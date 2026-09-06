@@ -4,7 +4,8 @@ A standalone identity-operations workstation: the virtual machine from the
 IAM & SSO 3D Lab, running on its own with no 3D world and no lab engine.
 
 It boots straight into a seeded Northwind directory — 14 users, 10 groups,
-5 federated applications — with every console live from the first frame.
+5 federated applications — with every console live from the first frame and six
+tickets already waiting in the queue.
 
 ```bash
 npm install
@@ -55,6 +56,24 @@ invite window code to keep depending on a concept this app does not have.
 The bundle is ~200 KB against the lab's ~886 KB, almost entirely because
 Three.js stayed behind.
 
+## The starting backlog
+
+Boot raises six tickets across six kinds — a CFO lockout, an access request, a
+new starter, an MFA device replacement, a leaver and a transfer.
+
+They obey the rules the 3D lab arrived at the hard way. A ticket names accounts
+the directory actually has; its payload points at the **subject** rather than
+whoever raised it; and if the prose claims evidence, that evidence is real. The
+lockout ticket describes failed sign-ins, so `greta.olsen` is genuinely
+`locked` and five `signin.failure` events are in the audit log — investigate,
+and you find what the ticket said you would.
+
+The onboarding ticket is the deliberate exception: `priya.raman` does not
+exist, because creating her is the job.
+
+`tests/session.test.ts` enforces all of that, so a ticket added later cannot
+quietly describe a world that is not there.
+
 ## Sessions
 
 `VmSession` (`src/vm/session.ts`) owns the seven services and seeds the
@@ -67,7 +86,7 @@ still reported success.
 
 ## Tests
 
-134 tests cover the parts with real logic: the script runner and its PowerShell
+147 tests cover the parts with real logic: the script runner and its PowerShell
 subset, terminal cmdlets and shell built-ins, the capability registry,
 directory integrity, the calculator's expression evaluator, and the browser
 allowlist including its bypass attempts.
@@ -78,7 +97,6 @@ an Electron shell, port that assertion across with it.
 
 ## Ideas from here
 
-- Seed a starting ticket backlog so the queue is not empty on boot.
 - An Electron shell, reusing `../app/electron` and its allowlist guards.
 - Free-play scenarios: inject a lockout or a broken SAML config on demand,
   without the full lab machinery.
