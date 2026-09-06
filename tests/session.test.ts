@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { VmSession } from '@/vm/session';
 import type { Ticket } from '@/domain';
-import { FIRST_DAY_STARTERS } from '@/vm/seedTickets';
+import { readEnvironment } from '@/vm/environmentStage';
 
 describe('VmSession boot', () => {
   let session: VmSession;
@@ -21,9 +21,14 @@ describe('VmSession boot', () => {
     session = new VmSession();
   });
 
-  it('seeds a populated directory', () => {
-    expect(session.dir.listUsers().length).toBeGreaterThan(0);
-    expect(session.dir.listGroups().length).toBeGreaterThan(0);
+  it('seeds a bare domain: the administrator and the federated apps, nothing else', () => {
+    // A newly promoted domain has no OUs, no groups and no staff. Building
+    // that structure is the work; pre-building it teaches none of it.
+    expect(session.dir.listUsers()).toHaveLength(1);
+    expect(session.dir.listGroups()).toHaveLength(0);
+    expect(session.dir.listOus()).toHaveLength(0);
+    // Applications are SaaS the organisation already subscribes to, not
+    // directory objects the administrator creates.
     expect(session.apps.apps().length).toBeGreaterThan(0);
   });
 
@@ -74,38 +79,32 @@ describe('starting ticket backlog', () => {
   const tickets = (): Ticket[] => session.tickets.list();
 
   it('gives the operator work to do on boot', () => {
-    expect(tickets().length).toBeGreaterThanOrEqual(3);
+    expect(tickets().length).toBeGreaterThan(0);
   });
 
-  it('opens with provisioning work, because nobody exists yet', () => {
-    // A fresh domain cannot raise a lockout or an offboarding ticket: there is
-    // nobody to lock out. Day one is creating the staff.
-    const kinds = new Set(tickets().map((t) => t.kind));
-    expect(kinds).toEqual(new Set(['onboarding']));
+  it('opens on the bare stage, because the domain has no structure yet', () => {
+    expect(readEnvironment(session.dir).stage).toBe('bare');
   });
+
+  it('the opening work is building structure, not onboarding people', () => {
+    // There is nowhere to put anyone yet, so asking for a new starter would be
+    // asking for work the domain cannot support.
+    const subjects = tickets().map((t) => t.subject);
+    expect(subjects.some((s) => /organisational unit/i.test(s))).toBe(true);
+    expect(subjects.some((s) => /new starter/i.test(s))).toBe(false);
+  });
+
 
   it('seeds only the administrator and the service accounts', () => {
     // Service accounts are real directory objects and belong on a fresh
     // domain; people do not, because provisioning them is the work.
     const people = session.dir.listUsers().filter((u) => !u.username.startsWith('svc-'));
-    expect(people.map((u) => u.username)).toEqual(['erickomari']);
+    expect(people.map((u) => u.username)).toEqual(['admin']);
   });
 
   it('the administrator can sign in with the shipped password', () => {
-    expect(session.idp.signIn('erickomari', 'Admin123!').ok).toBe(true);
+    expect(session.idp.signIn('admin', '123!').ok).toBe(true);
   });
 
-  it('every starter named in a ticket is genuinely absent from the directory', () => {
-    // The whole task is creating them; if the seed made them first, the ticket
-    // would be complete before it was read.
-    for (const s of FIRST_DAY_STARTERS) {
-      expect(session.dir.getUserByUsername(s.logon)).toBeUndefined();
-    }
-  });
 
-  it('names groups that exist, so the starter can actually be placed', () => {
-    for (const s of FIRST_DAY_STARTERS) {
-      expect(session.dir.getGroupByName(s.group), `missing group ${s.group}`).toBeDefined();
-    }
-  });
 });

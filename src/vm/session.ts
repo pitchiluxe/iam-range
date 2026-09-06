@@ -20,7 +20,7 @@ import {
   MockTicketQueue,
 } from '@/services';
 import { applyBaseline } from '@/seed/baseline';
-import { seedStartingTickets } from './seedTickets';
+import { generateTicketsSync } from './ticketGenerator';
 import { auditStore, ticketStore } from '@/stores';
 
 /**
@@ -71,8 +71,10 @@ export class VmSession implements VmServices {
     this.incidents = new MockIncidents();
 
     applyBaseline(this.dir, this.idp, this.apps);
-    // A workstation with an empty queue has nothing to do.
-    seedStartingTickets({ dir: this.dir, tickets: this.tickets, audit: this.audit });
+    // Raise the work this domain is ready for. On a fresh install that is
+    // building the OU structure, not onboarding — there is nowhere to put
+    // anyone yet.
+    generateTicketsSync({ dir: this.dir, tickets: this.tickets, audit: this.audit });
 
     // Mirror seeded state into the stores the windows subscribe to.
     auditStore.getState().reset();

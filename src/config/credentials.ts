@@ -38,16 +38,16 @@ export const SEED_USERS: SeedUser[] = [];
  */
 export const SEED_ADMINS: SeedUser[] = [
   {
-    username: 'erickomari',
-    displayName: 'Erick Omari',
-    email: 'eomari@iamlab.com',
+    username: 'admin',
+    displayName: 'Administrator',
     department: 'IT',
-    title: 'IAM Administrator',
+    title: 'Domain Administrator',
     mfa: 'none',
-    // Change it at first sign-in; the workstation supports that from the
-    // login screen the same way Windows does.
-    password: 'Admin123!',
-    groups: ['grp-iam-admins', 'grp-domain-admins'],
+    // The built-in credential, changed at first sign-in.
+    password: '123!',
+    // No groups: a fresh domain has none, and the administrator's rights come
+    // from being the built-in account rather than from membership.
+    groups: [],
     privileged: true,
   },
 ];

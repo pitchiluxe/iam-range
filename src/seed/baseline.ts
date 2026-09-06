@@ -26,13 +26,33 @@ export interface SeedResult {
   appIds: Record<string, AppId>; // app name → AppId
 }
 
-export function applyBaseline(dir: MockDirectory, idp: MockIdP, apps: MockAppServer): SeedResult {
+/**
+ * Build the environment.
+ *
+ * `structure: false` — the default — leaves the domain bare: the built-in
+ * administrator, the service accounts, and the federated applications the
+ * organisation already subscribes to. No OUs, no groups, no staff. Creating
+ * those is the administrator's job, and a lab that pre-builds them teaches
+ * nothing about building them.
+ *
+ * `structure: true` restores the fully populated fixture, which the tests use.
+ */
+export function applyBaseline(
+  dir: MockDirectory,
+  idp: MockIdP,
+  apps: MockAppServer,
+  options: { structure?: boolean } = {},
+): SeedResult {
+  const withStructure = options.structure ?? false;
   const groupIds: Record<string, GroupId> = {};
   const roleIds: Record<string, RoleId> = {};
   const userIds: Record<string, UserId> = {};
   const appIds: Record<string, AppId> = {};
 
   // --- Groups ---
+  // Security groups exist only in the populated fixture.
+  if (withStructure)
+
   for (const name of GROUP_NAMES) {
     const g = dir.createGroup(name, `Security group ${name}`, 'system' as UserId);
     groupIds[name] = g.id;
@@ -121,38 +141,42 @@ export function applyBaseline(dir: MockDirectory, idp: MockIdP, apps: MockAppSer
     if (g) g.ownerRoleId = r.id;
   }
   // Privileged roles
-  const iamAdminRole = dir.createRole(
-    'role-iam-admins',
-    'IAM Administrators',
-    ['iam:*'],
-    undefined,
-    'system' as UserId,
-  );
-  const domainAdminRole = dir.createRole(
-    'role-domain-admins',
-    'Domain Administrators',
-    ['domain:*'],
-    undefined,
-    'system' as UserId,
-  );
-  const serverAdminRole = dir.createRole(
-    'role-server-admins',
-    'Server Administrators',
-    ['server:*'],
-    undefined,
-    'system' as UserId,
-  );
-  roleIds['role-iam-admins'] = iamAdminRole.id;
-  roleIds['role-domain-admins'] = domainAdminRole.id;
-  roleIds['role-server-admins'] = serverAdminRole.id;
+  // Built-in privileged roles come with the populated fixture. A bare domain
+  // has none: the administrator defines the role model as part of the work.
+  if (withStructure) {
+    const iamAdminRole = dir.createRole(
+      'role-iam-admins',
+      'IAM Administrators',
+      ['iam:*'],
+      undefined,
+      'system' as UserId,
+    );
+    const domainAdminRole = dir.createRole(
+      'role-domain-admins',
+      'Domain Administrators',
+      ['domain:*'],
+      undefined,
+      'system' as UserId,
+    );
+    const serverAdminRole = dir.createRole(
+      'role-server-admins',
+      'Server Administrators',
+      ['server:*'],
+      undefined,
+      'system' as UserId,
+    );
+    roleIds['role-iam-admins'] = iamAdminRole.id;
+    roleIds['role-domain-admins'] = domainAdminRole.id;
+    roleIds['role-server-admins'] = serverAdminRole.id;
 
-  // Wire admin group → privileged role
-  const gIamAdmins = dir.getGroup(groupIds['grp-iam-admins']!);
-  if (gIamAdmins) gIamAdmins.ownerRoleId = iamAdminRole.id;
-  const gDomainAdmins = dir.getGroup(groupIds['grp-domain-admins']!);
-  if (gDomainAdmins) gDomainAdmins.ownerRoleId = domainAdminRole.id;
-  const gServerAdmins = dir.getGroup(groupIds['grp-server-admins']!);
-  if (gServerAdmins) gServerAdmins.ownerRoleId = serverAdminRole.id;
+    // Wire admin group → privileged role
+    const gIamAdmins = dir.getGroup(groupIds['grp-iam-admins']!);
+    if (gIamAdmins) gIamAdmins.ownerRoleId = iamAdminRole.id;
+    const gDomainAdmins = dir.getGroup(groupIds['grp-domain-admins']!);
+    if (gDomainAdmins) gDomainAdmins.ownerRoleId = domainAdminRole.id;
+    const gServerAdmins = dir.getGroup(groupIds['grp-server-admins']!);
+    if (gServerAdmins) gServerAdmins.ownerRoleId = serverAdminRole.id;
+  }
 
   // --- Users (resolve manager IDs first) ---
   // First pass: create users with no manager
@@ -186,6 +210,8 @@ export function applyBaseline(dir: MockDirectory, idp: MockIdP, apps: MockAppSer
   }
 
   // --- Service accounts (created like users but flagged) ---
+  // Service accounts are provisioned by the organisation, not by DCPROMO.
+  if (withStructure)
   for (const name of SERVICE_ACCOUNT_NAMES) {
     const u = dir.ensureUser(
       {

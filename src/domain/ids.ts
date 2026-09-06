@@ -6,6 +6,7 @@ import type {
   UserId,
   GroupId,
   RoleId,
+  OuId,
   AppId,
   TicketId,
   AuditId,
@@ -28,6 +29,10 @@ export function mkGroupId(raw?: string): GroupId {
 }
 
 /** Create a RoleId branded string. */
+export function mkOuId(raw?: string): OuId {
+  return (raw ?? nanoid(10)) as OuId;
+}
+
 export function mkRoleId(raw?: string): RoleId {
   return (raw ?? nanoid(10)) as RoleId;
 }

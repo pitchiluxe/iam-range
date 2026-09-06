@@ -17,9 +17,9 @@ export const VM_HOST = {
   /** Short domain name, as Windows shows it in DOMAIN\user. */
   netbiosDomain: 'IAMLAB',
   /** The operator account the learner is signed in as. */
-  user: 'erickomari',
-  displayName: 'Erick Omari',
-  email: 'eomari@iamlab.com',
+  user: 'admin',
+  displayName: 'Administrator',
+  email: 'admin@iamlab.com',
 
   os: 'Microsoft Windows 11 Enterprise',
   osVersion: '10.0.22631',

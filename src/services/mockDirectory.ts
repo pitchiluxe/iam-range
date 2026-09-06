@@ -13,8 +13,10 @@ import type {
   MfaMethod,
   Application,
   AppId,
+  OuId,
+  OrganizationalUnit,
 } from '@/domain';
-import { mkUserId, mkGroupId, mkRoleId, SYSTEM_ACTOR } from '@/domain';
+import { mkUserId, mkGroupId, mkRoleId, mkOuId, SYSTEM_ACTOR } from '@/domain';
 import type { MockAuditLog } from './mockAuditLog';
 
 export class MockDirectory {
@@ -22,8 +24,72 @@ export class MockDirectory {
   private groups = new Map<GroupId, Group>();
   private roles = new Map<RoleId, RoleRecord>();
   private appIndex = new Map<string, Application>();
+  /** Empty on a fresh domain: the administrator builds the OU structure. */
+  private ous = new Map<OuId, OrganizationalUnit>();
 
   constructor(private readonly audit: MockAuditLog) {}
+
+  // --- ORGANISATIONAL UNITS -------------------------------------------------
+
+  listOus(): OrganizationalUnit[] {
+    return Array.from(this.ous.values());
+  }
+  getOu(id: OuId): OrganizationalUnit | undefined {
+    return this.ous.get(id);
+  }
+  getOuByName(name: string): OrganizationalUnit | undefined {
+    const want = name.toLowerCase();
+    return Array.from(this.ous.values()).find((o) => o.name.toLowerCase() === want);
+  }
+
+  /** OUs directly beneath `parentId`, or beneath the domain root when omitted. */
+  childOus(parentId?: OuId): OrganizationalUnit[] {
+    return this.listOus().filter((o) => o.parentId === parentId);
+  }
+
+  createOu(
+    name: string,
+    description = '',
+    parentId?: OuId,
+    actor: UserId = SYSTEM_ACTOR,
+  ): OrganizationalUnit {
+    // Names are the natural key here as they are for groups, so a duplicate is
+    // a mistake worth reporting rather than a second OU with the same label.
+    if (this.getOuByName(name)) {
+      throw new Error(`[directory] createOu: an OU named '${name}' already exists.`);
+    }
+    const ou: OrganizationalUnit = {
+      id: mkOuId(name),
+      name,
+      description,
+      createdAt: Date.now(),
+      ...(parentId ? { parentId } : {}),
+    };
+    this.ous.set(ou.id, ou);
+    this.audit.record({ actorId: actor, action: 'ou.created', targetId: ou.id });
+    return ou;
+  }
+
+  /** Remove an OU. Refuses while anything still lives in it, as AD does. */
+  deleteOu(id: OuId, actor: UserId = SYSTEM_ACTOR): void {
+    const ou = this.ous.get(id);
+    if (!ou) throw new Error(`[directory] deleteOu: OU ${id} not found`);
+    const occupied = this.listUsers().some((u) => u.ouId === id);
+    const hasChildren = this.childOus(id).length > 0;
+    if (occupied || hasChildren) {
+      throw new Error(`[directory] deleteOu: '${ou.name}' is not empty.`);
+    }
+    this.ous.delete(id);
+    this.audit.record({ actorId: actor, action: 'ou.deleted', targetId: id });
+  }
+
+  /** Move an account into an OU. */
+  setUserOu(userId: UserId, ouId: OuId | undefined, actor: UserId = SYSTEM_ACTOR): void {
+    const u = this.users.get(userId);
+    if (!u) throw new Error(`[directory] setUserOu: user ${userId} not found`);
+    u.ouId = ouId;
+    this.audit.record({ actorId: actor, action: 'user.moved', targetId: userId });
+  }
 
   // --- USERS ----------------------------------------------------------------
 
@@ -331,5 +397,6 @@ export class MockDirectory {
     this.groups.clear();
     this.roles.clear();
     this.appIndex.clear();
+    this.ous.clear();
   }
 }

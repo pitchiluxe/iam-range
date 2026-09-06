@@ -237,7 +237,7 @@ describe('Windows shell built-ins', () => {
 
   it('whoami reports the simulated operator, not the real machine user', () => {
     const out = dispatch('whoami', ctx).output;
-    expect(out).toBe(String.raw`IAMLAB\erickomari`);
+    expect(out).toBe(String.raw`IAMLAB\admin`);
   });
 
   it('hostname and ipconfig describe the simulated workstation', () => {

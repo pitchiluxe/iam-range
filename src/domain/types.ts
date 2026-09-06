@@ -9,6 +9,7 @@
 export type UserId = string & { readonly __brand: 'UserId' };
 export type GroupId = string & { readonly __brand: 'GroupId' };
 export type RoleId = string & { readonly __brand: 'RoleId' };
+export type OuId = string & { readonly __brand: 'OuId' };
 export type AppId = string & { readonly __brand: 'AppId' };
 export type TicketId = string & { readonly __brand: 'TicketId' };
 export type AuditId = string & { readonly __brand: 'AuditId' };
@@ -113,9 +114,24 @@ export interface User {
   /** Set by an admin password reset; sign-in is refused until the user picks
    *  their own password. Absent = no forced change pending. */
   mustChangePassword?: boolean;
+  /** The OU this account sits in. Absent means directly under the domain. */
+  ouId?: OuId;
   /** Roles granted straight to the user, outside any group. Optional so the
    *  seed-data literal needs no change; readers treat undefined as empty. */
   directRoleIds?: RoleId[];
+}
+
+/**
+ * An organisational unit. A fresh domain has none: building the OU structure is
+ * the administrator's first task, exactly as it is on a new forest.
+ */
+export interface OrganizationalUnit {
+  id: OuId;
+  name: string;
+  /** Parent OU, or undefined for one directly under the domain root. */
+  parentId?: OuId;
+  description: string;
+  createdAt: number;
 }
 
 export interface Group {
@@ -276,6 +292,8 @@ export interface AuditEvent {
     | 'password.reset'
     | 'account.unlock'
     | 'user.moved'
+    | 'ou.created'
+    | 'ou.deleted'
     | 'app.config.changed'
     | 'signin.success'
     | 'signin.failure'
@@ -368,7 +386,9 @@ export type ValidatorKind =
   /** N accounts provisioned into a named group — the bulk-automation labs.
    *  Counted by group membership rather than raw user count, so the baseline's
    *  existing users cannot satisfy it by accident. */
-  | 'users-provisioned';
+  | 'users-provisioned'
+  /** An organisational unit was created — the first task on a bare domain. */
+  | 'ou-created';
 
 export interface LabStep {
   id: string;

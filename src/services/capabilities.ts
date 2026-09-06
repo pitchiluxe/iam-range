@@ -366,6 +366,54 @@ export const CAPABILITIES: readonly IamCapability[] = [
   },
 
   // ── Groups ───────────────────────────────────────────────────────────────
+  // ── Organisational units ─────────────────────────────────────────────────
+  {
+    id: 'ou.create',
+    label: 'New Organizational Unit',
+    synopsis: 'Create an organisational unit under the domain or another OU.',
+    consoleSection: 'users',
+    cmdlet: 'New-ADOrganizationalUnit',
+    validator: 'ou-created',
+    params: [
+      { name: 'Name', label: 'OU name', kind: 'text', required: true },
+      { name: 'Path', label: 'Parent OU', kind: 'text', required: false },
+      { name: 'Description', label: 'Description', kind: 'text', required: false },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      if (!a.Name) return err('Name is required.');
+      const parent = a.Path ? ctx.dir.getOuByName(a.Path) : undefined;
+      if (a.Path && !parent) return err(`Cannot find an OU named '${a.Path}'.`);
+      try {
+        const ou = ctx.dir.createOu(a.Name, a.Description ?? '', parent?.id, ctx.actor);
+        return ok(`Created OU ${ou.name}${parent ? ` under ${parent.name}` : ''}.`);
+      } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+      }
+    },
+  },
+  {
+    id: 'ou.list',
+    label: 'Organizational Units',
+    synopsis: 'List the organisational units in the domain.',
+    consoleSection: 'users',
+    cmdlet: 'Get-ADOrganizationalUnit',
+    readOnly: true,
+    legacyConsoleForm: true,
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      const ous = ctx.dir.listOus();
+      return ok(
+        `${ous.length} organisational unit(s).`,
+        ous.map((o) => ({
+          Name: o.name,
+          Parent: o.parentId ? (ctx.dir.getOu(o.parentId)?.name ?? '—') : 'domain root',
+          Description: o.description || '—',
+        })),
+      );
+    },
+  },
   {
     id: 'group.list',
     legacyConsoleForm: true,
