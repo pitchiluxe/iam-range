@@ -1,0 +1,29 @@
+{
+  "_comment": "Single source of truth for the in-VM browser's reachable hosts. Read by src/config/webAllowlist.ts (renderer) and electron/main.cjs (main process) so the two enforcement points cannot drift apart.",
+  "hosts": [
+    "learn.microsoft.com",
+    "okta.com",
+    "auth0.com",
+    "duo.com",
+    "ping.com",
+    "pingidentity.com",
+    "keycloak.org",
+    "jumpcloud.com",
+    "oauth.net",
+    "openid.net",
+    "datatracker.ietf.org",
+    "nist.gov",
+    "csrc.nist.gov",
+    "owasp.org",
+    "saml.xml.org",
+    "w3.org",
+    "wikipedia.org",
+    "youtube.com",
+    "youtube-nocookie.com",
+    "youtu.be"
+  ],
+  "pathRestricted": {
+    "youtube.com": "/embed/",
+    "youtube-nocookie.com": "/embed/"
+  }
+}
