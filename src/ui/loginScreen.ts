@@ -14,6 +14,11 @@ import type { User } from '@/domain';
 import type { LoginSession } from '@/vm/loginSession';
 import { VM_HOST } from '@/config/vmHost';
 import { logonChime, errorBeep } from './sounds';
+import { SEED_ADMINS } from '@/config';
+
+/** Shown on the sign-in panel for the built-in account. Read from the seed so
+ *  the screen cannot drift from the credential that actually works. */
+const BUILTIN_ADMIN_PASSWORD = SEED_ADMINS[0]?.password ?? '';
 
 export interface LoginScreen {
   /** Show the lock screen; resolves once a user has signed in. */
@@ -29,6 +34,18 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
   let selected: User | null = null;
   /** Set when the account must choose a new password before it can proceed. */
   let mustChangeFor: string | null = null;
+  /**
+   * The temporary password the user typed at the sign-in that came back
+   * "must change".
+   *
+   * That attempt authenticated — it was only refused pending a new password —
+   * so what they typed is the account's current credential, and clearing the
+   * forced change needs it. This used to be guessed as `<username>123`, which
+   * was true only of the old seeded accounts; after an administrator reset in
+   * ADUC it never matched, and the account could not get past the change
+   * prompt at all.
+   */
+  let temporaryPassword: string | null = null;
 
   function build(): HTMLElement {
     const el = document.createElement('div');
@@ -98,6 +115,14 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     if (!overlay) return;
     overlay.innerHTML = '';
 
+    // On a fresh install there is exactly one account. Windows selects it for
+    // you, and leaving it unselected here meant typing the administrator's
+    // password and being told to choose an account — with only one to choose.
+    if (!selected) {
+      const accounts = login.listAccounts();
+      if (accounts.length === 1) selected = accounts[0] ?? null;
+    }
+
     const panel = document.createElement('div');
     // Lifted slightly above true centre, which is where Windows puts it.
     panel.style.cssText =
@@ -150,7 +175,7 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
       if (mustChangeFor) {
         const changed = login.changePassword(
           selected.username,
-          `${selected.username}123`,
+          temporaryPassword ?? '',
           input.value,
         );
         if (!changed) {
@@ -160,6 +185,7 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
           return;
         }
         mustChangeFor = null;
+        temporaryPassword = null;
         const after = login.signIn(selected.username, input.value);
         if (after.ok) return finish();
         message.textContent = after.message;
@@ -174,6 +200,9 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
       errorBeep();
       if (result.reason === 'must-change-password') {
         mustChangeFor = selected.username;
+        // Authentication succeeded; only the forced change refused it. Keep
+        // the credential so the change can be made without asking for it again.
+        temporaryPassword = input.value;
         renderSignIn();
       }
     };
@@ -193,7 +222,14 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
       panel.appendChild(note);
     } else {
       const hint = document.createElement('div');
-      hint.textContent = 'Passwords follow the pattern username123.';
+      // The old text promised every password was `<username>123`. That was
+      // true of the seeded accounts that no longer exist: the directory now
+      // starts empty, and every account in it was given a password by whoever
+      // created it. Only the built-in administrator has a documented default.
+      hint.textContent =
+        selected && selected.username === 'admin'
+          ? `Built-in administrator. Default password: ${BUILTIN_ADMIN_PASSWORD}`
+          : 'Use the password set for this account in Active Directory.';
       hint.style.cssText = 'font-size:11px;opacity:0.5;margin-top:12px;';
       panel.appendChild(hint);
     }
@@ -245,6 +281,8 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
       chip.addEventListener('click', () => {
         selected = u;
         mustChangeFor = null;
+        // Never carry one account's credential across to another.
+        temporaryPassword = null;
         renderSignIn();
       });
       bar.appendChild(chip);
@@ -268,6 +306,8 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
       destroy();
       locked = true;
       mustChangeFor = null;
+      temporaryPassword = null;
+      selected = null;
       overlay = build();
       document.body.appendChild(overlay);
       renderLock();

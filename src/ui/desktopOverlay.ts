@@ -21,6 +21,9 @@ import { renderScriptEditorWindow } from './consoles/scriptEditorWindow';
 import { renderSettingsWindow } from './consoles/settingsWindow';
 import { renderControlPanelWindow } from './consoles/controlPanelWindow';
 import { renderRecycleBinWindow } from './consoles/recycleBinWindow';
+import { renderTutorWindow } from './consoles/tutorWindow';
+import { renderDocumentationWindow } from './consoles/documentationWindow';
+import { onAppRequest } from '@/util/appLauncher';
 import {
   getIconOrder,
   saveIconOrder,
@@ -171,6 +174,22 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 680,
     height: 520,
     render: (_c, b) => renderControlPanelWindow(b),
+  },
+  {
+    id: 'tutor',
+    title: 'IAM Tutor',
+    icon: '🎓',
+    width: 620,
+    height: 620,
+    render: (c, b) => renderTutorWindow(b, c),
+  },
+  {
+    id: 'documentation',
+    title: 'Documentation',
+    icon: '📚',
+    width: 860,
+    height: 640,
+    render: (_c, b) => renderDocumentationWindow(b),
   },
   {
     id: 'recycle-bin',
@@ -479,6 +498,10 @@ export function createDesktopOverlay(): DesktopOverlay {
   // tooling) or a plain consumer PC — set on every show() call so exiting an
   // IT zone's VM and entering a non-IT one's swaps the app set correctly.
   let currentDepartment = 'IT';
+  // The services the desktop is currently bound to. Held so a cross-window
+  // launch request (util/appLauncher) opens against the current lab rather
+  // than whatever was live when the overlay was first built.
+  let currentServices: VmServices | null = null;
   let iconColEl: HTMLElement | null = null;
   let renderStartMenuApps: (() => void) | null = null;
 
@@ -1123,6 +1146,7 @@ export function createDesktopOverlay(): DesktopOverlay {
   const api: DesktopOverlay = {
     show(conductor: VmServices, department?: string) {
       currentDepartment = department ?? 'IT';
+      currentServices = conductor;
       allowedAppIds = department ? new Set(appsForDepartment(department)) : null;
 
       if (!container) {
@@ -1193,5 +1217,12 @@ export function createDesktopOverlay(): DesktopOverlay {
     },
     onExit: null,
   };
+
+  // A window asking for another window. openWindow still applies the
+  // department check, so this cannot open something the profile excludes.
+  onAppRequest(({ appId }) => {
+    if (currentServices) api.openWindow(appId, currentServices);
+  });
+
   return api;
 }

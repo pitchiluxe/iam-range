@@ -11,7 +11,7 @@
  * typed in the terminal or run from a script. The three surfaces cannot drift.
  */
 import type { VmServices } from '@/vm/session';
-import type { Group, User, UserId } from '@/domain';
+import type { Group, OrganizationalUnit, OuId, User, UserId } from '@/domain';
 import { CAPABILITY_BY_ID, type CapabilityContext } from '@/services';
 import { DEPARTMENTS } from '@/config';
 import { VM_HOST } from '@/config/vmHost';
@@ -45,7 +45,34 @@ const DOMAIN_SERVERS = [
   { name: 'NW-IDP01', description: 'Identity Provider' },
 ];
 
-function buildTree(): TreeNode {
+/**
+ * The domain tree, built from the directory.
+ *
+ * Only the containers a fresh domain genuinely has are fixed — Builtin,
+ * Computers, Domain Controllers and CN=Users. Everything below that comes from
+ * `dir.listOus()`.
+ *
+ * It used to be a hardcoded scaffold showing Groups, Service Accounts and one
+ * OU per department. None of those existed: the directory now starts empty, and
+ * the first ticket asks the learner to create Corp/Users and Corp/Groups while
+ * the tree already displayed Users and Groups. A snap-in that shows structure
+ * nobody created makes "did my change take effect?" unanswerable, which is the
+ * failure this project keeps finding and removing.
+ */
+function buildTree(dir: VmServices['dir']): TreeNode {
+  const ous = dir.listOus();
+
+  const ouNode = (ou: OrganizationalUnit): TreeNode => {
+    const children = ous.filter((child) => child.parentId === ou.id).map(ouNode);
+    return {
+      id: `ou:${ou.id}`,
+      label: ou.name,
+      kind: 'ou',
+      icon: '🗂️',
+      ...(children.length > 0 ? { children } : {}),
+    };
+  };
+
   return {
     id: 'domain',
     label: VM_HOST.domain,
@@ -54,21 +81,14 @@ function buildTree(): TreeNode {
     children: [
       { id: 'builtin', label: 'Builtin', kind: 'container', icon: '📁' },
       { id: 'computers', label: 'Computers', kind: 'container', icon: '📁' },
-      { id: 'domain-controllers', label: 'Domain Controllers', kind: 'ou', icon: '🗂️' },
-      { id: 'groups', label: 'Groups', kind: 'ou', icon: '🗂️' },
-      { id: 'service-accounts', label: 'Service Accounts', kind: 'ou', icon: '🗂️' },
       {
-        id: 'users',
-        label: 'Users',
+        id: 'domain-controllers',
+        label: 'Domain Controllers',
         kind: 'ou',
         icon: '🗂️',
-        children: DEPARTMENTS.map((d) => ({
-          id: `users:${d}`,
-          label: d,
-          kind: 'ou' as NodeKind,
-          icon: '🗂️',
-        })),
       },
+      { id: 'users', label: 'Users', kind: 'container', icon: '📁' },
+      ...ous.filter((o) => !o.parentId).map(ouNode),
     ],
   };
 }
@@ -83,22 +103,9 @@ interface AdObject {
   group?: Group;
 }
 
-const isServiceAccount = (u: User): boolean => u.username.startsWith('svc-');
-
 function objectsFor(nodeId: string, dir: VmServices['dir']): AdObject[] {
   const users = dir.listUsers();
 
-  if (nodeId === 'groups') {
-    return dir.listGroups().map((g) => ({
-      name: g.name,
-      type: 'Security Group',
-      description: g.description || `${g.memberIds.length} member(s)`,
-      group: g,
-    }));
-  }
-  if (nodeId === 'service-accounts') {
-    return users.filter(isServiceAccount).map(toUserRow);
-  }
   if (nodeId === 'computers') {
     return DOMAIN_COMPUTERS.map((c) => ({
       name: c.name,
@@ -116,15 +123,32 @@ function objectsFor(nodeId: string, dir: VmServices['dir']): AdObject[] {
       { name: 'Remote Desktop Users', type: 'Security Group', description: 'RDP access' },
     ];
   }
+  // CN=Users is where accounts and groups land when nobody has placed them in
+  // an OU — which is what real AD does, and why "move it to the right OU" is
+  // a real piece of work rather than bookkeeping.
   if (nodeId === 'users') {
-    return users.filter((u) => !isServiceAccount(u)).map(toUserRow);
+    return [...users.filter((u) => !u.ouId).map(toUserRow), ...dir.listGroups().map(toGroupRow)];
   }
-  if (nodeId.startsWith('users:')) {
-    const dept = nodeId.slice('users:'.length);
-    return users.filter((u) => !isServiceAccount(u) && u.department === dept).map(toUserRow);
+  if (nodeId.startsWith('ou:')) {
+    const ouId = nodeId.slice('ou:'.length) as OuId;
+    // Child OUs are listed alongside the accounts, as the snap-in shows them.
+    const children: AdObject[] = dir
+      .listOus()
+      .filter((o) => o.parentId === ouId)
+      .map((o) => ({ name: o.name, type: 'Organizational Unit', description: o.description }));
+    return [...children, ...users.filter((u) => u.ouId === ouId).map(toUserRow)];
   }
-  // Domain root: show the containers themselves, as the snap-in does.
+  // Domain root: the containers themselves are the tree, as the snap-in does.
   return [];
+}
+
+function toGroupRow(g: Group): AdObject {
+  return {
+    name: g.name,
+    type: 'Security Group',
+    description: g.description || `${g.memberIds.length} member(s)`,
+    group: g,
+  };
 }
 
 function toUserRow(u: User): AdObject {
@@ -167,7 +191,6 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     return res.ok;
   };
 
-  const tree = buildTree();
   let selectedNodeId = 'users';
   let selectedObject: AdObject | null = null;
   const expanded = new Set<string>(['domain', 'users']);
@@ -219,6 +242,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
   toolbar.append(
     toolBtn('👤 New User', 'Create a user in this container', () => newUserDialog()),
     toolBtn('👥 New Group', 'Create a security group', () => newGroupDialog()),
+    toolBtn('🗂️ New OU', 'Create an organisational unit here', () => newOuDialog()),
     toolBtn('🔄 Refresh', 'Refresh the object list', () => refresh()),
     toolBtn('📋 Properties', 'Open the selected object', () => {
       if (selectedObject?.user) propertiesDialog(selectedObject.user);
@@ -292,6 +316,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         selectedNodeId = node.id;
         renderTree();
         contextMenu(e, [
+          { label: 'New  ▸  Organizational Unit', onClick: () => newOuDialog() },
           { label: 'New  ▸  User', onClick: () => newUserDialog() },
           { label: 'New  ▸  Group', onClick: () => newGroupDialog() },
           { label: 'Refresh', onClick: () => refresh() },
@@ -304,7 +329,8 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
       }
     };
 
-    drawNode(tree, 0);
+    // Rebuilt on every render: creating an OU must appear in the tree.
+    drawNode(buildTree(conductor.dir), 0);
   }
 
   // ── Object list ──────────────────────────────────────────────────────────
@@ -648,6 +674,41 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
       },
       () => run('group.create', { Name: readName().trim(), Description: readDesc() }),
     );
+  }
+
+  /**
+   * New OU, created under whichever OU is selected.
+   *
+   * The snap-in had no way to make one, while the first ticket in a new domain
+   * says to use this console or New-ADOrganizationalUnit. Half that sentence
+   * was false, and the console could not do the one job a bare domain needs.
+   */
+  function newOuDialog(): void {
+    let readName = (): string => '';
+    let readDesc = (): string => '';
+    const parent = selectedParentOuName();
+    modal(
+      parent ? `New Object — Organizational Unit (in ${parent})` : 'New Object — Organizational Unit',
+      (b) => {
+        readName = field(b, 'Name:');
+        readDesc = field(b, 'Description:');
+      },
+      () =>
+        run('ou.create', {
+          Name: readName().trim(),
+          Description: readDesc(),
+          // Selecting an OU and creating inside it is how the tree gets built;
+          // anywhere else means directly under the domain.
+          ...(parent ? { Path: parent } : {}),
+        }),
+    );
+  }
+
+  /** The selected OU's name, when an OU is selected. */
+  function selectedParentOuName(): string | undefined {
+    if (!selectedNodeId.startsWith('ou:')) return undefined;
+    const id = selectedNodeId.slice('ou:'.length);
+    return conductor.dir.listOus().find((o) => o.id === id)?.name;
   }
 
   function resetPasswordDialog(u: User): void {
