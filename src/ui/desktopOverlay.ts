@@ -721,8 +721,8 @@ export function createDesktopOverlay(): DesktopOverlay {
       border: 1px solid #2d343d; background: transparent; color: #8b95a1;
       font-size: 12px; cursor: pointer; transition: all 0.15s;
     `;
-    logoutBtn.textContent = '↩ Exit';
-    logoutBtn.title = 'Close workstation and return to 3D navigation';
+    logoutBtn.textContent = '↩ Sign out';
+    logoutBtn.title = 'Sign out and return to the lock screen';
     logoutBtn.addEventListener('mouseenter', () => {
       logoutBtn.style.background = '#2d343d';
       logoutBtn.style.color = '#e6e6e6';
