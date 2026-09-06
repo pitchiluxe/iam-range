@@ -237,11 +237,11 @@ describe('Windows shell built-ins', () => {
 
   it('whoami reports the simulated operator, not the real machine user', () => {
     const out = dispatch('whoami', ctx).output;
-    expect(out).toBe(String.raw`northwind\iam.admin`);
+    expect(out).toBe(String.raw`IAMLAB\erickomari`);
   });
 
   it('hostname and ipconfig describe the simulated workstation', () => {
-    expect(dispatch('hostname', ctx).output).toBe('NW-IT-WS01');
+    expect(dispatch('hostname', ctx).output).toBe('IAMLAB-WS01');
     const ip = dispatch('ipconfig', ctx).output;
     expect(ip).toContain('IPv4 Address');
     expect(ip).toContain('10.20.4.31');

@@ -14,9 +14,7 @@
  */
 import type { MfaMethod, User, UserId } from '@/domain';
 import type { VmServices } from './session';
-
-/** Departments whose members get the identity-administration tooling. */
-const IT_DEPARTMENTS = new Set(['IT', 'Security']);
+import { isIdentityAdmin } from '@/config/desktopProfiles';
 
 export type SignInOutcome =
   | { ok: true; user: User; isIT: boolean }
@@ -57,9 +55,14 @@ export class LoginSession {
     return this.current !== null;
   }
 
-  /** IT and Security see the administration tooling; nobody else does. */
+  /** The signed-in user's department, which decides their desktop. */
+  get department(): string {
+    return this.current?.department ?? '';
+  }
+
+  /** Whether this user administers identity — IT and Help Desk do. */
   get isIT(): boolean {
-    return this.current ? IT_DEPARTMENTS.has(this.current.department) : false;
+    return this.current ? isIdentityAdmin(this.current.department) : false;
   }
 
   onChange(fn: () => void): () => void {

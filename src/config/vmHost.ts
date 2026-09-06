@@ -12,14 +12,14 @@
  */
 export const VM_HOST = {
   /** NetBIOS-style machine name. */
-  name: 'NW-IT-WS01',
-  domain: 'northwind.example',
+  name: 'IAMLAB-WS01',
+  domain: 'iamlab.com',
   /** Short domain name, as Windows shows it in DOMAIN\user. */
-  netbiosDomain: 'northwind',
+  netbiosDomain: 'IAMLAB',
   /** The operator account the learner is signed in as. */
-  user: 'iam.admin',
-  displayName: 'Identity Operations',
-  email: 'iam.admin@northwind.example',
+  user: 'erickomari',
+  displayName: 'Erick Omari',
+  email: 'eomari@iamlab.com',
 
   os: 'Microsoft Windows 11 Enterprise',
   osVersion: '10.0.22631',
@@ -33,7 +33,7 @@ export const VM_HOST = {
   gateway: '10.20.4.1',
   dns: '10.20.1.10',
   mac: '00-15-5D-2A-7C-04',
-  domainController: 'NW-DC01',
+  domainController: 'IAMLAB-DC01',
 } as const;
 
 /** `DOMAIN\user`, the form Windows shows for a signed-in account. */

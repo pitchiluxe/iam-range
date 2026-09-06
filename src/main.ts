@@ -27,7 +27,7 @@ const desktop = createDesktopOverlay();
 type ShowArg = Parameters<typeof desktop.show>[0];
 
 function showDesktop(): void {
-  desktop.show(session as unknown as ShowArg, login.isIT);
+  desktop.show(session as unknown as ShowArg, login.department);
 }
 
 function signOut(): void {

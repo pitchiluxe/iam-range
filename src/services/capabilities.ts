@@ -17,6 +17,7 @@
  * instances; domain/ is pure types and must stay that way.
  */
 import type { MfaMethod, TicketKind, UserId, ValidatorKind } from '@/domain';
+import { COMPANY } from '@/config';
 import type { MockAuditLog } from './mockAuditLog';
 import type { MockDirectory } from './mockDirectory';
 import type { MockIdP } from './mockIdP';
@@ -162,6 +163,13 @@ export const CAPABILITIES: readonly IamCapability[] = [
       { name: 'Name', label: 'Display name', kind: 'text', required: true },
       { name: 'Department', label: 'Department', kind: 'text', required: true },
       { name: 'Title', label: 'Job title', kind: 'text', required: false },
+      { name: 'AccountPassword', label: 'Password', kind: 'password', required: false },
+      {
+        name: 'ChangePasswordAtLogon',
+        label: 'Must change at next sign-in',
+        kind: 'bool',
+        required: false,
+      },
     ],
     resolvesTicketKinds: ['onboarding'],
     run(ctx, a) {
@@ -171,12 +179,23 @@ export const CAPABILITIES: readonly IamCapability[] = [
       const u = ctx.dir.createUser({
         username: a.SamAccountName,
         displayName: a.Name,
-        email: `${a.SamAccountName}@northwind.example`,
+        email: `${a.SamAccountName}@${COMPANY.domain}`,
         department: a.Department ?? 'Unassigned',
         title: a.Title ?? 'Employee',
         mfa: 'none',
       });
-      return ok(`Created ${u.username} (${u.displayName}).`);
+
+      // An account with no credential cannot sign in, which makes the new user
+      // invisible at the lock screen and the ticket impossible to finish.
+      // Default to the house convention so provisioning always yields a
+      // usable account, and let the caller override it.
+      const password = a.AccountPassword?.trim() || `${a.SamAccountName}123`;
+      ctx.idp.seedPasswords({ [u.username]: password });
+      if (truthy(a.ChangePasswordAtLogon)) {
+        ctx.idp.resetPassword(u.id, password, { forceChangeAtNextLogin: true }, ctx.actor);
+      }
+
+      return ok(`Created ${u.username} (${u.displayName}). Password set.`);
     },
   },
   {

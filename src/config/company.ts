@@ -3,16 +3,29 @@
  * These are the single source of truth for company identity.
  */
 export const COMPANY = {
-  name: 'Northwind Labs',
-  domain: 'northwind.example',
-  tld: 'example',
-  idpRealm: 'northwind',
-  idpUrl: 'https://idp.northwind.example/realms/northwind',
+  name: 'IAM Lab',
+  domain: 'iamlab.com',
+  tld: 'com',
+  idpRealm: 'iamlab',
+  idpUrl: 'https://idp.iamlab.com/realms/iamlab',
 } as const;
 
 export const OU_NAMES = ['Users', 'Groups', 'Computers', 'Servers', 'ServiceAccounts'] as const;
 
-export const DEPARTMENTS = ['HR', 'Finance', 'Engineering', 'IT', 'Security'] as const;
+/**
+ * Departments a user can belong to. Department decides which applications
+ * appear on that user's desktop — see config/desktopProfiles.ts — so adding one
+ * here means deciding what its people are given.
+ */
+export const DEPARTMENTS = [
+  'IT',
+  'Help Desk',
+  'Security',
+  'HR',
+  'Finance',
+  'Engineering',
+  'Sales',
+] as const;
 
 /** All security groups used across labs. */
 export const GROUP_NAMES = [

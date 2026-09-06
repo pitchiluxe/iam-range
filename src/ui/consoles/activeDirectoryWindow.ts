@@ -584,6 +584,8 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     let readLogon = (): string => '';
     let readDept = (): string => '';
     let readTitle = (): string => '';
+    let readPwd = (): string => '';
+    let mustChange = false;
 
     modal(
       'New Object — User',
@@ -593,10 +595,24 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         readLogon = field(b, 'User logon name:');
         readDept = field(b, 'Department:', { options: [...DEPARTMENTS], value: dept });
         readTitle = field(b, 'Job title:', { value: 'Analyst' });
+        readPwd = field(b, 'Password:', { type: 'password' });
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-left:142px;';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.addEventListener('change', () => (mustChange = cb.checked));
+        const lab = document.createElement('label');
+        lab.textContent = 'User must change password at next logon';
+        lab.style.cssText = 'font-size:12px;color:#ccc;';
+        row.append(cb, lab);
+        b.appendChild(row);
+
         const hint = document.createElement('div');
         hint.textContent =
-          'The logon name becomes the account name. Leave it blank to derive first.last.';
-        hint.style.cssText = 'font-size:11px;color:#9d9d9d;margin-top:6px;';
+          'The department decides which applications appear on their desktop. Leave the ' +
+          'password blank to use the house default of username123.';
+        hint.style.cssText = 'font-size:11px;color:#9d9d9d;margin-top:10px;line-height:1.5;';
         b.appendChild(hint);
       },
       () => {
@@ -613,6 +629,8 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
           Name: `${first} ${last}`,
           Department: readDept(),
           Title: readTitle(),
+          AccountPassword: readPwd(),
+          ChangePasswordAtLogon: mustChange ? 'true' : 'false',
         });
       },
     );

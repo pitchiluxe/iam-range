@@ -1,21 +1,17 @@
 /**
- * vm/seedTickets.ts — the queue an operator finds waiting on Monday morning.
+ * vm/seedTickets.ts — the queue on a freshly installed domain.
  *
- * A workstation with an empty ticket queue has nothing to do, so the session
- * seeds a small realistic backlog. Every ticket here obeys the rules the 3D lab
- * learned the hard way:
+ * The directory starts with the administrator and nobody else, so the opening
+ * work is what it would really be on day one: create the staff. Tickets that
+ * depend on existing people — lockouts, transfers, offboarding — cannot be
+ * seeded here, because there is nobody to lock out yet. They arrive once the
+ * directory has people in it, generated against accounts that actually exist.
  *
- *   - it names accounts that exist in the directory (except onboarding, whose
- *     whole point is an account that does not exist yet)
- *   - its payload points at the SUBJECT, not whoever raised it
- *   - if the prose claims evidence — failed sign-ins, a lockout — that evidence
- *     is really in the audit log and the account is really in that state
- *
- * A ticket describing something the world does not contain sends the operator
- * looking for evidence that was never there.
+ * That constraint is the same rule the labs enforce: a ticket must never
+ * describe a world that is not there.
  */
-import type { GroupId, RoleId, UserId } from '@/domain';
 import type { MockAuditLog, MockDirectory, MockTicketQueue } from '@/services';
+import { COMPANY } from '@/config';
 
 interface SeedDeps {
   dir: MockDirectory;
@@ -23,144 +19,72 @@ interface SeedDeps {
   audit: MockAuditLog;
 }
 
-/** Record `count` failed sign-ins for a user, so the log matches the story. */
-function recordFailedSignIns(
-  audit: MockAuditLog,
-  userId: UserId,
-  count: number,
-  ip: string,
-): void {
-  for (let i = 0; i < count; i++) {
-    audit.record({ actorId: userId, action: 'signin.failure', targetId: userId, ip });
-  }
-}
+/** New starters waiting to be provisioned on a fresh domain. */
+export const FIRST_DAY_STARTERS = [
+  {
+    logon: 'jdoe',
+    display: 'John Doe',
+    department: 'Help Desk',
+    title: 'Service Desk Analyst',
+    group: 'grp-helpdesk-tier1',
+  },
+  {
+    logon: 'mchen',
+    display: 'Maya Chen',
+    department: 'HR',
+    title: 'HR Business Partner',
+    group: 'grp-hr-readers',
+  },
+  {
+    logon: 'rpatel',
+    display: 'Ravi Patel',
+    department: 'Finance',
+    title: 'Payroll Analyst',
+    group: 'grp-finance-payroll',
+  },
+] as const;
 
-/**
- * Raise the starting backlog. Safe to call on a freshly seeded directory only —
- * it looks accounts up by username and skips any ticket whose subject is
- * missing rather than inventing one.
- */
-export function seedStartingTickets({ dir, tickets, audit }: SeedDeps): void {
-  const by = (username: string) => dir.getUserByUsername(username);
-  const groupId = (name: string): GroupId | undefined => dir.getGroupByName(name)?.id;
+export function seedStartingTickets({ dir, tickets }: SeedDeps): void {
+  const admin = dir.listUsers()[0];
+  if (!admin) return;
 
-  const helpdesk = by('dan.rivera') ?? by('admin');
-  const manager = by('cara.patel') ?? by('admin');
-  if (!helpdesk || !manager) return;
+  const groupId = (name: string) => dir.getGroupByName(name)?.id;
 
-  // ── 1. Lockout. The account is genuinely locked and the failures are real,
-  //       so Unlock-ADAccount is the correct remedy and the log backs it up.
-  const locked = by('greta.olsen');
-  if (locked) {
-    locked.status = 'locked';
-    recordFailedSignIns(audit, locked.id, 5, '10.20.4.88');
+  // One ticket per starter, so each can be worked and closed on its own — and
+  // so the queue shows what a real intake looks like rather than one lump.
+  for (const s of FIRST_DAY_STARTERS) {
+    const g = groupId(s.group);
     tickets.create({
-      kind: 'password-reset',
-      requesterId: helpdesk.id,
-      subject: 'Account locked out: Greta Olsen (CFO)',
+      kind: 'onboarding',
+      requesterId: admin.id,
+      subject: `New starter: ${s.display} (${s.title})`,
       body:
-        'Greta Olsen (greta.olsen) is locked out after repeated failed sign-ins. ' +
-        'Check the audit log for the attempts, unlock the account, and reset her ' +
-        'password with a forced change at next sign-in. She is the CFO — treat as urgent.',
-      priority: 'urgent',
-      relatedUserIds: [locked.id],
-      payload: { userId: locked.id, method: 'helpdesk' },
-    });
-  }
-
-  // ── 2. Access request, filed on someone else's behalf.
-  const requester = by('erin.cho');
-  const payrollRole = dir.getRoleByName('grp-finance-payroll')?.id;
-  if (requester) {
-    tickets.create({
-      kind: 'access-request',
-      requesterId: manager.id,
-      subject: 'Finance Portal access for Erin Cho',
-      body:
-        'Erin Cho (erin.cho) needs access to the Finance Portal to cover month-end ' +
-        'reporting. Approved by her manager. Grant the minimum that gets the job ' +
-        'done and record what you granted.',
+        `${s.display} joins the ${s.department} team. Create the account ${s.logon} in ` +
+        `Active Directory, set a password, and add them to ${s.group}. ` +
+        `Then sign out and sign in as ${s.logon} to confirm the account works and that ` +
+        `their desktop has the right tools for ${s.department}.`,
       priority: 'normal',
-      relatedUserIds: [requester.id],
+      relatedUserIds: [],
       payload: {
-        userId: requester.id,
-        requestedRoleIds: payrollRole ? [payrollRole] : ([] as RoleId[]),
-        justification: 'Month-end reporting cover, manager approved.',
+        proposedGroupIds: g ? [g] : [],
+        proposedRoleIds: [],
+        startDate: Date.now(),
       },
     });
   }
 
-  // ── 3. Onboarding. The subject deliberately does not exist yet.
-  const financeGroup = groupId('grp-finance-payroll');
+  // A standing note rather than a task: it explains the environment.
   tickets.create({
     kind: 'onboarding',
-    requesterId: manager.id,
-    subject: 'New starter: Priya Raman (Finance Analyst)',
+    requesterId: admin.id,
+    subject: `Welcome — ${COMPANY.name} domain is ready`,
     body:
-      'Priya Raman starts Monday as a Finance Analyst. Create priya.raman, add her ' +
-      'to grp-finance-payroll, and confirm she can sign in. Three more starters ' +
-      'follow next week — consider doing this in PowerShell ISE rather than by hand.',
-    priority: 'normal',
+      `The ${COMPANY.domain} domain has been built and you are the only account in it. ` +
+      `Everyone you create in Active Directory can sign in at the lock screen with the ` +
+      `password you set, and their desktop is decided by the department you put them in. ` +
+      `Work the onboarding tickets first — the rest of the queue needs people to exist.`,
+    priority: 'low',
     relatedUserIds: [],
-    payload: {
-      proposedGroupIds: financeGroup ? [financeGroup] : [],
-      proposedRoleIds: payrollRole ? [payrollRole] : [],
-      startDate: Date.now() + 3 * 24 * 60 * 60 * 1000,
-    },
+    payload: { proposedGroupIds: [], proposedRoleIds: [], startDate: Date.now() },
   });
-
-  // ── 4. MFA device replacement.
-  const mfaUser = by('finn.muller');
-  if (mfaUser) {
-    tickets.create({
-      kind: 'mfa-issue',
-      requesterId: mfaUser.id,
-      subject: 'Lost phone — MFA re-enrolment for Finn Müller',
-      body:
-        'Finn Müller (finn.muller) lost the phone holding his authenticator. Clear ' +
-        'the existing registration so he can enrol on the new device. Clearing the ' +
-        'registration is not the same as turning MFA off — do not disable the policy.',
-      priority: 'high',
-      relatedUserIds: [mfaUser.id],
-      payload: { userId: mfaUser.id, symptom: 'lost-device' },
-    });
-  }
-
-  // ── 5. Leaver.
-  const leaver = by('bob.sato');
-  if (leaver) {
-    tickets.create({
-      kind: 'leaver',
-      requesterId: manager.id,
-      subject: 'Offboarding: Bob Sato — last day today',
-      body:
-        'Bob Sato (bob.sato) leaves today. Disable the account and revoke his active ' +
-        'sessions. Order matters: a disabled account with a live session can still ' +
-        'be used until that session is killed.',
-      priority: 'high',
-      relatedUserIds: [leaver.id],
-      payload: { userId: leaver.id, lastDay: Date.now(), revokeSessions: true },
-    });
-  }
-
-  // ── 6. Department transfer.
-  const mover = by('jane.doe');
-  if (mover) {
-    tickets.create({
-      kind: 'transfer',
-      requesterId: manager.id,
-      subject: 'Transfer: Jane Doe, Finance to Engineering',
-      body:
-        'Jane Doe (jane.doe) moves to Engineering on Monday. Update her department ' +
-        'and adjust group membership. Remember to remove the access she no longer ' +
-        'needs, not just add the new — stale access after a move is how privilege creeps.',
-      priority: 'normal',
-      relatedUserIds: [mover.id],
-      payload: {
-        userId: mover.id,
-        fromDepartment: mover.department,
-        toDepartment: 'Engineering',
-      },
-    });
-  }
 }

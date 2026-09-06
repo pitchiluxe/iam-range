@@ -5,6 +5,7 @@
  * corporate OS shell (dark theme, taskbar, Start menu, system tray, live clock)
  * with multiple draggable/minimizable/maximizable/closable windows.
  */
+import { appsForDepartment } from '@/config/desktopProfiles';
 import type { VmServices } from '@/vm/session';
 import { renderActiveDirectoryWindow } from './consoles/activeDirectoryWindow';
 import { renderTicketConsole } from './consoles/ticketConsole';
@@ -43,10 +44,12 @@ export interface WindowDef {
 }
 
 export interface DesktopOverlay {
-  /** @param isIT Whether this workstation's zone is IT-staffed (defaults to
-   *  true) — decides whether the full IAM/SecOps/Ticket VM opens or a plain
-   *  consumer desktop. */
-  show(conductor: VmServices, isIT?: boolean): void;
+  /**
+   * @param department Department of the signed-in user. Decides which
+   *   applications the desktop contains — see config/desktopProfiles.ts.
+   *   Omitted means "everything", which is only right before sign-in.
+   */
+  show(conductor: VmServices, department?: string): void;
   hide(): void;
   isVisible(): boolean;
   openWindow(id: string, conductor: VmServices): void;
@@ -202,13 +205,12 @@ const CONDUCTOR_BACKED_WINDOW_IDS = new Set([
 
 /** Apps only an IT workstation has installed — hidden from the desktop
  * icons, Start menu, and default layout on a non-IT zone's "computer". */
-const IT_ONLY_APP_IDS = new Set([
-  'active-directory',
-  'terminal',
-  'script-editor',
-  'ticket-console',
-  'secops-dashboard',
-]);
+/** Applications the signed-in user's department is entitled to. Replaced on
+ *  every show(); an empty set would mean "nothing", so it starts as null and
+ *  every app is allowed until a profile says otherwise. */
+let allowedAppIds: Set<string> | null = null;
+
+const appAllowed = (id: string): boolean => allowedAppIds === null || allowedAppIds.has(id);
 
 // ---------------------------------------------------------------------------
 // WindowManager
@@ -476,7 +478,7 @@ export function createDesktopOverlay(): DesktopOverlay {
   // Whether the current workstation is an IT one (full IAM/SecOps/Ticket
   // tooling) or a plain consumer PC — set on every show() call so exiting an
   // IT zone's VM and entering a non-IT one's swaps the app set correctly.
-  let currentIsIT = true;
+  let currentDepartment = 'IT';
   let iconColEl: HTMLElement | null = null;
   let renderStartMenuApps: (() => void) | null = null;
 
@@ -543,7 +545,7 @@ export function createDesktopOverlay(): DesktopOverlay {
   }
 
   function allDesktopIconEntries(): DesktopIconEntry[] {
-    return DESKTOP_APPS.filter((a) => currentIsIT || !IT_ONLY_APP_IDS.has(a.id)).map(
+    return DESKTOP_APPS.filter((a) => appAllowed(a.id)).map(
       (a): DesktopIconEntry => ({ id: a.id, title: a.title, icon: a.icon }),
     );
   }
@@ -885,9 +887,9 @@ export function createDesktopOverlay(): DesktopOverlay {
     renderStartMenuApps = () => {
       const subtitle = header.querySelector('#sm-subtitle');
       if (subtitle)
-        subtitle.textContent = currentIsIT ? 'IT Operations Workstation' : 'Workstation';
+        subtitle.textContent = `${currentDepartment} Workstation`;
       appsGrid.innerHTML = '';
-      const apps = DESKTOP_APPS.filter((a) => currentIsIT || !IT_ONLY_APP_IDS.has(a.id));
+      const apps = DESKTOP_APPS.filter((a) => appAllowed(a.id));
       for (const app of apps) {
         const appBtn = document.createElement('button');
         appBtn.style.cssText = `
@@ -1119,17 +1121,18 @@ export function createDesktopOverlay(): DesktopOverlay {
   }
 
   const api: DesktopOverlay = {
-    show(conductor: VmServices, isIT = true) {
-      currentIsIT = isIT;
+    show(conductor: VmServices, department?: string) {
+      currentDepartment = department ?? 'IT';
+      allowedAppIds = department ? new Set(appsForDepartment(department)) : null;
 
       if (!container) {
         container = buildContainer();
         buildDesktop(container);
         buildTaskbar(container, conductor);
-        // Auto-open IAM Console + Objectives inside the VM (2-pane default
-        // layout) — but only on an IT workstation; a consumer PC (Finance,
-        // HR, Reception, App Center) starts with a plain empty desktop.
-        if (isIT) layoutDefaultWindows(wmCtx.current);
+        // Open the two-pane working layout for people who administer
+        // identity. Everyone else starts on a plain desktop — Finance has no
+        // use for Active Directory sitting open.
+        if (appAllowed('active-directory')) layoutDefaultWindows(wmCtx.current);
       } else {
         // Re-entering the VM: reuse the existing WindowManager and its DOM
         // instead of building a new one. Recreating the WindowManager here
@@ -1138,30 +1141,30 @@ export function createDesktopOverlay(): DesktopOverlay {
         // Objectives on top of them every single time the learner exited
         // and re-entered, duplicating windows without bound.
         const wm = wmCtx.current;
-        if (wm && !isIT) {
-          // Consumer desktop — this "computer" doesn't have IT tooling
-          // installed, so close any IT-only windows left open from a
-          // previous IT-zone visit rather than showing them here.
+        if (wm) {
+          // Signing in as someone else: close anything their department is not
+          // entitled to, rather than leaving the previous user's windows up.
           for (const id of wm.getOpenIds()) {
-            if (IT_ONLY_APP_IDS.has(id)) wm.close(id);
+            if (!appAllowed(id)) wm.close(id);
           }
-        } else if (wm && wm.getOpenIds().length > 0) {
-          // Windows are already open — refresh the conductor-backed ones so
-          // they reflect the current lab state (e.g. after Reset Lab) rather
-          // than whatever was rendered when they were first opened.
-          for (const id of wm.getOpenIds()) {
-            if (CONDUCTOR_BACKED_WINDOW_IDS.has(id)) wm.refresh(id);
+
+          const stillOpen = wm.getOpenIds();
+          if (stillOpen.length > 0) {
+            // Re-render the service-backed windows so they show current state
+            // rather than whatever was there when they were first opened.
+            for (const id of stillOpen) {
+              if (CONDUCTOR_BACKED_WINDOW_IDS.has(id)) wm.refresh(id);
+            }
+            wm.updateTaskbar();
+          } else if (appAllowed('active-directory')) {
+            // Nothing left open — restore the working layout.
+            layoutDefaultWindows(wm);
           }
-          wm.updateTaskbar();
-        } else if (wm) {
-          // Desktop was opened before but everything got closed — restore
-          // the default layout.
-          layoutDefaultWindows(wm);
         }
       }
 
-      // The app set (icons, Start menu) depends on isIT, which can differ
-      // from the last time this desktop was shown — refresh both to match.
+      // The app set depends on the signed-in user's department, which differs
+      // between sign-ins — refresh icons and Start menu to match.
       if (iconColEl) renderDesktopIcons(iconColEl);
       renderStartMenuApps?.();
 
@@ -1184,7 +1187,8 @@ export function createDesktopOverlay(): DesktopOverlay {
       // Belt-and-suspenders: even if something (e.g. the File Explorer's
       // Program Files listing) tries to open an IT app by id directly, a
       // consumer desktop still won't actually launch it.
-      if (!currentIsIT && IT_ONLY_APP_IDS.has(id)) return;
+      // Never open something this department is not entitled to.
+      if (!appAllowed(id)) return;
       wmCtx.current?.openById(id);
     },
     onExit: null,

@@ -34,6 +34,9 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     const el = document.createElement('div');
     el.style.cssText =
       'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;' +
+      // The account strip is absolutely positioned, so it takes no part in
+      // this centring — the panel sits in the middle of the screen, as it
+      // does in Windows, rather than in the space above the strip.
       'justify-content:center;overflow:hidden;' +
       // A calm gradient rather than a photo: no third-party image to ship.
       'background:linear-gradient(150deg,#0b3a5e 0%,#123f63 40%,#0e2438 100%);' +
@@ -96,7 +99,9 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     overlay.innerHTML = '';
 
     const panel = document.createElement('div');
-    panel.style.cssText = 'text-align:center;width:340px;';
+    // Lifted slightly above true centre, which is where Windows puts it.
+    panel.style.cssText =
+      'text-align:center;width:340px;position:relative;top:-6vh;';
 
     // Avatar
     const avatar = document.createElement('div');
