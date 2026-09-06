@@ -18,7 +18,7 @@
  * the world before the ticket is raised. The model never decides whether a
  * person exists.
  */
-import type { MockAuditLog, MockDirectory, MockTicketQueue } from '@/services';
+import type { MockAuditLog, MockDirectory, MockTicketQueue, MockPim } from '@/services';
 import type { Ticket, TicketKind, UserId } from '@/domain';
 import { readEnvironment, type EnvironmentState, type Stage } from './environmentStage';
 import { describeForPrompt } from './environmentStage';
@@ -27,6 +27,8 @@ export interface GeneratorDeps {
   dir: MockDirectory;
   tickets: MockTicketQueue;
   audit: MockAuditLog;
+  /** Optional: PIM scenarios are simply not offered without it. */
+  pim?: MockPim;
 }
 
 /** A unit of work the environment can currently support. */
@@ -187,12 +189,68 @@ function operatingScenarios(env: EnvironmentState): Scenario[] {
   return out;
 }
 
-function scenariosFor(env: EnvironmentState): Scenario[] {
+
+/**
+ * Privileged-access work. Offered only once there are people and a privileged
+ * role to hold, because eligibility for a role nobody defined is not a task.
+ */
+function pimScenarios(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
+  if (!deps.pim) return [];
+  const adminRole = deps.dir.getRoleByName('role-domain-admins') ?? deps.dir.listRoles()[0];
+  if (!adminRole || env.staffLogons.length === 0) return [];
+
+  const out: Scenario[] = [];
+  const target = env.staffLogons[Math.floor(Math.random() * env.staffLogons.length)]!;
+
+  // 1. Standing privilege discovered in a review. Created for real so the
+  //    review has something to find.
+  out.push({
+    id: `pim-standing-${target}`,
+    kind: 'access-request',
+    priority: 'high',
+    subject: `Access review: ${target} holds permanent admin rights`,
+    body:
+      `The quarterly privileged access review flagged ${target} as holding ` +
+      `${adminRole.name} permanently, with no expiry and no approval on record. ` +
+      'Standing privilege is what PIM exists to remove. Make them eligible instead, ' +
+      'so the role has to be activated with a reason and lapses on its own, then ' +
+      'remove the permanent assignment. Confirm with Get-PimStandingPrivilege.',
+    prepare: ({ dir, pim }) => {
+      const u = dir.getUserByUsername(target);
+      if (!u || !pim) return [];
+      pim.grantPermanent(u.id, adminRole.id, u.id);
+      return [u.id];
+    },
+  });
+
+  // 2. Just-in-time elevation for a real piece of work.
+  out.push({
+    id: `pim-jit-${target}`,
+    kind: 'access-request',
+    priority: 'normal',
+    subject: `Elevation request: ${target} needs admin for a change window`,
+    body:
+      `${target} has a change to make tonight and needs ${adminRole.name} for the ` +
+      'window only. Make them eligible rather than granting it outright, then have ' +
+      'the role activated with a justification and a duration that matches the ' +
+      'change. Check afterwards that it lapsed rather than staying on.',
+    prepare: ({ dir }) => {
+      const u = dir.getUserByUsername(target);
+      return u ? [u.id] : [];
+    },
+  });
+
+  return out;
+}
+
+function scenariosFor(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
   const byStage: Record<Stage, () => Scenario[]> = {
     bare: () => bareStageScenarios(),
     structured: () => structuredStageScenarios(env),
     'ready-to-staff': () => staffingScenarios(env),
-    operating: () => operatingScenarios(env),
+    // Privileged-access work joins the ordinary queue once the domain is
+    // staffed: PIM is a day-to-day discipline, not a separate mode.
+    operating: () => [...operatingScenarios(env), ...pimScenarios(env, deps)],
   };
   return byStage[env.stage]();
 }
@@ -314,7 +372,7 @@ export async function generateTickets(
   const open = deps.tickets.list().filter((t) => t.status !== 'resolved');
   const openSubjects = new Set(open.map((t) => t.subject));
 
-  const candidates = scenariosFor(env)
+  const candidates = scenariosFor(env, deps)
     .filter((s) => !openSubjects.has(s.subject))
     .slice(0, options.max ?? 3);
 
@@ -341,7 +399,7 @@ export function generateTicketsSync(deps: GeneratorDeps, max = 3): number {
       .filter((t) => t.status !== 'resolved')
       .map((t) => t.subject),
   );
-  const candidates = scenariosFor(env)
+  const candidates = scenariosFor(env, deps)
     .filter((s) => !openSubjects.has(s.subject))
     .slice(0, max);
   for (const s of candidates) raise(deps, s);

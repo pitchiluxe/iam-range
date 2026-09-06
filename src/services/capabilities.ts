@@ -22,6 +22,7 @@ import type { MockAuditLog } from './mockAuditLog';
 import type { MockDirectory } from './mockDirectory';
 import type { MockIdP } from './mockIdP';
 import type { MockTicketQueue } from './mockTicketQueue';
+import type { MockPim } from './mockPim';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,6 +30,9 @@ import type { MockTicketQueue } from './mockTicketQueue';
 
 export interface CapabilityContext {
   dir: MockDirectory;
+  /** Privileged Identity Management. Optional so hosts without PIM still
+   *  satisfy the contract; the PIM capabilities refuse cleanly when absent. */
+  pim?: MockPim;
   idp: MockIdP;
   tickets: MockTicketQueue;
   audit: MockAuditLog;
@@ -600,7 +604,161 @@ export const CAPABILITIES: readonly IamCapability[] = [
     },
   },
 
-  // ── Audit ────────────────────────────────────────────────────────────────
+  // -- Privileged Identity Management ---------------------------------------
+  {
+    id: 'pim.list',
+    label: 'Privileged Assignments',
+    synopsis: 'Show who is eligible for, or currently holding, a privileged role.',
+    consoleSection: 'access',
+    cmdlet: 'Get-PimAssignment',
+    readOnly: true,
+    params: [{ ...P.identity, required: false }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      if (!ctx.pim) return err('PIM is not available on this host.');
+      const u = a.Identity ? findUser(ctx, a.Identity) : undefined;
+      if (a.Identity && !u) return err(`Cannot find an object with identity '${a.Identity}'.`);
+      const rows = ctx.pim.list(u ? { userId: u.id } : undefined).map((x) => ({
+        User: ctx.dir.getUser(x.userId)?.username ?? x.userId,
+        Role: ctx.dir.getRole(x.roleId)?.name ?? x.roleId,
+        State: x.state,
+        Expires: x.expiresAt ? new Date(x.expiresAt).toLocaleTimeString() : '-',
+        Justification: x.justification ?? '-',
+      }));
+      return ok(`${rows.length} assignment(s).`, rows);
+    },
+  },
+  {
+    id: 'pim.eligible',
+    label: 'Make Eligible',
+    synopsis: 'Allow someone to activate a privileged role, without granting it now.',
+    consoleSection: 'access',
+    cmdlet: 'New-PimEligibility',
+    validator: 'pim-eligible',
+    params: [P.identity, P.role],
+    resolvesTicketKinds: ['access-request'],
+    run(ctx, a) {
+      if (!ctx.pim) return err('PIM is not available on this host.');
+      const u = findUser(ctx, a.Identity ?? '');
+      if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
+      const r = findRole(ctx, a.Role ?? '');
+      if (!r) return err(`Cannot find a role named '${a.Role}'.`);
+      const res = ctx.pim.makeEligible(u.id, r.id, ctx.actor);
+      return res.ok ? ok(`${u.username} is now eligible for ${r.name}.`) : err(res.error);
+    },
+  },
+  {
+    id: 'pim.activate',
+    label: 'Activate Role',
+    synopsis: 'Take up an eligible role for a bounded window, stating why.',
+    consoleSection: 'access',
+    cmdlet: 'Enable-PimRole',
+    validator: 'pim-activated',
+    params: [
+      P.identity,
+      P.role,
+      { name: 'Justification', label: 'Reason', kind: 'text', required: true },
+      { name: 'Minutes', label: 'Duration (minutes)', kind: 'text', required: false },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      if (!ctx.pim) return err('PIM is not available on this host.');
+      const u = findUser(ctx, a.Identity ?? '');
+      if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
+      const r = findRole(ctx, a.Role ?? '');
+      if (!r) return err(`Cannot find a role named '${a.Role}'.`);
+      const minutes = a.Minutes ? Number(a.Minutes) : undefined;
+      if (a.Minutes && !Number.isFinite(minutes)) return err('Minutes must be a number.');
+      const res = ctx.pim.activate(u.id, r.id, {
+        ...(a.Justification ? { justification: a.Justification } : {}),
+        ...(minutes !== undefined ? { minutes } : {}),
+      });
+      return res.ok ? ok(`${u.username} -> ${r.name}: ${res.message}`) : err(res.error);
+    },
+  },
+  {
+    id: 'pim.approve',
+    label: 'Approve Activation',
+    synopsis: 'Approve a pending activation request raised by someone else.',
+    consoleSection: 'access',
+    cmdlet: 'Approve-PimRequest',
+    validator: 'pim-approved',
+    params: [P.identity, P.role],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      if (!ctx.pim) return err('PIM is not available on this host.');
+      const u = findUser(ctx, a.Identity ?? '');
+      if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
+      const r = findRole(ctx, a.Role ?? '');
+      if (!r) return err(`Cannot find a role named '${a.Role}'.`);
+      const res = ctx.pim.approve(u.id, r.id, ctx.actor);
+      return res.ok ? ok(`${u.username} -> ${r.name}: ${res.message}`) : err(res.error);
+    },
+  },
+  {
+    id: 'pim.deactivate',
+    label: 'Deactivate Role',
+    synopsis: 'End an activation early, returning the person to eligible.',
+    consoleSection: 'access',
+    cmdlet: 'Disable-PimRole',
+    validator: 'pim-deactivated',
+    params: [P.identity, P.role],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      if (!ctx.pim) return err('PIM is not available on this host.');
+      const u = findUser(ctx, a.Identity ?? '');
+      if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
+      const r = findRole(ctx, a.Role ?? '');
+      if (!r) return err(`Cannot find a role named '${a.Role}'.`);
+      const res = ctx.pim.deactivate(u.id, r.id, ctx.actor);
+      return res.ok ? ok(`${u.username} -> ${r.name}: ${res.message}`) : err(res.error);
+    },
+  },
+  {
+    id: 'pim.remove',
+    label: 'Remove Standing Privilege',
+    synopsis: 'Remove a privileged assignment entirely - the fix for standing access.',
+    consoleSection: 'access',
+    cmdlet: 'Remove-PimAssignment',
+    validator: 'pim-removed',
+    params: [P.identity, P.role],
+    resolvesTicketKinds: ['access-request'],
+    run(ctx, a) {
+      if (!ctx.pim) return err('PIM is not available on this host.');
+      const u = findUser(ctx, a.Identity ?? '');
+      if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
+      const r = findRole(ctx, a.Role ?? '');
+      if (!r) return err(`Cannot find a role named '${a.Role}'.`);
+      const res = ctx.pim.remove(u.id, r.id, ctx.actor);
+      return res.ok ? ok(`Removed ${r.name} from ${u.username}.`) : err(res.error);
+    },
+  },
+  {
+    id: 'pim.standing',
+    label: 'Standing Privilege',
+    synopsis: 'List permanently assigned privileged roles - what a review hunts for.',
+    consoleSection: 'access',
+    cmdlet: 'Get-PimStandingPrivilege',
+    readOnly: true,
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      if (!ctx.pim) return err('PIM is not available on this host.');
+      const rows = ctx.pim.standingPrivilege().map((x) => ({
+        User: ctx.dir.getUser(x.userId)?.username ?? x.userId,
+        Role: ctx.dir.getRole(x.roleId)?.name ?? x.roleId,
+        Since: new Date(x.createdAt).toLocaleDateString(),
+      }));
+      return ok(
+        rows.length === 0
+          ? 'No standing privilege - every privileged assignment is time-bound.'
+          : `${rows.length} standing assignment(s). Each is permanent access nobody re-approves.`,
+        rows,
+      );
+    },
+  },
+
+  // -- Audit ----------------------------------------------------------------
   {
     id: 'audit.list',
     legacyConsoleForm: true,

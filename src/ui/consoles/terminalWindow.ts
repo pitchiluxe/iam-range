@@ -55,6 +55,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
       idp: conductor.idp,
       tickets: conductor.tickets,
       audit: conductor.audit,
+      pim: conductor.pim,
       actor: 'system' as UserId,
     };
   };

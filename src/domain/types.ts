@@ -292,6 +292,14 @@ export interface AuditEvent {
     | 'password.reset'
     | 'account.unlock'
     | 'user.moved'
+    | 'pim.eligible'
+    | 'pim.permanent'
+    | 'pim.requested'
+    | 'pim.approved'
+    | 'pim.activated'
+    | 'pim.deactivated'
+    | 'pim.expired'
+    | 'pim.removed'
     | 'ou.created'
     | 'ou.deleted'
     | 'app.config.changed'
@@ -388,7 +396,12 @@ export type ValidatorKind =
    *  existing users cannot satisfy it by accident. */
   | 'users-provisioned'
   /** An organisational unit was created — the first task on a bare domain. */
-  | 'ou-created';
+  | 'ou-created'
+  | 'pim-eligible'
+  | 'pim-activated'
+  | 'pim-approved'
+  | 'pim-deactivated'
+  | 'pim-removed';
 
 export interface LabStep {
   id: string;

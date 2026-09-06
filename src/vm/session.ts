@@ -18,6 +18,7 @@ import {
   MockIdP,
   MockIncidents,
   MockTicketQueue,
+  MockPim,
 } from '@/services';
 import { applyBaseline } from '@/seed/baseline';
 import { generateTicketsSync } from './ticketGenerator';
@@ -37,6 +38,7 @@ export interface VmServices {
   audit: MockAuditLog;
   reviews: MockAccessReviews;
   incidents: MockIncidents;
+  pim: MockPim;
   /** Discard all work and re-seed. The Ticket Queue's reset button calls this. */
   reset(): void;
 }
@@ -49,6 +51,7 @@ export class VmSession implements VmServices {
   audit!: MockAuditLog;
   reviews!: MockAccessReviews;
   incidents!: MockIncidents;
+  pim!: MockPim;
 
   constructor() {
     this.boot();
@@ -69,12 +72,18 @@ export class VmSession implements VmServices {
     this.tickets = new MockTicketQueue(this.audit);
     this.reviews = new MockAccessReviews();
     this.incidents = new MockIncidents();
+    this.pim = new MockPim(this.audit);
 
     applyBaseline(this.dir, this.idp, this.apps);
     // Raise the work this domain is ready for. On a fresh install that is
     // building the OU structure, not onboarding — there is nowhere to put
     // anyone yet.
-    generateTicketsSync({ dir: this.dir, tickets: this.tickets, audit: this.audit });
+    generateTicketsSync({
+      dir: this.dir,
+      tickets: this.tickets,
+      audit: this.audit,
+      pim: this.pim,
+    });
 
     // Mirror seeded state into the stores the windows subscribe to.
     auditStore.getState().reset();

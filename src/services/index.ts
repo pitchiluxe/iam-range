@@ -14,6 +14,13 @@ export { MockTicketQueue } from './mockTicketQueue';
 export type { NewTicket } from './mockTicketQueue';
 export { MockAccessReviews } from './mockAccessReviews';
 export { MockIncidents } from './mockIncidents';
+export { MockPim } from './mockPim';
+export type {
+  PimAssignment,
+  AssignmentState,
+  PrivilegedRoleSettings,
+  PimResult,
+} from './mockPim';
 export {
   CAPABILITIES,
   CAPABILITY_BY_ID,

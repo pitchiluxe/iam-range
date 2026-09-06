@@ -153,6 +153,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     idp: conductor.idp,
     tickets: conductor.tickets,
     audit: conductor.audit,
+    pim: conductor.pim,
     actor: 'system' as UserId,
   });
 
