@@ -6,7 +6,7 @@
  * with multiple draggable/minimizable/maximizable/closable windows.
  */
 import type { VmServices } from '@/vm/session';
-import { renderIAMConsole } from './consoles/iamConsole';
+import { renderActiveDirectoryWindow } from './consoles/activeDirectoryWindow';
 import { renderTicketConsole } from './consoles/ticketConsole';
 import { renderSecOpsDashboard } from './consoles/secOpsDashboard';
 import { renderNotepadWindow } from './consoles/notepadWindow';
@@ -56,12 +56,12 @@ export interface DesktopOverlay {
 
 const DESKTOP_APPS: WindowDef[] = [
   {
-    id: 'iam-console',
-    title: 'IAM Console',
-    icon: '🔐',
-    width: 720,
-    height: 580,
-    render: (c, b) => renderIAMConsole(b, c),
+    id: 'active-directory',
+    title: 'Active Directory Users and Computers',
+    icon: '🗄️',
+    width: 940,
+    height: 620,
+    render: (c, b) => renderActiveDirectoryWindow(b, c),
   },
   {
     id: 'ticket-console',
@@ -189,7 +189,7 @@ const APP_BY_ID: Record<string, WindowDef> = Object.fromEntries(DESKTOP_APPS.map
  * clobbering in-progress local state (e.g. an unsaved Notepad draft) for no
  * benefit. */
 const CONDUCTOR_BACKED_WINDOW_IDS = new Set([
-  'iam-console',
+  'active-directory',
   'app-portal',
   'script-editor',
   // Rebuilt on VM re-entry so the shell binds to the current lab's services.
@@ -203,7 +203,7 @@ const CONDUCTOR_BACKED_WINDOW_IDS = new Set([
 /** Apps only an IT workstation has installed — hidden from the desktop
  * icons, Start menu, and default layout on a non-IT zone's "computer". */
 const IT_ONLY_APP_IDS = new Set([
-  'iam-console',
+  'active-directory',
   'terminal',
   'script-editor',
   'ticket-console',
@@ -1114,7 +1114,7 @@ export function createDesktopOverlay(): DesktopOverlay {
     const h = Math.min(620, window.innerHeight - 80);
     const y0 = Math.round((window.innerHeight - 48 - h) / 2); // above the taskbar
 
-    openPinned('iam-console', x0, y0, iamW, h);
+    openPinned('active-directory', x0, y0, iamW, h);
     openPinned('ticket-console', x0 + iamW + GAP, y0, queueW, h);
   }
 
