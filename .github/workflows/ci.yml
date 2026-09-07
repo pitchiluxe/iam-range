@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Test, typecheck, lint, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm test -- --run
+      - run: npm run build
+
+  installers:
+    name: Build installer (${{ matrix.os }})
+    needs: verify
+    # Only on a push. A pull request from a fork has no access to the release
+    # token, and a build that cannot publish is a build nobody will use.
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows
+          - os: macos-latest
+            artifact: macos
+          - os: ubuntu-latest
+            artifact: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Build and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release
+
+      # electron-builder can exit zero having published nothing — a wrong
+      # output directory, a skipped target, a publish that quietly no-ops.
+      # This is the check that caught exactly that in the sibling project,
+      # where a release shipped with source code and no installer.
+      - name: Verify an installer was produced
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(dist-installer/*.exe dist-installer/*.dmg dist-installer/*.AppImage)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No installer in dist-installer/ — the publish step produced nothing."
+            ls -la dist-installer/ || echo "dist-installer/ does not exist"
+            exit 1
+          fi
+          printf 'Built: %s\n' "${files[@]}"
+
+      - name: Upload installer as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.artifact }}
+          path: |
+            dist-installer/*.exe
+            dist-installer/*.dmg
+            dist-installer/*.AppImage
+            dist-installer/latest*.yml
+          if-no-files-found: error

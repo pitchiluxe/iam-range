@@ -1,102 +1,118 @@
-# IAM Operator Workstation
+# Identity Operations Workstation
 
-A standalone identity-operations workstation: the virtual machine from the
-IAM & SSO 3D Lab, running on its own with no 3D world and no lab engine.
+A simulated Windows workstation for practising Identity and Access Management
+and Privileged Identity Management. The directory behind it is real enough to
+be wrong: you can misconfigure it, and it will behave the way a misconfigured
+one behaves.
 
-It boots straight into a seeded Northwind directory — 14 users, 10 groups,
-5 federated applications — with every console live from the first frame and six
-tickets already waiting in the queue.
+The domain starts **empty**. One administrator account, no organisational
+units, no groups, nobody in it. Everything else gets there because you put it
+there, which is the point — every account in a real directory exists because
+somebody provisioned it.
+
+## What is in it
+
+| Application | What it does |
+| --- | --- |
+| Active Directory Users and Computers | The snap-in, backed by a real directory. The tree shows what exists and nothing that does not. |
+| PowerShell | A working subset of the AD cmdlets, with script templates for bulk work. |
+| Cloud Identity | Okta and Entra ID in front of the domain: sync cycles, SCIM, soft-match failures. |
+| Ticket Queue | Work raised for the state the domain is actually in, with the evidence made true first. |
+| IAM Tutor | Answers from a written reference and names the article it used. Socratic by default. |
+| Documentation | Thirteen articles on the things the job and the interview both ask about. |
+| Writer | The documents an identity engineer files — incident report, access review, offboarding checklist. |
+| SecOps Dashboard, App Portal, Control Panel, Settings, Explorer, Terminal | The rest of the desktop. |
+
+Which applications appear depends on the department of the account signed in.
+HR does not get Active Directory. Signing in as somebody else to see what their
+desktop has is a genuine diagnostic step.
+
+## Running it
 
 ```bash
 npm install
-npm run dev      # http://localhost:5174
-npm test -- --run
-npm run build
+npm run dev        # http://localhost:5174
 ```
 
-## What's in it
+Sign in as `admin` with the password shown on the sign-in panel.
 
-| Window | What it does |
-|---|---|
-| **IAM Console** | Users, groups, roles, credentials, sessions, audit trail |
-| **Ticket Queue** | Raise and work tickets, with SLA timers and comments |
-| **SecOps Dashboard** | Searchable audit log, incidents, access reviews |
-| **Terminal** | PowerShell shell — real AD cmdlet names, plus `dir`, `whoami`, `net user`, `ipconfig` |
-| **PowerShell ISE** | Script editor with nine automation templates and save-your-own |
-| **App Portal** | SSO portal — attempt sign-on as any user and see the page they'd get |
-| **Browser** | Restricted browser, IAM/identity resources only |
-| Calculator, Notepad, Sticky Notes, File Explorer, Settings, Control Panel, Recycle Bin | Desktop accessories |
+```bash
+npm test -- --run  # the suite
+npm run type-check
+npm run lint
+npm run build      # production build into dist/
+```
 
-Every console action runs against the same services and writes to the same
-audit log, so what you do in the Terminal shows up in the IAM Console and the
-SecOps log — the surfaces cannot disagree.
+## Building the desktop application
 
-## Relationship to `../app`
+```bash
+npm run build:desktop   # installer into dist-installer/, no publish
+npm run release         # build and publish to GitHub Releases
+```
 
-This project was extracted from the 3D lab and is now **independent**. Changes
-here do not affect `../app`, and vice versa. The extraction was possible
-without rewriting the windows because each one imported the lab's `Conductor`
-only as a **type** — so they bind by shape to `VmSession`, which owns the same
-seven services and nothing else.
+`npm run electron:dev` runs the Electron shell against an existing `dist/`.
 
-**Carried over:** `domain/`, `services/`, `terminal/`, `config/`, `util/`,
-`seed/baseline`, `ui/desktopOverlay` and 14 console windows.
+Publishing needs `GH_TOKEN` and the `publish` block in `package.json` pointing
+at a repository that exists. CI does this on every push to the default branch,
+and fails the job if the publish step produced no installer — a build that
+exits zero having shipped nothing is the failure this check exists for.
 
-**Left behind, deliberately:**
+## The optional part
 
-- `three/` — the 3D engine. The VM never imported it.
-- `labs/`, `conductor/`, `seed/perLab/` — lab definitions, steps, scoring, faults.
-- `Objectives` and `AI Supervisor` windows — both exist to serve labs.
-- Evidence capture and scoring. The audit log is the record here.
+The tutor and the ticket generator can use [Ollama](https://ollama.com/download),
+a local model runtime. Nothing leaves the machine; the model runs on it.
 
-The lab-shaped stores (`labStore`, `evidenceStore`, `scoreStore`, `tutorStore`,
-`progressStore`, `faultStore`) are **absent rather than stubbed**. A stub would
-invite window code to keep depending on a concept this app does not have.
+```bash
+ollama pull llama3.2
+```
 
-The bundle is ~200 KB against the lab's ~886 KB, almost entirely because
-Three.js stayed behind.
+Without Ollama the tutor quotes the documentation rather than composing an
+answer, and generated tickets use their built-in wording. That is a narrower
+experience, not a broken one, and it is the one most people will have — so it
+is tested as a first-class path rather than as a fallback.
 
-## The starting backlog
+Settings → AI Assistant reports whether Ollama is currently answering.
 
-Boot raises six tickets across six kinds — a CFO lockout, an access request, a
-new starter, an MFA device replacement, a leaver and a transfer.
+## The landing page
 
-They obey the rules the 3D lab arrived at the hard way. A ticket names accounts
-the directory actually has; its payload points at the **subject** rather than
-whoever raised it; and if the prose claims evidence, that evidence is real. The
-lockout ticket describes failed sign-ins, so `greta.olsen` is genuinely
-`locked` and five `signin.failure` events are in the audit log — investigate,
-and you find what the ticket said you would.
+`site/` is a single static page with a download button. `vercel.json` deploys
+it as-is with no build step. `npm run build:icons` regenerates the mark it
+shares with the application.
 
-The onboarding ticket is the deliberate exception: `priya.raman` does not
-exist, because creating her is the job.
+## How it is put together
 
-`tests/session.test.ts` enforces all of that, so a ticket added later cannot
-quietly describe a world that is not there.
+```
+src/
+  config/       company, credentials, host identity, desktop profiles,
+                knowledge base, document templates, script templates
+  domain/       types, branded IDs, audit and validator unions
+  services/     directory, IdP, app server, tickets, audit, reviews,
+                incidents, PIM, cloud tenants, capability registry
+  vm/           session, login, environment stage, ticket generator, tutor
+  terminal/     tokenizer, dispatcher, script runner, shell intrinsics
+  ui/           desktop overlay, login screen, sounds, toast
+  ui/consoles/  one file per application window
+```
 
-## Sessions
+Two rules hold the thing together.
 
-`VmSession` (`src/vm/session.ts`) owns the seven services and seeds the
-directory. **Reset Environment** in the Ticket Queue re-seeds from scratch.
+**The capability registry is the single source of truth.** `services/capabilities.ts`
+defines what an operator can do. The console renders a form per capability, the
+terminal dispatches cmdlets against it, and ticket kinds declare which
+capability resolves them. Adding an action there makes it reachable everywhere
+at once; a ticket kind with no resolving capability fails the build.
 
-Services are *replaced* on reset, not cleared — so windows resolve them per
-action rather than capturing a reference at render time. That was a real bug in
-the 3D app: a window holding a stale service mutated an orphaned directory and
-still reported success.
+**Drift is a test failure.** A ticket naming an account that does not exist, a
+lockout ticket with no locked account, a validator with no case, a script
+template that does not parse, or a source file naming a company this project
+renamed away from — each of those breaks the suite rather than being noticed
+months later by somebody using it.
 
-## Tests
+## A note on realism
 
-147 tests cover the parts with real logic: the script runner and its PowerShell
-subset, terminal cmdlets and shell built-ins, the capability registry,
-directory integrity, the calculator's expression evaluator, and the browser
-allowlist including its bypass attempts.
+Every account, company, domain and application is fictional. The workstation
+touches nothing on the host machine and opens no network connection of its own;
+the only outbound request it can make is to a local Ollama, and only if you
+install one.
 
-Lab-dependent suites did not come across, and neither did the Electron
-main-process allowlist test — this project has no main process yet. If you add
-an Electron shell, port that assertion across with it.
-
-## Ideas from here
-
-- An Electron shell, reusing `../app/electron` and its allowlist guards.
-- Free-play scenarios: inject a lockout or a broken SAML config on demand,
-  without the full lab machinery.
+Built by Erick Omari.

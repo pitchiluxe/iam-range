@@ -19,6 +19,8 @@ import { WALLPAPERS, WALLPAPER_STORAGE_KEY, DEFAULT_WALLPAPER_ID,
 } from '@/util/wallpapers';
 import { updateManager, type UpdateStatus } from '@/util/updateManager';
 import { COMPANY } from '@/config';
+import { tutorAvailable } from '@/vm/tutor';
+import { openExternal, OLLAMA_DOWNLOAD_URL, OLLAMA_MODEL } from '@/util/externalLink';
 
 const DENSITY_KEY = 'settings_density';
 const THEME_KEY = 'app_theme';
@@ -45,7 +47,14 @@ function setTheme(theme: 'dark' | 'light'): void {
 }
 
 type CategoryId =
-  'system' | 'personalization' | 'apps' | 'accounts' | 'sound' | 'updates' | 'about';
+  | 'system'
+  | 'personalization'
+  | 'apps'
+  | 'accounts'
+  | 'sound'
+  | 'assistant'
+  | 'updates'
+  | 'about';
 
 interface Category {
   id: CategoryId;
@@ -59,6 +68,7 @@ const CATEGORIES: Category[] = [
   { id: 'apps', icon: '📦', label: 'Apps' },
   { id: 'accounts', icon: '👤', label: 'Accounts' },
   { id: 'sound', icon: '🔊', label: 'Sound' },
+  { id: 'assistant', icon: '🎓', label: 'AI Assistant' },
   { id: 'updates', icon: '🔄', label: 'Updates' },
   { id: 'about', icon: 'ℹ️', label: 'About' },
 ];
@@ -460,6 +470,72 @@ export function renderSettingsWindow(body: HTMLElement): void {
         ),
       );
       return;
+    }
+
+    if (active === 'assistant') {
+      content.appendChild(sectionTitle('AI Assistant'));
+
+      const intro = document.createElement('div');
+      intro.style.cssText = 'font-size:12.5px;color:#c9d1d9;line-height:1.65;margin-bottom:16px;';
+      intro.textContent =
+        'The IAM Tutor and the ticket generator both run against Ollama, a local model ' +
+        'runtime. Nothing is sent anywhere: the model runs on this machine. Both features ' +
+        'work without it — the tutor quotes the documentation instead of composing an ' +
+        'answer, and tickets use their built-in wording — so this is optional, not required.';
+      content.appendChild(intro);
+
+      const statusCard = document.createElement('div');
+      statusCard.style.cssText =
+        'border:1px solid #2d343d;border-radius:6px;padding:14px 16px;background:#161b22;' +
+        'margin-bottom:16px;';
+      const statusLine = document.createElement('div');
+      statusLine.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:4px;';
+      statusLine.textContent = 'Checking for Ollama\u2026';
+      const statusDetail = document.createElement('div');
+      statusDetail.style.cssText = 'font-size:11.5px;color:#8b95a1;line-height:1.6;';
+      statusCard.append(statusLine, statusDetail);
+      content.appendChild(statusCard);
+
+      // Asked live rather than cached: the point of this page is to be
+      // correct at the moment somebody is looking at it, including right
+      // after they have installed it in another window.
+      void tutorAvailable().then((up) => {
+        statusLine.textContent = up ? '\u25CF Ollama is running' : '\u25CB Ollama is not running';
+        statusLine.style.color = up ? '#4ec9b0' : '#e2a03f';
+        statusDetail.textContent = up
+          ? `The tutor will compose answers from the documentation, and generated tickets ` +
+            `will be written by the model. Model requested: ${OLLAMA_MODEL}.`
+          : 'The tutor will quote the documentation and generated tickets will use their ' +
+            'built-in wording. Everything else in the workstation is unaffected.';
+      });
+
+      const steps = document.createElement('div');
+      steps.style.cssText = 'font-size:12px;color:#c9d1d9;line-height:1.8;margin-bottom:14px;';
+      steps.innerHTML =
+        '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;' +
+        'color:#8b95a1;margin-bottom:8px;">To enable it</div>' +
+        '<div>1. Install Ollama for your platform.</div>' +
+        `<div>2. Pull the model: <code style="background:#0e1116;border:1px solid #2d343d;` +
+        `border-radius:3px;padding:1px 6px;">ollama pull ${OLLAMA_MODEL}</code></div>` +
+        '<div>3. Leave it running and reopen the IAM Tutor.</div>';
+      content.appendChild(steps);
+
+      const dl = document.createElement('button');
+      dl.textContent = 'Open the Ollama download page';
+      dl.style.cssText =
+        'padding:8px 14px;border-radius:4px;border:1px solid #2563eb;background:#2563eb;' +
+        'color:#fff;font-size:12px;cursor:pointer;font-family:inherit;';
+      // Opens in the real browser. The workstation's own browser is fenced to
+      // an allowlist on purpose, and a genuine download is outside the lab.
+      dl.addEventListener('click', () => openExternal(OLLAMA_DOWNLOAD_URL));
+      content.appendChild(dl);
+
+      const note = document.createElement('div');
+      note.style.cssText = 'font-size:11px;color:#6b7482;margin-top:14px;line-height:1.6;';
+      note.textContent =
+        'A small local model gets details wrong sometimes. That is why the tutor cites the ' +
+        'article it used: open it from the reply and check.';
+      content.appendChild(note);
     }
 
     if (active === 'updates') {

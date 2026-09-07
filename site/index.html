@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Identity Operations Workstation — IAM &amp; PIM lab</title>
+    <meta
+      name="description"
+      content="A simulated Windows workstation for practising Identity and Access Management and Privileged Identity Management: Active Directory, PowerShell, Okta and Entra, a ticket queue, and a tutor that cites its sources."
+    />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        --bg: #0a0d12;
+        --panel: #12161c;
+        --line: #21262d;
+        --text: #d7dde4;
+        --dim: #8b95a1;
+        --faint: #6b7482;
+        --accent: #4ec9b0;
+        --blue: #2563eb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+      a { color: var(--accent); }
+
+      header { padding: 84px 0 56px; text-align: center; }
+      .kicker {
+        font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--accent); margin-bottom: 14px;
+      }
+      h1 {
+        font-size: clamp(30px, 5.2vw, 46px); line-height: 1.15; margin: 0 0 18px;
+        font-weight: 650; color: #fff; letter-spacing: -0.5px;
+      }
+      .lede { font-size: 17px; color: var(--dim); max-width: 660px; margin: 0 auto 32px; }
+
+      .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+      .btn {
+        display: inline-block; padding: 13px 26px; border-radius: 6px; font-size: 14.5px;
+        font-weight: 600; text-decoration: none; border: 1px solid transparent;
+      }
+      .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+      .btn-secondary { background: transparent; color: var(--text); border-color: var(--line); }
+      .platforms { font-size: 12px; color: var(--faint); margin-top: 14px; }
+
+      section { padding: 44px 0; border-top: 1px solid var(--line); }
+      h2 { font-size: 21px; color: #fff; margin: 0 0 8px; font-weight: 600; }
+      .sub { color: var(--dim); margin: 0 0 26px; font-size: 14.5px; }
+
+      .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+      .card {
+        background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+        padding: 18px 20px;
+      }
+      .card h3 { margin: 0 0 6px; font-size: 14.5px; color: #fff; font-weight: 600; }
+      .card p { margin: 0; font-size: 13px; color: var(--dim); line-height: 1.65; }
+
+      ol.steps { padding-left: 20px; margin: 0; }
+      ol.steps li { margin-bottom: 12px; font-size: 14px; color: var(--dim); }
+      ol.steps strong { color: var(--text); font-weight: 600; }
+
+      code {
+        background: #0e1116; border: 1px solid var(--line); border-radius: 3px;
+        padding: 1px 6px; font-family: Consolas, Monaco, monospace; font-size: 12.5px;
+        color: var(--accent);
+      }
+
+      .note {
+        background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+        border-radius: 6px; padding: 16px 20px; font-size: 13.5px; color: var(--dim);
+      }
+
+      footer {
+        padding: 40px 0 60px; border-top: 1px solid var(--line); text-align: center;
+        font-size: 12.5px; color: var(--faint);
+      }
+      footer p { margin: 4px 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <div class="kicker">IAM &amp; PIM practice environment</div>
+        <h1>Learn the job by doing the job</h1>
+        <p class="lede">
+          A simulated Windows workstation with a real directory behind it. Build an empty
+          domain into a working one, work the tickets it raises, and find the mistakes it
+          lets you make.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" id="download" href="https://github.com/pitchiluxe/iam-workstation/releases/latest">
+            Download for Windows
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/pitchiluxe/iam-workstation">
+            Source on GitHub
+          </a>
+        </div>
+        <div class="platforms">
+          Windows installer · macOS and Linux builds on the releases page · free and offline
+        </div>
+      </div>
+    </header>
+
+    <section>
+      <div class="wrap">
+        <h2>What is inside</h2>
+        <p class="sub">
+          The tools an identity engineer uses on an ordinary day, wired to one directory so
+          a change in one place shows up in the others.
+        </p>
+        <div class="grid">
+          <div class="card">
+            <h3>Active Directory Users and Computers</h3>
+            <p>
+              The snap-in, backed by a real directory. Create OUs, users and groups; the tree
+              shows what exists and nothing that does not.
+            </p>
+          </div>
+          <div class="card">
+            <h3>PowerShell</h3>
+            <p>
+              A working subset of the AD cmdlets, plus scripts and templates for bulk work.
+              Everything the console can do, the shell can do.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Privileged Identity Management</h3>
+            <p>
+              Eligible versus active, time-bound activation, approvals that refuse
+              self-approval, and standing privilege you have to go and find.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Okta and Entra ID</h3>
+            <p>
+              A hybrid estate with a sync cycle that is not instant, SCIM that is switched off
+              by default, and soft matches that fail the way real ones do.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Ticket queue</h3>
+            <p>
+              Work raised for the state your domain is actually in, with the evidence made
+              true before the ticket describes it.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Tutor and documentation</h3>
+            <p>
+              An assistant that asks before it tells, answers from a written reference, and
+              names the article it used so you can check it.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>How it goes</h2>
+        <p class="sub">The domain starts empty. Everything in it gets there because you put it there.</p>
+        <ol class="steps">
+          <li>
+            <strong>Sign in as the administrator.</strong> The directory has one account and no
+            structure — the same thing you would find on a freshly promoted domain controller.
+          </li>
+          <li>
+            <strong>Build it out.</strong> The first ticket asks for an OU hierarchy, because
+            where an account lives decides which policy and delegation reach it.
+          </li>
+          <li>
+            <strong>Staff it.</strong> Create people, and they appear on the login screen. Sign
+            in as one and the desktop changes: HR does not get Active Directory.
+          </li>
+          <li>
+            <strong>Handle what goes wrong.</strong> Lockouts, leavers who still have access,
+            standing admin rights nobody approved, two cloud identities for one person.
+          </li>
+          <li>
+            <strong>Write it up.</strong> Incident reports, access reviews and change records,
+            because being able to explain what you did is the part interviews test.
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>The optional part</h2>
+        <p class="sub">Everything above works offline with nothing else installed.</p>
+        <div class="note">
+          <p style="margin: 0 0 10px">
+            The tutor and the ticket generator can run against
+            <a href="https://ollama.com/download">Ollama</a>, a local model runtime. Nothing
+            leaves your machine — the model runs on it. Install Ollama, then
+            <code>ollama pull llama3.2</code>, and the tutor composes answers instead of
+            quoting them.
+          </p>
+          <p style="margin: 0">
+            Without it the tutor quotes the documentation and tickets use their built-in
+            wording. That is a narrower experience, not a broken one, and it is the one most
+            people will have.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="wrap">
+        <p>Built by Erick Omari.</p>
+        <p>
+          Every account, company, domain and application in the workstation is fictional.
+          It touches nothing on your machine and reaches no network of its own.
+        </p>
+      </div>
+    </footer>
+
+    <script>
+      // Name the platform on the download button when the browser is confident
+      // about it. It always points at the releases page, which lists every
+      // build — a wrong guess would send someone to the wrong installer, so the
+      // link never changes, only its label.
+      (function () {
+        var btn = document.getElementById('download');
+        if (!btn) return;
+        var ua = navigator.userAgent || '';
+        if (/Macintosh|Mac OS X/.test(ua)) btn.textContent = 'Download for macOS';
+        else if (/Linux/.test(ua) && !/Android/.test(ua)) btn.textContent = 'Download for Linux';
+      })();
+    </script>
+  </body>
+</html>
