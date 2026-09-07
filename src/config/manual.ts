@@ -521,6 +521,7 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Export to CSV and open it in Sheets to count. COUNTIF answers "how many of these are stale".' },
           { do: 'Capture what you found with Snip & Annotate, and redact the names that should not travel \u2014 an opaque block, never a blur, because a blur can be undone.' },
           { do: 'Use Screen Pen when you need to point at something on a live console rather than a captured picture.' },
+          { do: 'Its camera photographs the screen with your annotations on it, and its recorder captures the walkthrough with your narration — both land in Documents. Say what you are doing and why while you do it; that recording is the closest thing to rehearsing the interview.' },
           { do: 'Produce the evidence pack from Lab Plan. It carries what you completed, the log entries behind each claim, and what is still outstanding.' },
         ],
         verify:

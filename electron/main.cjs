@@ -256,6 +256,36 @@ function createWindow() {
     webPreferences.contextIsolation = true;
   });
 
+  /**
+   * Who may ask for what.
+   *
+   * Without a handler Electron's default applies to everything this window
+   * loads, and this window renders arbitrary pages inside a webview. The
+   * recorder needs a microphone for narration, so the microphone is granted
+   * to the workstation's own document -- loaded from file: -- and to nothing
+   * else. A page in the browser asking for the microphone, the camera, the
+   * user's location or notifications is refused, because there is no feature
+   * here that needs any of those and an unasked-for grant is the kind of thing
+   * nobody discovers until it matters.
+   */
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (contents, permission, callback) => {
+      const url = contents?.getURL?.() ?? '';
+      const isTheApp = url.startsWith('file://');
+      if (permission === 'media' && isTheApp) {
+        callback(true);
+        return;
+      }
+      callback(false);
+    },
+  );
+
+  // The synchronous counterpart, consulted for some checks rather than the
+  // handler above. Same rule, so the two cannot disagree.
+  mainWindow.webContents.session.setPermissionCheckHandler((_contents, permission, origin) => {
+    return permission === 'media' && String(origin).startsWith('file://');
+  });
+
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {
     mainWindow = null;

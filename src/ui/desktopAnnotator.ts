@@ -24,6 +24,10 @@
  * once meant it.
  */
 import { showToast } from '@/ui/toast';
+import { captureScreen } from '@/util/screenCapture';
+import { startRecording, canRecord } from '@/util/screenRecorder';
+import type { RecorderHandle } from '@/util/screenRecorder';
+import { FS } from '@/terminal/shellIntrinsics';
 
 const OVERLAY_ID = 'desktop-annotator';
 const POSITION_KEY = 'annotator_toolbar_position';
@@ -99,6 +103,11 @@ interface Stroke {
   points: Point[];
 }
 
+/** m:ss, for the running recorder. */
+function formatElapsed(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 let active = false;
 
 /** Whether the desktop annotator is currently up. */
@@ -147,6 +156,8 @@ export function toggleDesktopAnnotator(): void {
   let drawMode = true;
   let strokes: Stroke[] = [];
   let current: Stroke | null = null;
+  let recorder: RecorderHandle | null = null;
+  let recordTick: number | null = null;
 
   const overlay = document.createElement('div');
   overlay.id = OVERLAY_ID;
@@ -261,6 +272,89 @@ export function toggleDesktopAnnotator(): void {
   bar.style.left = `${pos.x}px`;
   bar.style.top = `${pos.y}px`;
 
+  /** Hand a file to the browser and drop a copy in the VM's Documents. */
+  function deliver(blob: Blob, name: string, note: string): void {
+    try {
+      FS.writeFile(`C:\\Users\\admin\\Documents\\${name}`, `[recording] ${name}`);
+    } catch {
+      // The download below is the copy that matters.
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    // Revoked late: revoking immediately can cancel the download in Chromium.
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    showToast(note, { kind: 'success' });
+  }
+
+  const stamp = (): string =>
+    new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+
+  /**
+   * Photograph the screen, annotations included.
+   *
+   * The toolbar is hidden for the frame it takes. A picture of the annotation
+   * with the annotator's own toolbar across the middle of it is not the
+   * picture anybody wanted.
+   */
+  async function screenshot(): Promise<void> {
+    bar.style.visibility = 'hidden';
+    // A frame, so the hide has actually painted before the capture.
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const dataUrl = await captureScreen();
+    bar.style.visibility = 'visible';
+
+    if (!dataUrl) {
+      showToast('Screen capture needs the installed application.', { kind: 'warn' });
+      return;
+    }
+    const res = await fetch(dataUrl);
+    deliver(await res.blob(), `lab-${stamp()}.png`, 'Screenshot saved.');
+  }
+
+  async function toggleRecording(): Promise<void> {
+    if (recorder) {
+      const handle = recorder;
+      recorder = null;
+      if (recordTick !== null) {
+        clearInterval(recordTick);
+        recordTick = null;
+      }
+      renderBar();
+      const blob = await handle.stop();
+      if (!blob) {
+        showToast('The recording produced nothing.', { kind: 'warn' });
+        return;
+      }
+      deliver(blob, `lab-${stamp()}.webm`, 'Recording saved.');
+      return;
+    }
+
+    if (!canRecord()) {
+      showToast('Recording is not available in this build.', { kind: 'warn' });
+      return;
+    }
+    showToast('Starting the recorder\u2026', { kind: 'info' });
+    const handle = await startRecording({ fps: 10, audio: true });
+    if (!handle) {
+      showToast('Recording needs the installed application.', { kind: 'warn' });
+      return;
+    }
+    recorder = handle;
+    // A clock, because a recorder with no visible elapsed time is one people
+    // leave running.
+    recordTick = window.setInterval(renderBar, 1000);
+    renderBar();
+    showToast(
+      handle.hasAudio()
+        ? 'Recording this window with your microphone. Roughly ten frames a second \u2014 fine for a walkthrough.'
+        : 'Recording without audio: no microphone, or permission was declined.',
+      { kind: handle.hasAudio() ? 'success' : 'warn' },
+    );
+  }
+
   function setMode(next: boolean): void {
     drawMode = next;
     overlay.className = next ? 'draw' : 'click-through';
@@ -365,6 +459,28 @@ export function toggleDesktopAnnotator(): void {
       }, true),
     );
 
+    const sep3 = document.createElement('div');
+    sep3.className = 'da-sep';
+    bar.appendChild(sep3);
+
+    bar.appendChild(
+      button('\u{1F4F7}', 'Photograph the screen, annotations included', false, () => {
+        void screenshot();
+      }),
+    );
+
+    const rec = button(
+      recorder ? `\u23F9 ${formatElapsed(recorder.elapsed())}` : '\u23FA',
+      recorder ? 'Stop recording and save' : 'Record this window with narration',
+      Boolean(recorder),
+      () => {
+        void toggleRecording();
+      },
+      Boolean(recorder),
+    );
+    if (recorder) rec.style.color = 'var(--on-accent)';
+    bar.appendChild(rec);
+
     // The mode toggle, which is the control that keeps the desktop usable.
     const mode = document.createElement('button');
     mode.className = 'da-mode' + (drawMode ? ' drawing' : '');
@@ -377,6 +493,9 @@ export function toggleDesktopAnnotator(): void {
 
     bar.appendChild(
       button('✕', 'Close the annotator', false, () => {
+        // A recording left running when the toolbar goes is a recording
+        // nobody can stop.
+        if (recorder) void toggleRecording();
         document.removeEventListener('mousemove', move);
         document.removeEventListener('mouseup', drop);
         window.removeEventListener('resize', sizeCanvas);
