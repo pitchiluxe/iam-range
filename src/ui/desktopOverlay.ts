@@ -32,6 +32,7 @@ import { renderBreakGlassWindow } from './consoles/breakGlassWindow';
 import { renderSheetWindow } from './consoles/sheetWindow';
 import { renderSlidesWindow } from './consoles/slidesWindow';
 import { renderAnnotateWindow } from './consoles/annotateWindow';
+import { toggleDesktopAnnotator } from './desktopAnnotator';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
@@ -59,6 +60,15 @@ export interface WindowDef {
   width: number;
   height: number;
   render(conductor: VmServices, body: HTMLElement): void;
+  /**
+   * Run this instead of opening a window.
+   *
+   * For the things that are not windows. The desktop annotator is a sheet
+   * over the whole screen with a floating toolbar; the window manager has
+   * nothing to give it. Checked in openWindow so the icon, the Start menu and
+   * the taskbar all honour it without each learning a special case.
+   */
+  launch?: () => void;
 }
 
 export interface DesktopOverlay {
@@ -213,6 +223,19 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    // Not a window: a sheet over the whole desktop with a floating toolbar,
+    // for drawing on a console while it is on screen.
+    id: 'pen',
+    title: 'Screen Pen',
+    icon: '\u{1F58A}\uFE0F',
+    width: 0,
+    height: 0,
+    render: () => {
+      /* never called — launch() handles this one */
+    },
+    launch: toggleDesktopAnnotator,
   },
   {
     // Evidence carries fifteen points, and the way it is actually filed is a
@@ -385,6 +408,14 @@ class WindowManager {
   }
 
   open(def: WindowDef): void {
+    // The single door. Desktop icons, the Start menu and the taskbar all
+    // reach a window through here, so anything that is not a window is
+    // intercepted here too -- putting this in openWindow() alone left three
+    // paths that walked straight past it.
+    if (def.launch) {
+      def.launch();
+      return;
+    }
     if (this.windows.has(def.id)) {
       this.focus(def.id);
       return;
@@ -1694,6 +1725,8 @@ export function createDesktopOverlay(): DesktopOverlay {
       // consumer desktop still won't actually launch it.
       // Never open something this department is not entitled to.
       if (!appAllowed(id)) return;
+      // Non-window applications are intercepted in WindowManager.open(),
+      // which every path funnels through.
       wmCtx.current?.openById(id);
     },
     onExit: null,

@@ -36,6 +36,7 @@ const BASELINE_APPS = [
   'slides',
   // Producing evidence is everybody's job, not a department's.
   'annotate',
+  'pen',
   'sticky-notes',
   'browser',
   'app-portal',

@@ -70,7 +70,7 @@ export function showToast(message: string, opts: ToastOptions = {}): void {
   if (opts.id) el.id = `toast-${opts.id}`;
   el.style.cssText = `
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     padding: 10px 16px;
     background: ${bg};
@@ -79,11 +79,16 @@ export function showToast(message: string, opts: ToastOptions = {}): void {
     color: var(--fg);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 13px;
-    max-width: 360px;
+    max-width: min(420px, calc(100vw - 48px));
     box-shadow: 0 4px 16px rgba(0,0,0,0.4);
     pointer-events: all;
     animation: toast-in 0.2s ease-out;
-    white-space: nowrap;
+    /* Wrapping, not nowrap. With nowrap the max-width above does nothing --
+       the text cannot break, so a long message overflowed the bubble and ran
+       off the side of the screen. A short message still sits on one line. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
     cursor: ${opts.onClick ? 'pointer' : 'default'};
   `;
   el.textContent = `${icon}  ${message}`;
