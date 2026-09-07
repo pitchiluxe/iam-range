@@ -3,268 +3,654 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>IAM Range — practise IAM and PIM on a real directory</title>
+
+    <title>IAM Range — practise Active Directory, PIM, Okta and Entra on a real directory</title>
     <meta
       name="description"
-      content="A simulated Windows workstation for practising Identity and Access Management and Privileged Identity Management: Active Directory, PowerShell, Okta and Entra, a ticket queue, and a tutor that cites its sources."
+      content="A free Windows-style workstation for practising identity and access management. Build an empty Active Directory, work generated tickets, run PowerShell, and handle PIM, Okta and Entra sync — offline, on your own machine."
     />
+    <link rel="canonical" href="https://iamrange.dev/" />
+    <meta name="author" content="Erick Omari" />
+    <meta name="theme-color" content="#05070a" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- Open Graph / Twitter: what a shared link looks like. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="IAM Range" />
+    <meta property="og:title" content="IAM Range — learn identity engineering by doing it" />
+    <meta
+      property="og:description"
+      content="An empty Active Directory, a ticket queue that raises real work, PIM, Okta and Entra. Free, offline, and it lets you make the mistakes."
+    />
+    <meta property="og:url" content="https://iamrange.dev/" />
+    <meta property="og:image" content="https://iamrange.dev/assets/shot-directory.png" />
+    <meta property="og:image:width" content="1440" />
+    <meta property="og:image:height" content="900" />
+    <meta
+      property="og:image:alt"
+      content="Active Directory Users and Computers and a ticket queue inside IAM Range"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="IAM Range — learn identity engineering by doing it" />
+    <meta
+      name="twitter:description"
+      content="An empty Active Directory, a ticket queue that raises real work, PIM, Okta and Entra. Free and offline."
+    />
+    <meta name="twitter:image" content="https://iamrange.dev/assets/shot-directory.png" />
+
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="preload" as="image" href="assets/shot-directory.png" />
+
+    <!-- Structured data, so search engines describe it accurately rather than
+         guessing from the prose. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "IAM Range",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Windows, macOS, Linux",
+        "description": "A simulated Windows workstation for practising identity and access management and privileged identity management: Active Directory, PowerShell, PIM, Okta and Entra ID, a ticket queue and an offline tutor.",
+        "url": "https://iamrange.dev/",
+        "downloadUrl": "https://github.com/pitchiluxe/iam-range/releases/latest",
+        "softwareVersion": "0.1.0",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Erick Omari" },
+        "keywords": "IAM, PIM, Active Directory, Okta, Entra ID, SSO, SAML, OIDC, SCIM, identity engineering, access review, lab"
+      }
+    </script>
+
     <style>
       :root {
-        --bg: #0a0d12;
-        --panel: #12161c;
-        --line: #21262d;
-        --text: #d7dde4;
-        --dim: #8b95a1;
-        --faint: #6b7482;
-        --accent: #4ec9b0;
-        --blue: #2563eb;
+        --ink: #05070a;
+        --panel: #0d1117;
+        --panel-2: #121820;
+        --line: #1e252f;
+        --line-soft: #171d26;
+        --text: #d5dce4;
+        --dim: #8a95a3;
+        --faint: #616c7a;
+        --teal: #4ec9b0;
+        --amber: #d7ba7d;
+        --mono: "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+        --sans: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
       }
       * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
       body {
         margin: 0;
-        background: var(--bg);
+        background: var(--ink);
         color: var(--text);
-        font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-        line-height: 1.7;
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.65;
         -webkit-font-smoothing: antialiased;
       }
-      .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
-      a { color: var(--accent); }
+      a { color: var(--teal); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
 
-      header { padding: 84px 0 56px; text-align: center; }
-      .kicker {
-        font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase;
-        color: var(--accent); margin-bottom: 14px;
+      /* ── Top bar ─────────────────────────────────────────────────────── */
+      .bar {
+        position: sticky; top: 0; z-index: 40;
+        border-bottom: 1px solid var(--line-soft);
+        background: rgba(5, 7, 10, 0.82);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
       }
+      .bar-in {
+        display: flex; align-items: center; gap: 22px;
+        height: 58px; max-width: 1120px; margin: 0 auto; padding: 0 28px;
+      }
+      .mark {
+        display: flex; align-items: center; gap: 9px;
+        font-weight: 650; letter-spacing: -0.2px; color: #fff;
+      }
+      .mark:hover { text-decoration: none; }
+      .mark svg { width: 22px; height: 22px; }
+      .bar nav { margin-left: auto; display: flex; gap: 20px; font-size: 14px; }
+      .bar nav a { color: var(--dim); }
+      .bar nav a:hover { color: var(--text); text-decoration: none; }
+      .bar .get {
+        font-size: 13.5px; font-weight: 600; color: #04120f;
+        background: var(--teal); padding: 7px 14px; border-radius: 5px;
+      }
+      .bar .get:hover { text-decoration: none; filter: brightness(1.08); }
+      @media (max-width: 760px) {
+        .bar nav { display: none; }
+        .bar .get { margin-left: auto; }
+      }
+
+      /* ── Hero ────────────────────────────────────────────────────────── */
+      .hero { padding: 76px 0 44px; }
+      .hero-grid {
+        display: grid; grid-template-columns: 1.15fr 1fr; gap: 54px; align-items: center;
+      }
+      @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; gap: 34px; } }
+
+      .eyebrow {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-family: var(--mono); font-size: 12px; color: var(--teal);
+        border: 1px solid rgba(78, 201, 176, 0.28); border-radius: 999px;
+        padding: 4px 12px; margin-bottom: 22px;
+      }
+      .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
       h1 {
-        font-size: clamp(30px, 5.2vw, 46px); line-height: 1.15; margin: 0 0 18px;
-        font-weight: 650; color: #fff; letter-spacing: -0.5px;
+        font-size: clamp(34px, 4.6vw, 52px); line-height: 1.08; margin: 0 0 20px;
+        font-weight: 680; color: #fff; letter-spacing: -1.2px;
       }
-      .lede { font-size: 17px; color: var(--dim); max-width: 660px; margin: 0 auto 32px; }
-
-      .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+      h1 .thin { color: var(--dim); font-weight: 400; }
+      .lede { font-size: 17.5px; color: var(--dim); margin: 0 0 30px; max-width: 54ch; }
+      .cta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
       .btn {
-        display: inline-block; padding: 13px 26px; border-radius: 6px; font-size: 14.5px;
-        font-weight: 600; text-decoration: none; border: 1px solid transparent;
+        display: inline-block; padding: 12px 22px; border-radius: 6px;
+        font-size: 14.5px; font-weight: 600; border: 1px solid transparent;
       }
-      .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
-      .btn-secondary { background: transparent; color: var(--text); border-color: var(--line); }
-      .platforms { font-size: 12px; color: var(--faint); margin-top: 14px; }
+      .btn-primary { background: var(--teal); color: #04120f; border-color: var(--teal); }
+      .btn-primary:hover { text-decoration: none; filter: brightness(1.08); }
+      .btn-ghost { border-color: var(--line); color: var(--text); }
+      .btn-ghost:hover { text-decoration: none; border-color: #2c3540; }
+      .meta { font-family: var(--mono); font-size: 12.5px; color: var(--faint); margin-top: 16px; }
 
-      section { padding: 44px 0; border-top: 1px solid var(--line); }
-      h2 { font-size: 21px; color: #fff; margin: 0 0 8px; font-weight: 600; }
-      .sub { color: var(--dim); margin: 0 0 26px; font-size: 14.5px; }
+      /* ── The identity flow diagram ───────────────────────────────────── */
+      .flow { width: 100%; height: auto; }
+      .flow text { font-family: var(--mono); font-size: 9px; fill: var(--dim); }
+      .flow .box { fill: var(--panel); stroke: var(--line); stroke-width: 1; }
+      .flow .box-hi { fill: #101a20; stroke: rgba(78, 201, 176, 0.45); }
+      .flow .wire { stroke: #263040; stroke-width: 1.4; fill: none; }
+      .flow .label-hi { fill: var(--teal); }
 
-      .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-      .card {
-        background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-        padding: 18px 20px;
+      /* A credential travelling the path: request out, token back. */
+      @keyframes ride { to { offset-distance: 100%; } }
+      .ride {
+        offset-path: path("M108 60 L188 60 L188 106 L268 106");
+        animation: ride 3.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
       }
-      .card h3 { margin: 0 0 6px; font-size: 14.5px; color: #fff; font-weight: 600; }
-      .card p { margin: 0; font-size: 13px; color: var(--dim); line-height: 1.65; }
+      .ride-2 {
+        offset-path: path("M268 106 L188 106 L188 152 L108 152");
+        animation: ride 3.2s cubic-bezier(0.5, 0, 0.5, 1) infinite 1.6s;
+      }
+      @keyframes blink { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+      .flow .live { animation: blink 2.4s ease-in-out infinite; }
 
-      ol.steps { padding-left: 20px; margin: 0; }
-      ol.steps li { margin-bottom: 12px; font-size: 14px; color: var(--dim); }
-      ol.steps strong { color: var(--text); font-weight: 600; }
+      /* ── Screenshot frames ───────────────────────────────────────────── */
+      .shot {
+        border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+        background: var(--panel); box-shadow: 0 26px 70px rgba(0, 0, 0, 0.6);
+      }
+      .shot-bar {
+        display: flex; align-items: center; gap: 7px; padding: 9px 12px;
+        background: var(--panel-2); border-bottom: 1px solid var(--line);
+      }
+      .shot-bar i { width: 9px; height: 9px; border-radius: 50%; background: #2c3540; display: block; }
+      .shot-bar .title {
+        font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-left: 8px;
+      }
+      .shot img { display: block; width: 100%; height: auto; }
+      .shot-note { font-size: 13px; color: var(--faint); margin-top: 12px; }
 
-      code {
-        background: #0e1116; border: 1px solid var(--line); border-radius: 3px;
-        padding: 1px 6px; font-family: Consolas, Monaco, monospace; font-size: 12.5px;
-        color: var(--accent);
+      /* ── Sections ────────────────────────────────────────────────────── */
+      section { padding: 62px 0; border-top: 1px solid var(--line-soft); }
+      .kicker {
+        font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.12em;
+        text-transform: uppercase; color: var(--faint); margin-bottom: 12px;
+      }
+      h2 {
+        font-size: clamp(24px, 3vw, 31px); color: #fff; margin: 0 0 12px;
+        font-weight: 640; letter-spacing: -0.7px;
+      }
+      .sub { color: var(--dim); margin: 0 0 34px; max-width: 62ch; font-size: 16px; }
+
+      /* Editorial numbered list rather than a card grid. */
+      .steps { border-top: 1px solid var(--line-soft); }
+      .step {
+        display: grid; grid-template-columns: 62px 1fr 1fr; gap: 28px;
+        padding: 26px 0; border-bottom: 1px solid var(--line-soft); align-items: start;
+      }
+      @media (max-width: 820px) {
+        .step { grid-template-columns: 40px 1fr; }
+        .step .aside { grid-column: 2; }
+      }
+      .step .num { font-family: var(--mono); font-size: 13px; color: var(--teal); padding-top: 3px; }
+      .step h3 { margin: 0 0 7px; font-size: 18px; color: #fff; font-weight: 600; }
+      .step p { margin: 0; color: var(--dim); font-size: 15px; }
+      .step .aside { color: var(--faint); font-size: 14px; }
+      .step code {
+        font-family: var(--mono); font-size: 12.5px; color: var(--amber);
+        background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+        padding: 1px 6px;
       }
 
-      .note {
-        background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent);
-        border-radius: 6px; padding: 16px 20px; font-size: 13.5px; color: var(--dim);
+      /* Capability table, in monospace where it is data. */
+      .estate { width: 100%; border-collapse: collapse; font-size: 14px; }
+      .estate th {
+        text-align: left; font-weight: 600; color: var(--faint); font-size: 12px;
+        text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      .estate td { padding: 13px 0; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+      .estate td:first-child { color: #fff; width: 32%; padding-right: 22px; }
+      .estate td:last-child { color: var(--dim); }
+      .estate .cmd { font-family: var(--mono); font-size: 12.5px; color: var(--teal); }
+      @media (max-width: 700px) {
+        .estate td:first-child { width: 40%; }
       }
 
-      .author {
-        display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap;
+      /* Gallery */
+      .gallery { display: grid; gap: 26px; }
+      .gallery figure { margin: 0; }
+      .gallery figcaption { color: var(--faint); font-size: 13.5px; margin-top: 11px; max-width: 70ch; }
+      .gallery-2 { grid-template-columns: 1fr 1fr; }
+      @media (max-width: 820px) { .gallery-2 { grid-template-columns: 1fr; } }
+
+      /* Terminal excerpt */
+      .term {
+        background: #06090d; border: 1px solid var(--line); border-radius: 8px;
+        padding: 18px 20px; font-family: var(--mono); font-size: 13px; line-height: 1.8;
+        overflow-x: auto; white-space: pre;
       }
+      .term .p { color: var(--teal); }
+      .term .c { color: #fff; }
+      .term .o { color: var(--dim); }
+      .term .w { color: var(--amber); }
+
+      /* Author */
+      .author { display: flex; gap: 30px; align-items: flex-start; flex-wrap: wrap; }
       .author img {
-        width: 132px; height: 132px; border-radius: 50%; object-fit: cover;
-        border: 2px solid var(--line); flex-shrink: 0;
+        width: 132px; height: 132px; border-radius: 10px; object-fit: cover;
+        border: 1px solid var(--line); flex-shrink: 0; background: var(--panel); display: block;
       }
-      .author-text { flex: 1; min-width: 260px; }
-      .author-text h3 { margin: 0 0 2px; font-size: 17px; color: #fff; font-weight: 600; }
-      .author-text .role { font-size: 12.5px; color: var(--accent); margin: 0 0 12px; }
-      .author-text p { margin: 0 0 10px; font-size: 14px; color: var(--dim); }
+      .author-text { flex: 1; min-width: 280px; }
+      .author-text h3 { margin: 0 0 2px; font-size: 18px; color: #fff; font-weight: 620; }
+      .author-text .role {
+        font-family: var(--mono); font-size: 12.5px; color: var(--teal); margin: 0 0 14px;
+      }
+      .author-text p { margin: 0 0 12px; color: var(--dim); font-size: 15px; max-width: 62ch; }
 
       footer {
-        padding: 40px 0 60px; border-top: 1px solid var(--line); text-align: center;
-        font-size: 12.5px; color: var(--faint);
+        padding: 40px 0 64px; border-top: 1px solid var(--line-soft);
+        font-size: 13.5px; color: var(--faint);
       }
-      footer p { margin: 4px 0; }
+      footer p { margin: 5px 0; max-width: 72ch; }
+
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        .ride, .ride-2, .flow .live { animation: none; }
+      }
     </style>
   </head>
+
   <body>
-    <header>
-      <div class="wrap">
-        <div class="kicker">IAM Range · IAM &amp; PIM practice environment</div>
-        <h1>Learn the job by doing the job</h1>
-        <p class="lede">
-          A simulated Windows workstation with a real directory behind it. Build an empty
-          domain into a working one, work the tickets it raises, and find the mistakes it
-          lets you make.
-        </p>
-        <div class="cta">
-          <a class="btn btn-primary" id="download" href="https://github.com/pitchiluxe/iam-range/releases/latest">
-            Download for Windows
-          </a>
-          <a class="btn btn-secondary" href="https://github.com/pitchiluxe/iam-range">
-            Source on GitHub
-          </a>
-        </div>
-        <div class="platforms">
-          Windows installer · macOS and Linux builds on the releases page · free and offline
-        </div>
+    <header class="bar">
+      <div class="bar-in">
+        <a class="mark" href="#top">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="16" rx="3" fill="none" stroke="#4ec9b0" stroke-width="1.6" />
+            <path d="M6 9h6M6 12h8M6 15h5" stroke="#8a95a3" stroke-width="1.4" stroke-linecap="round" />
+            <circle cx="17.5" cy="14" r="2" fill="none" stroke="#d7ba7d" stroke-width="1.4" />
+          </svg>
+          IAM Range
+        </a>
+        <nav>
+          <a href="#what">What you do</a>
+          <a href="#inside">Inside</a>
+          <a href="#screens">Screens</a>
+          <a href="#author">Author</a>
+        </nav>
+        <a class="get" href="https://github.com/pitchiluxe/iam-range/releases/latest">Download</a>
       </div>
     </header>
 
-    <section>
-      <div class="wrap">
-        <h2>What is inside</h2>
-        <p class="sub">
-          The tools an identity engineer uses on an ordinary day, wired to one directory so
-          a change in one place shows up in the others.
+    <main id="top">
+      <div class="wrap hero">
+        <div class="hero-grid">
+          <div>
+            <span class="eyebrow"><span class="dot"></span> Free · offline · Windows, macOS, Linux</span>
+            <h1>
+              An empty Active&nbsp;Directory,<br />
+              <span class="thin">and everything that goes wrong in one.</span>
+            </h1>
+            <p class="lede">
+              IAM Range is a workstation you install. It ships one administrator account and no
+              structure — the same thing you would find on a freshly promoted domain controller.
+              Build it out, work the tickets it raises, and find out what breaks when you get it
+              wrong.
+            </p>
+            <div class="cta">
+              <a class="btn btn-primary" id="download" href="https://github.com/pitchiluxe/iam-range/releases/latest">
+                Download for Windows
+              </a>
+              <a class="btn btn-ghost" href="https://github.com/pitchiluxe/iam-range">Source on GitHub</a>
+            </div>
+            <p class="meta">admin · Password123! · no account, no telemetry, no network</p>
+          </div>
+
+          <!-- The identity flow, animated: a request out, a token back. It is the
+               shape of every federated sign-in, which is what the lab is about. -->
+          <svg
+            class="flow" viewBox="0 0 340 200" role="img"
+            aria-label="Diagram: a workstation authenticates against a directory and an identity provider, which issues a token back to an application"
+          >
+            <path class="wire" d="M108 60 L188 60 L188 106 L268 106" />
+            <path class="wire" d="M268 106 L188 106 L188 152 L108 152" />
+
+            <rect class="box" x="24" y="42" width="84" height="36" rx="5" />
+            <text x="38" y="58">workstation</text>
+            <text x="38" y="70" class="label-hi">admin</text>
+
+            <rect class="box box-hi" x="146" y="88" width="84" height="36" rx="5" />
+            <text x="160" y="104">directory</text>
+            <text x="160" y="116">iamlab.com</text>
+
+            <rect class="box" x="268" y="88" width="58" height="36" rx="5" />
+            <text x="279" y="104">Okta /</text>
+            <text x="279" y="116">Entra</text>
+
+            <rect class="box" x="24" y="134" width="84" height="36" rx="5" />
+            <text x="38" y="150">application</text>
+            <text x="38" y="162" class="label-hi">token</text>
+
+            <circle class="ride" r="3.4" fill="#4ec9b0" />
+            <circle class="ride-2" r="3.4" fill="#d7ba7d" />
+            <circle class="live" cx="318" cy="80" r="2.6" fill="#4ec9b0" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="wrap" style="padding-bottom: 8px">
+        <figure class="shot" style="margin: 0">
+          <div class="shot-bar">
+            <i></i><i></i><i></i>
+            <span class="title">IAM Range — Identity Operations Workstation</span>
+          </div>
+          <img
+            src="assets/shot-directory.png" width="1440" height="900" decoding="async"
+            alt="Active Directory Users and Computers open beside the ticket queue inside IAM Range, showing a domain with organisational units and four staff accounts"
+          />
+        </figure>
+        <p class="shot-note">
+          Not a mockup. Every screenshot on this page is captured from the running application.
         </p>
-        <div class="grid">
-          <div class="card">
-            <h3>Active Directory Users and Computers</h3>
-            <p>
-              The snap-in, backed by a real directory. Create OUs, users and groups; the tree
-              shows what exists and nothing that does not.
-            </p>
-          </div>
-          <div class="card">
-            <h3>PowerShell</h3>
-            <p>
-              A working subset of the AD cmdlets, plus scripts and templates for bulk work.
-              Everything the console can do, the shell can do.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Privileged Identity Management</h3>
-            <p>
-              Eligible versus active, time-bound activation, approvals that refuse
-              self-approval, and standing privilege you have to go and find.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Okta and Entra ID</h3>
-            <p>
-              A hybrid estate with a sync cycle that is not instant, SCIM that is switched off
-              by default, and soft matches that fail the way real ones do.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Ticket queue</h3>
-            <p>
-              Work raised for the state your domain is actually in, with the evidence made
-              true before the ticket describes it.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Tutor and documentation</h3>
-            <p>
-              An assistant that asks before it tells, answers from a written reference, and
-              names the article it used so you can check it.
-            </p>
-          </div>
-        </div>
       </div>
-    </section>
 
-    <section>
-      <div class="wrap">
-        <h2>How it goes</h2>
-        <p class="sub">The domain starts empty. Everything in it gets there because you put it there.</p>
-        <ol class="steps">
-          <li>
-            <strong>Sign in as the administrator.</strong> The directory has one account and no
-            structure — the same thing you would find on a freshly promoted domain controller.
-          </li>
-          <li>
-            <strong>Build it out.</strong> The first ticket asks for an OU hierarchy, because
-            where an account lives decides which policy and delegation reach it.
-          </li>
-          <li>
-            <strong>Staff it.</strong> Create people, and they appear on the login screen. Sign
-            in as one and the desktop changes: HR does not get Active Directory.
-          </li>
-          <li>
-            <strong>Handle what goes wrong.</strong> Lockouts, leavers who still have access,
-            standing admin rights nobody approved, two cloud identities for one person.
-          </li>
-          <li>
-            <strong>Write it up.</strong> Incident reports, access reviews and change records,
-            because being able to explain what you did is the part interviews test.
-          </li>
-        </ol>
-      </div>
-    </section>
-
-    <section>
-      <div class="wrap">
-        <h2>The optional part</h2>
-        <p class="sub">Everything above works offline with nothing else installed.</p>
-        <div class="note">
-          <p style="margin: 0 0 10px">
-            The tutor and the ticket generator can run against
-            <a href="https://ollama.com/download">Ollama</a>, a local model runtime. Nothing
-            leaves your machine — the model runs on it. Install Ollama, then
-            <code>ollama pull llama3.2</code>, and the tutor composes answers instead of
-            quoting them.
+      <section id="what">
+        <div class="wrap">
+          <p class="kicker">What you actually do</p>
+          <h2>The work, in the order it happens</h2>
+          <p class="sub">
+            The domain starts empty because being handed a working directory teaches nothing about
+            how it got that way. Each stage unlocks the next, and the ticket queue only raises work
+            the environment can currently support.
           </p>
-          <p style="margin: 0">
-            Without it the tutor quotes the documentation and tickets use their built-in
-            wording. That is a narrower experience, not a broken one, and it is the one most
-            people will have.
-          </p>
-        </div>
-      </div>
-    </section>
 
-    <section>
-      <div class="wrap">
-        <h2>Who made it</h2>
-        <div class="author">
-          <img src="assets/Erick.jpg" alt="Portrait of Erick Omari" width="132" height="132"
-               loading="lazy" />
-          <div class="author-text">
-            <h3>Erick Omari</h3>
-            <p class="role">Identity and access management</p>
-            <p>
-              I built this because learning IAM from slides does not prepare anyone for a
-              locked-out executive at 2am. Everything here favours realistic failure over
-              scripted success: every task has a way to get it wrong, every mistake leaves a
-              log line, and every log line is something you can talk through in an interview.
-            </p>
-            <p>
-              The domain starts empty for the same reason. Being handed a working directory
-              teaches you nothing about how it got that way.
-            </p>
-            <a href="https://github.com/pitchiluxe">More on GitHub</a>
+          <div class="steps">
+            <div class="step">
+              <div class="num">01</div>
+              <div>
+                <h3>Build the structure</h3>
+                <p>
+                  Organisational units are administrative boundaries, not folders — you delegate
+                  over them and link policy to them. Get the tree wrong and every reorganisation
+                  becomes directory work.
+                </p>
+              </div>
+              <div class="aside"><code>New-ADOrganizationalUnit -Name Corp</code></div>
+            </div>
+
+            <div class="step">
+              <div class="num">02</div>
+              <div>
+                <h3>Staff the domain</h3>
+                <p>
+                  Create people and they appear on the sign-in screen. Sign in as one and the
+                  desktop changes: Help Desk gets Active Directory, Finance does not. An account
+                  that exists but cannot authenticate is not a finished onboarding.
+                </p>
+              </div>
+              <div class="aside"><code>New-ADUser -SamAccountName jdoe</code></div>
+            </div>
+
+            <div class="step">
+              <div class="num">03</div>
+              <div>
+                <h3>Work the queue</h3>
+                <p>
+                  Lockouts, transfers, leavers who still have access, standing admin rights nobody
+                  approved. The state each ticket describes is made true before it is raised, so
+                  the evidence is genuinely there to be found.
+                </p>
+              </div>
+              <div class="aside"><code>Get-DirectorySyncStatus</code></div>
+            </div>
+
+            <div class="step">
+              <div class="num">04</div>
+              <div>
+                <h3>Prove it worked</h3>
+                <p>
+                  The audit log records what was attempted; the state tells you what took effect.
+                  Every lesson ends in the check, because "how do you know?" is the question that
+                  separates candidates.
+                </p>
+              </div>
+              <div class="aside"><code>Get-ADPrincipalGroupMembership</code></div>
+            </div>
+
+            <div class="step">
+              <div class="num">05</div>
+              <div>
+                <h3>Write it up</h3>
+                <p>
+                  Incident report, access review summary, offboarding checklist, change record.
+                  Being able to explain what you did is the part interviews actually test.
+                </p>
+              </div>
+              <div class="aside">Writer ships the forms, with the prompts</div>
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      <section id="inside">
+        <div class="wrap">
+          <p class="kicker">The estate</p>
+          <h2>Tools wired to one directory</h2>
+          <p class="sub">
+            A change in one place shows up in the others, because there is only one directory
+            behind all of them. The consoles and the shell run the same code, including the
+            refusals.
+          </p>
+
+          <table class="estate">
+            <thead>
+              <tr>
+                <th>Application</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Active Directory Users and Computers</td>
+                <td>The snap-in, backed by a real directory. The tree shows what exists and nothing that does not.</td>
+              </tr>
+              <tr>
+                <td>PowerShell</td>
+                <td>
+                  A working subset of the AD cmdlets plus script templates for bulk work —
+                  <span class="cmd">New-ADUser</span>, <span class="cmd">Add-ADGroupMember</span>,
+                  <span class="cmd">Unlock-ADAccount</span>.
+                </td>
+              </tr>
+              <tr>
+                <td>Privileged Identity Management</td>
+                <td>Eligible versus active, time-bound activation, approvals that refuse self-approval, and standing privilege you have to go and find.</td>
+              </tr>
+              <tr>
+                <td>Cloud Identity</td>
+                <td>Okta and Entra ID with a sync cycle that is not instant, SCIM switched off by default, and soft matches that fail the way real ones do.</td>
+              </tr>
+              <tr>
+                <td>Ticket Queue</td>
+                <td>Work raised for the state your domain is actually in, with the evidence made true first. Optionally written by a local language model.</td>
+              </tr>
+              <tr>
+                <td>Manual and Documentation</td>
+                <td>Sixteen guided lessons and thirteen reference articles, each ending in the interview question it prepares you for.</td>
+              </tr>
+              <tr>
+                <td>IAM Tutor</td>
+                <td>Asks before it tells, answers from the written reference, and names the article it used so you can check it.</td>
+              </tr>
+              <tr>
+                <td>Writer, SecOps, App Portal, Control Panel, Explorer</td>
+                <td>The rest of a workstation, so the lab is a desk rather than a form.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="screens">
+        <div class="wrap">
+          <p class="kicker">Screens</p>
+          <h2>What it looks like</h2>
+          <p class="sub">Captured from the running application at 1440&nbsp;×&nbsp;900.</p>
+
+          <div class="gallery">
+            <figure>
+              <div class="shot">
+                <div class="shot-bar">
+                  <i></i><i></i><i></i>
+                  <span class="title">Cloud Identity — Okta &amp; Entra ID</span>
+                </div>
+                <img
+                  src="assets/shot-cloud.png" width="1440" height="900" loading="lazy" decoding="async"
+                  alt="The Cloud Identity window showing directory sync status with one account out of date and SCIM switched off for three applications"
+                />
+              </div>
+              <figcaption>
+                A leaver disabled on premises, still active in the tenant, with the pending change
+                named and the last cycle timed. This is "I disabled them and they can still get
+                in", reproduced rather than described.
+              </figcaption>
+            </figure>
+
+            <div class="gallery gallery-2">
+              <figure>
+                <div class="shot">
+                  <div class="shot-bar">
+                    <i></i><i></i><i></i><span class="title">IAM Range Manual</span>
+                  </div>
+                  <img
+                    src="assets/shot-manual.png" width="1440" height="900" loading="lazy" decoding="async"
+                    alt="The manual open on a lesson showing objective, why it matters, numbered steps with copyable commands, and how to verify"
+                  />
+                </div>
+                <figcaption>Sixteen lessons, each ending in the check that proves it worked.</figcaption>
+              </figure>
+              <figure>
+                <div class="shot">
+                  <div class="shot-bar">
+                    <i></i><i></i><i></i><span class="title">Terminal</span>
+                  </div>
+                  <img
+                    src="assets/shot-terminal.png" width="1440" height="900" loading="lazy" decoding="async"
+                    alt="The PowerShell terminal listing directory users and directory sync status output"
+                  />
+                </div>
+                <figcaption>The shell runs the same capabilities the consoles do.</figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div style="margin-top: 34px">
+            <div class="term"><span class="p">PS C:\></span> <span class="c">Disable-ADAccount -Identity rpatel</span>
+<span class="o">Disabled rpatel.</span>
+
+<span class="p">PS C:\></span> <span class="c">Get-DirectorySyncStatus -Provider okta</span>
+<span class="o">UPN                Change   Detail</span>
+<span class="o">-----------------  -------  ------------------------------------------------</span>
+<span class="w">rpatel@iamlab.com  disable  Disabled in the directory, still active in Okta.</span>
+
+<span class="o">Last cycle 22 minute(s) ago. 1 account(s) are out of date — until a</span>
+<span class="o">cycle runs, the cloud still enforces the old state.</span></div>
+            <p class="shot-note">Real output. The refusal messages are the lesson.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="ai">
+        <div class="wrap">
+          <p class="kicker">Optional</p>
+          <h2>A tutor that cites its sources</h2>
+          <p class="sub">
+            Everything above works offline with nothing else installed. If you also run
+            <a href="https://ollama.com/download" rel="noopener">Ollama</a>, the tutor composes
+            answers and the ticket queue writes its own prose — locally, on your machine, with
+            nothing sent anywhere.
+          </p>
+          <div class="term" style="max-width: 76ch"><span class="o">You:</span> <span class="c">Why do I need organisational units before anything else?</span>
+
+<span class="o">Tutor:</span> <span class="c">What would happen if you created the Corp/ServiceAccounts OU
+before the Corp/Users OU?</span>
+
+<span class="o">Sources: Organisational units and why structure comes first</span></div>
+          <p class="shot-note">
+            It asks before it tells, and names the article it used — a small local model gets
+            details wrong, and an answer you can open and check is worth more than a confident one.
+            Without Ollama the tutor quotes the documentation instead. That is narrower, not
+            broken, and it is the experience most people will have.
+          </p>
+        </div>
+      </section>
+
+      <section id="author">
+        <div class="wrap">
+          <p class="kicker">Who made it</p>
+          <div class="author">
+            <picture>
+              <source srcset="assets/erick-360.webp" type="image/webp" />
+              <img
+                src="assets/erick-360.jpg" width="132" height="132" loading="lazy" decoding="async"
+                alt="Erick Omari"
+              />
+            </picture>
+            <div class="author-text">
+              <h3>Erick Omari</h3>
+              <p class="role">Identity and access management</p>
+              <p>
+                I built this because learning IAM from slides does not prepare anyone for a
+                locked-out executive at 2am. Everything here favours realistic failure over
+                scripted success: every task has a way to get it wrong, every mistake leaves a log
+                line, and every log line is something you can talk through in an interview.
+              </p>
+              <p>
+                The domain starts empty for the same reason. Being handed a working directory
+                teaches you nothing about how it got that way.
+              </p>
+              <p><a href="https://github.com/pitchiluxe">More on GitHub</a></p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
 
     <footer>
       <div class="wrap">
+        <p><strong style="color: var(--text)">IAM Range</strong> — created by Erick Omari.</p>
         <p>
-          Every account, company, domain and application in the workstation is fictional.
-          It touches nothing on your machine and reaches no network of its own.
+          Every account, company, domain and application inside the workstation is fictional. It
+          touches nothing on your machine and opens no network connection of its own; the only
+          outbound request it can make is to a local Ollama, and only if you install one.
         </p>
       </div>
     </footer>
 
     <script>
-      // Name the platform on the download button when the browser is confident
-      // about it. It always points at the releases page, which lists every
-      // build — a wrong guess would send someone to the wrong installer, so the
-      // link never changes, only its label.
+      // Name the platform on the download button when the browser is confident.
+      // The link always points at the releases page, which lists every build —
+      // a wrong guess would send somebody to the wrong installer, so only the
+      // label changes, never the destination.
       (function () {
         var btn = document.getElementById('download');
         if (!btn) return;
