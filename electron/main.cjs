@@ -188,6 +188,25 @@ ipcMain.handle('update:install', () => {
 
 ipcMain.handle('ollama:probe', () => probeOllama());
 
+/**
+ * Capture the workstation's own window, for the annotation tool.
+ *
+ * capturePage rather than desktopCapturer on purpose: the renderer gets a
+ * picture of this window and nothing else. desktopCapturer would hand a web
+ * page the ability to photograph the user's real desktop -- their email, their
+ * password manager -- which is not a capability a training VM has any business
+ * holding, and not one that can be taken back once exposed.
+ */
+ipcMain.handle('capture:screen', async () => {
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
+    const image = await mainWindow.webContents.capturePage();
+    return image.isEmpty() ? null : image.toDataURL();
+  } catch {
+    return null;
+  }
+});
+
 // Opening a link is the one thing the renderer cannot do for itself, and it
 // must never become "run whatever the page passes". Only http and https.
 ipcMain.handle('shell:openExternal', (_event, url) => {

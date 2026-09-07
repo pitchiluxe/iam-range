@@ -31,6 +31,7 @@ import { renderAccessReviewWindow } from './consoles/accessReviewWindow';
 import { renderBreakGlassWindow } from './consoles/breakGlassWindow';
 import { renderSheetWindow } from './consoles/sheetWindow';
 import { renderSlidesWindow } from './consoles/slidesWindow';
+import { renderAnnotateWindow } from './consoles/annotateWindow';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
@@ -212,6 +213,17 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    // Evidence carries fifteen points, and the way it is actually filed is a
+    // screenshot with the relevant field circled and the other people's names
+    // taken out.
+    id: 'annotate',
+    title: 'Snip & Annotate',
+    icon: '✂️',
+    width: 1080,
+    height: 700,
+    render: (_c, b) => renderAnnotateWindow(b),
   },
   {
     // Communication carries ten points in the rubric, and presenting findings

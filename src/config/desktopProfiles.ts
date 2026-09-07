@@ -34,6 +34,8 @@ const BASELINE_APPS = [
   // Everyone gets the spreadsheet, the way every desk in an office has one.
   'sheets',
   'slides',
+  // Producing evidence is everybody's job, not a department's.
+  'annotate',
   'sticky-notes',
   'browser',
   'app-portal',
