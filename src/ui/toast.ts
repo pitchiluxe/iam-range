@@ -42,6 +42,17 @@ const KIND_COLORS: Record<
   success: { bg: 'rgba(20,36,28,0.96)', border: 'var(--accent)', icon: '✓' },
 };
 
+/**
+ * Remove every toast currently on screen.
+ *
+ * For the moment a message stops being true: the ticket review refuses,
+ * the learner fixes the work, and the refusal is still sitting there
+ * contradicting the acceptance that just arrived.
+ */
+export function clearToasts(): void {
+  document.getElementById('toast-container')?.replaceChildren();
+}
+
 export function showToast(message: string, opts: ToastOptions = {}): void {
   const kind = opts.kind ?? 'info';
   const duration = opts.durationMs ?? 4000;

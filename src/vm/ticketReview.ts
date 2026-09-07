@@ -118,6 +118,10 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
         break;
       }
 
+      // 'leaver' is the same event under the other vocabulary. Sharing the
+      // branch is what stops the two drifting into different standards for
+      // identical work.
+      case 'leaver':
       case 'termination': {
         checks.push(
           user.status === 'disabled'
@@ -185,6 +189,7 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
         break;
       }
 
+      case 'mover':
       case 'transfer': {
         const groups = dir.listGroups().filter((g) => g.memberIds.includes(user.id));
         const removed = audit.events.some(
@@ -203,6 +208,21 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
                 'Old access removed',
                 'Nothing was removed. This is the half of a transfer people skip, and it is ' +
                   'how privilege accumulates.',
+              ),
+        );
+        // A move is not only a change of access. The account has to end up
+        // where the person now works, or the next person to read the
+        // directory is misled about who they are.
+        const moved = audit.events.some(
+          (e) => e.action === 'user.moved' && e.at >= ticket.createdAt && e.targetId === user.id,
+        );
+        checks.push(
+          moved
+            ? pass('Account was moved', 'A move is recorded for this account.')
+            : fail(
+                'Account was moved',
+                'The account is where it started. Changing group membership without moving ' +
+                  'the account leaves the directory disagreeing with the org chart.',
               ),
         );
         break;
@@ -229,6 +249,34 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
         break;
       }
 
+      case 'mfa-issue': {
+        // Clearing a registration is the fix; leaving it cleared is not. An
+        // account with no second factor is the thing the ticket was about,
+        // so re-enrolment has to be part of resolving it.
+        const cleared = audit.events.some(
+          (e) => e.action === 'mfa.reset' && e.at >= ticket.createdAt && e.targetId === user.id,
+        );
+        checks.push(
+          cleared
+            ? pass('Registration was cleared', 'A reset is recorded for this account.')
+            : fail(
+                'Registration was cleared',
+                'No MFA reset appears in the audit log since the ticket was raised, so ' +
+                  'whatever was done was not this.',
+              ),
+        );
+        checks.push(
+          user.mfa !== 'none'
+            ? pass('A second factor is in place', `${user.username} is enrolled for ${user.mfa}.`)
+            : fail(
+                'A second factor is in place',
+                `${user.username} has no second factor. Clearing the old registration and ` +
+                  'stopping there leaves the account weaker than before the ticket.',
+              ),
+        );
+        break;
+      }
+
       case 'incident': {
         const tenant = deps.cloud?.okta ?? deps.cloud?.entra;
         if (tenant) {
@@ -246,18 +294,26 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
       }
 
       default: {
-        // Kinds without a specific check still get the general one: something
-        // must have happened to this account since the ticket was raised.
-        const touched = audit.events.some(
-          (e) => e.at >= ticket.createdAt && (e.targetId === user.id || e.subjectId === user.id),
-        );
-        checks.push(
-          touched
-            ? pass('Something was done', 'The audit log records work on this account.')
-            : fail(
-                'Something was done',
-                'Nothing in the audit log touches this account since the ticket was raised.',
-              ),
+        /*
+         * Unreachable, and the compiler proves it: every member of TicketKind
+         * now has a branch, so `ticket` narrows to never here.
+         *
+         * This used to be a live fallback asking only whether anything in the
+         * audit log had touched the account since the ticket was raised.
+         * mover, leaver and mfa-issue landed on it, and it passed for any
+         * change at all -- disable the wrong person on a leaver ticket and
+         * the review congratulated you. A vacuous check is worse than no
+         * check, because it produces a green verdict the learner calibrates
+         * on.
+         *
+         * Keeping it as an exhaustiveness guard rather than a fallback means
+         * the next ticket kind added to the union fails the build until
+         * somebody writes checks for it, instead of silently inheriting a
+         * standard that cannot be failed.
+         */
+        const unhandled: never = ticket;
+        throw new Error(
+          `[ticketReview] no checks for ticket kind '${(unhandled as Ticket).kind}'.`,
         );
       }
     }

@@ -217,6 +217,12 @@ export interface TicketComment {
 }
 
 interface TicketBase {
+  /** When this ticket passed its response target, if it did.
+   *
+   *  The countdown badge went red and said OVERDUE and nothing was recorded,
+   *  so a breach could not be reviewed after the fact -- and an SLA nobody
+   *  can review is not an SLA. */
+  slaBreachedAt?: number;
   id: TicketId;
   kind: TicketKind;
   status: TicketStatus;
@@ -328,7 +334,11 @@ export interface AuditEvent {
     /** A resolved ticket was checked against the directory, and what was found. */
     | 'ticket.review.passed'
     | 'ticket.review.failed'
-    | 'ticket.escalated';
+    | 'ticket.escalated'
+    /** A ticket passed its response target. The badge turned red and said
+     *  OVERDUE and nothing was recorded, so a breach could not be reviewed
+     *  afterwards -- and an SLA nobody can review is not an SLA. */
+    | 'ticket.slaBreached';
   /** Polysemous target: UserId | GroupId | RoleId | AppId | TicketId | SessionId */
   targetId?: string;
   /** For events that involve a subject distinct from the actor/target (group/role grants). */

@@ -153,7 +153,133 @@ describe('transfer review', () => {
 
     const review = reviewTicketSync(ticketFor(s, 'transfer', user.id, 'Move mchen'), deps(s), ACTOR);
     expect(review.passed).toBe(false);
-    expect(review.checks.filter((c) => !c.passed).map((c) => c.label)).toEqual(['Old access removed']);
+    // The move itself is now checked too. Swapping group membership without
+    // moving the account leaves the directory disagreeing with the org chart,
+    // which is the other half people skip.
+    expect(review.checks.filter((c) => !c.passed).map((c) => c.label)).toEqual([
+      'Old access removed',
+      'Account was moved',
+    ]);
+  });
+
+  it('passes when the access was swapped and the account actually moved', () => {
+    const s = setup();
+    const user = s.dir.createUser({
+      username: 'mchen',
+      displayName: 'Maya Chen',
+      email: 'mchen@iamlab.com',
+      department: 'HR',
+      title: 'Partner',
+      mfa: 'none',
+    });
+    const oldGroup = s.dir.getGroupByName('grp-helpdesk-tier1')!;
+    const newGroup = s.dir.createGroup('grp-hr-readers', 'HR read access', ACTOR);
+    s.dir.addToGroup(user.id, oldGroup.id, ACTOR);
+    s.dir.removeFromGroup(user.id, oldGroup.id, ACTOR);
+    s.dir.addToGroup(user.id, newGroup.id, ACTOR);
+    s.dir.moveUser(user.id, 'HR', ACTOR);
+
+    const review = reviewTicketSync(ticketFor(s, 'transfer', user.id, 'Move mchen'), deps(s), ACTOR);
+    expect(review.passed).toBe(true);
+  });
+
+  it('holds a mover to the same standard as a transfer', () => {
+    // Two names for one event. Sharing the branch is what stops them drifting
+    // into different standards for identical work -- 'mover' used to fall
+    // through to "something happened", which any change at all satisfied.
+    const s = setup();
+    const user = s.dir.createUser({
+      username: 'dpark',
+      displayName: 'Dan Park',
+      email: 'dpark@iamlab.com',
+      department: 'Finance',
+      title: 'Analyst',
+      mfa: 'none',
+    });
+    s.dir.addToGroup(user.id, s.dir.getGroupByName('grp-helpdesk-tier1')!.id, ACTOR);
+
+    const review = reviewTicketSync(ticketFor(s, 'mover', user.id, 'Move dpark'), deps(s), ACTOR);
+    expect(review.passed).toBe(false);
+    expect(review.checks.map((c) => c.label)).toContain('Account was moved');
+  });
+});
+
+describe('mfa-issue review', () => {
+  /*
+   * This kind used to fall through to "something in the audit log touched
+   * this account", which any change at all satisfied. Renaming the person
+   * passed an MFA ticket.
+   */
+  function withUser() {
+    const s = setup();
+    const user = s.dir.createUser({
+      username: 'lnguyen',
+      displayName: 'Linh Nguyen',
+      email: 'lnguyen@iamlab.com',
+      department: 'Sales',
+      title: 'Rep',
+      mfa: 'totp',
+    });
+    return { s, user };
+  }
+
+  it('refuses when nothing was reset', () => {
+    const { s, user } = withUser();
+    const review = reviewTicketSync(ticketFor(s, 'mfa-issue', user.id, 'MFA broken'), deps(s), ACTOR);
+    expect(review.passed).toBe(false);
+    expect(review.checks.filter((c) => !c.passed).map((c) => c.label)).toContain(
+      'Registration was cleared',
+    );
+  });
+
+  it('refuses when the registration was cleared and left cleared', () => {
+    // Clearing the old factor is the fix; stopping there leaves the account
+    // weaker than before the ticket was raised.
+    const { s, user } = withUser();
+    s.idp.resetMfa(user.id, ACTOR);
+
+    const review = reviewTicketSync(ticketFor(s, 'mfa-issue', user.id, 'MFA broken'), deps(s), ACTOR);
+    expect(review.passed).toBe(false);
+    expect(review.checks.filter((c) => !c.passed).map((c) => c.label)).toContain(
+      'A second factor is in place',
+    );
+  });
+
+  it('passes once it is cleared and re-enrolled', () => {
+    const { s, user } = withUser();
+    s.idp.resetMfa(user.id, ACTOR);
+    s.idp.enrollMfa(user.id, 'totp', ACTOR);
+
+    const review = reviewTicketSync(ticketFor(s, 'mfa-issue', user.id, 'MFA broken'), deps(s), ACTOR);
+    expect(review.passed).toBe(true);
+  });
+});
+
+describe('leaver review', () => {
+  it('is held to the same standard as a termination', () => {
+    // Two names for one event. 'leaver' used to reach the generic fallback,
+    // so disabling the account on premises and stopping there passed — the
+    // exact half-done offboarding the termination checks exist to catch.
+    const s = setup();
+    const user = s.dir.createUser({
+      username: 'rpatel',
+      displayName: 'Ravi Patel',
+      email: 'rpatel@iamlab.com',
+      department: 'Finance',
+      title: 'Analyst',
+      mfa: 'none',
+    });
+    s.cloud.okta.connect();
+    s.cloud.okta.grantAppAccount('HR Portal', 'rpatel@iamlab.com');
+    s.cloud.okta.sync(ACTOR);
+    s.cloud.okta.openSession('rpatel@iamlab.com');
+    s.dir.disableUser(user.id, ACTOR);
+
+    const review = reviewTicketSync(ticketFor(s, 'leaver', user.id, 'Offboard rpatel'), deps(s), ACTOR);
+    expect(review.passed).toBe(false);
+    const failed = review.checks.filter((c) => !c.passed).map((c) => c.label);
+    expect(failed).toContain('Disabled in the tenant');
+    expect(failed).toContain('Sessions revoked');
   });
 });
 

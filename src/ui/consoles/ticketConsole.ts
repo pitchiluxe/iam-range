@@ -20,10 +20,12 @@
  */
 import type { VmServices } from '@/vm/session';
 import { ticketStore } from '@/stores';
+// The response target lives with the queue, not with the badge that draws it.
+import { SLA_MS } from '@/services/mockTicketQueue';
 import {mkTicketId} from '@/domain';
 import type { Ticket, TicketId, TicketKind, TicketPriority, UserId } from '@/domain';
-import { showToast } from '@/ui/toast';
-import { ticketBlip, ticketResolved, urgentAlert } from '@/ui/audio';
+import { clearToasts, showToast } from '@/ui/toast';
+import { errorTone, fanfare, ticketBlip, ticketResolved, urgentAlert } from '@/ui/audio';
 import { generateTickets } from '@/vm/ticketGenerator';
 import { reviewTicketSync, explainReview, type TicketReview } from '@/vm/ticketReview';
 
@@ -41,13 +43,6 @@ const priorityColors: Record<
 };
 
 /** SLA windows (ms). Urgent = 15m, high = 30m. Normal/low = no SLA. */
-const SLA_MS: Record<TicketPriority, number> = {
-  urgent: 15 * 60 * 1000,
-  high: 30 * 60 * 1000,
-  normal: 0,
-  low: 0,
-};
-
 const statusRank: Record<Ticket['status'], number> = {
   open: 0,
   'in-progress': 1,
@@ -92,11 +87,11 @@ function formatElapsed(ms: number): string {
 function formatSLA(
   createdAt: number,
   priority: TicketPriority,
-): { text: string; color: string } | null {
+): { text: string; color: string; overdue?: boolean } | null {
   const sla = SLA_MS[priority];
   if (!sla) return null;
   const remaining = sla - (Date.now() - createdAt);
-  if (remaining <= 0) return { text: '⚠️ OVERDUE', color: '#ef4444' };
+  if (remaining <= 0) return { text: '⚠️ OVERDUE', color: '#ef4444', overdue: true };
   const totalMin = Math.floor(remaining / 60000);
   const sec = Math.floor((remaining % 60000) / 1000);
   // Color shift: > 50% remaining = green, > 25% = yellow, else red
@@ -190,8 +185,63 @@ const TICKET_TEMPLATES: Array<{
   },
 ];
 
+/**
+ * The moment a ticket is accepted.
+ *
+ * Finishing a ticket used to produce a small green toast identical to every
+ * other toast in the app. This is the only point in the exercise where the
+ * directory provably matches what was asked, and it earns a beat -- but it
+ * sits over the queue rather than in front of it, because the next ticket is
+ * the reward and a dialog would stand between them.
+ */
+const CELEBRATE_CSS = `
+  @keyframes tq-celebrate-in {
+    0%   { opacity: 0; transform: translate(-50%, 14px) scale(0.94); }
+    55%  { opacity: 1; transform: translate(-50%, 0) scale(1.02); }
+    70%  { transform: translate(-50%, 0) scale(1); }
+    82%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -10px) scale(1); }
+  }
+  @keyframes tq-celebrate-mark {
+    0%   { transform: scale(0.2) rotate(-25deg); opacity: 0; }
+    60%  { transform: scale(1.15) rotate(0deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  .tq-celebrate {
+    /* Clear of the toast stack, which is bottom-centre at 60px with
+       z-index 9999 -- the celebration was landing underneath it. */
+    position: fixed; left: 50%; bottom: 118px; transform: translateX(-50%);
+    z-index: 10000; display: flex; align-items: center; gap: 12px;
+    padding: 13px 20px 13px 15px; border-radius: 11px; pointer-events: none;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+    border: 1px solid rgba(78, 201, 176, 0.55);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.13);
+    backdrop-filter: blur(26px) saturate(160%);
+    -webkit-backdrop-filter: blur(26px) saturate(160%);
+    animation: tq-celebrate-in 2600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .tq-celebrate-mark {
+    width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent); color: var(--on-accent);
+    font-size: 17px; font-weight: 700; line-height: 1;
+    animation: tq-celebrate-mark 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  .tq-celebrate-title { font-size: 12.5px; font-weight: 650; color: var(--accent); }
+  .tq-celebrate-sub {
+    font-size: 11px; color: var(--muted); margin-top: 1px;
+    max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* Still says it happened; it just does not move to say it. */
+    .tq-celebrate, .tq-celebrate-mark { animation-duration: 1ms; animation-delay: 2400ms; }
+  }
+`;
+
 export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
-  // One-time injection of thin scrollbar CSS for Webkit browsers
+  // One-time injection of the console's own CSS: the scrollbar, and the
+  // animation for work the review accepted.
   if (!document.getElementById('ticket-console-scroll-css')) {
     const style = document.createElement('style');
     style.id = 'ticket-console-scroll-css';
@@ -199,7 +249,8 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       '#ticket-console-wrap::-webkit-scrollbar{width:6px}' +
       '#ticket-console-wrap::-webkit-scrollbar-track{background:var(--panel)}' +
       '#ticket-console-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}' +
-      '#ticket-console-wrap::-webkit-scrollbar-thumb:hover{background:#3d4a56}';
+      '#ticket-console-wrap::-webkit-scrollbar-thumb:hover{background:#3d4a56}' +
+      CELEBRATE_CSS;
     document.head.appendChild(style);
   }
 
@@ -274,6 +325,102 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
   });
 
   /**
+   * The animation for work the review accepted.
+   *
+   * Deliberately brief and self-dismissing. This is the only moment in the
+   * app that says the directory now matches what was asked, and it earns a
+   * beat -- but it sits over the queue rather than blocking it, because the
+   * next ticket is the reward and a dialog would stand in front of it.
+   */
+  function celebrateResolved(t: Ticket): void {
+    // A refusal the learner has since satisfied is no longer information.
+    // Left up, it sits on the screen contradicting this.
+    clearToasts();
+    fanfare();
+    const card = document.createElement('div');
+    card.className = 'tq-celebrate';
+    card.innerHTML =
+      '<div class="tq-celebrate-mark">✓</div>' +
+      '<div><div class="tq-celebrate-title">Objectives met</div>' +
+      `<div class="tq-celebrate-sub">${t.subject}</div></div>`;
+    body.appendChild(card);
+    // Removed by the clock rather than by an animation event, so a browser
+    // that skips animations still cleans it up.
+    window.setTimeout(() => card.remove(), 2600);
+  }
+
+  /** The sound for work handed back. Quiet: a refusal is information. */
+  function reviewRefused(): void {
+    errorTone();
+  }
+
+  /**
+   * Say which tickets have just missed their target.
+   *
+   * The queue decides and records; this only announces. Detection used to
+   * live here and read the rendered badges, which meant a breach existed
+   * only while somebody had the window open -- the same decoration problem
+   * one layer up.
+   */
+  function announceBreaches(): void {
+    const fresh = queue.sweepSla();
+    if (fresh.length === 0) return;
+    errorTone();
+    for (const t of fresh) showToast(`SLA missed: ${t.subject}`, { kind: 'warn' });
+  }
+
+  /**
+   * Try to resolve a ticket. The review decides whether it happens.
+   *
+   * The one place queue.resolve() is called from. Before this existed the
+   * card button, the bulk action and the keyboard shortcut each carried their
+   * own copy, so a gate added to one of them would have been walked around by
+   * the other two.
+   *
+   * Returns whether the ticket was actually resolved, so a caller acting on
+   * several tickets can report how many really closed rather than how many it
+   * attempted.
+   */
+  function attemptResolve(t: Ticket, opts: { quiet?: boolean } = {}): boolean {
+    const review = reviewTicketSync(
+      t,
+      { dir: conductor.dir, audit: conductor.audit, pim: conductor.pim, cloud: conductor.cloud },
+      'system' as UserId,
+    );
+    reviews.set(t.id, review);
+
+    // The model only ever rewrites the prose. The verdict above is already
+    // decided, and nothing it returns can change it.
+    void explainReview(t, review).then((written) => {
+      if (!written) return;
+      reviews.set(t.id, { ...review, summary: written, source: 'ollama' });
+      render();
+    });
+
+    if (!review.passed) {
+      const failed = review.checks.filter((c) => !c.passed);
+      if (!opts.quiet) {
+        reviewRefused();
+        showToast(
+          `Not resolved — ${failed.length} check${failed.length > 1 ? 's' : ''} did not pass. ` +
+            'The review below says what is still outstanding.',
+          { kind: 'warn' },
+        );
+      }
+      return false;
+    }
+
+    queue.resolve(t.id, 'system' as UserId);
+    ticketStore.getState().incrementResolved();
+    selectedIds.delete(t.id);
+    if (!opts.quiet) {
+      ticketResolved();
+      celebrateResolved(t);
+    }
+    return true;
+  }
+
+  /**
    * Rewrite the age on each card.
    *
    * This was written once at render and then never again, while the SLA badge
@@ -327,6 +474,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       // beside it that was left out of that fix and silently froze.
       updateSLABadges();
       updateAges();
+      announceBreaches();
     }, 1000);
   }
   startSLATick();
@@ -576,19 +724,31 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
           'display:flex;align-items:center;gap:6px;padding:6px 8px;background:rgba(78,201,176,0.08);border:1px solid var(--accent);border-radius:3px;';
         row3.innerHTML = `<span style="color:var(--accent);font-size:12px;font-weight:600;">${selectedIds.size} selected</span>`;
         const bulkResolve = btn('✓ Resolve all', 'var(--accent)', () => {
-          let count = 0;
-          for (const id of selectedIds) {
+          // Each one is reviewed on its own. Selecting ten tickets is not a
+          // way to close the two that are not finished.
+          let done = 0;
+          let refused = 0;
+          for (const id of [...selectedIds]) {
+            const t = queue.get(id);
+            if (!t) continue;
             try {
-              queue.resolve(id, 'system' as UserId);
-              ticketStore.getState().incrementResolved();
-              count++;
+              if (attemptResolve(t, { quiet: true })) done += 1;
+              else refused += 1;
             } catch {
               /* skip */
             }
           }
-          if (count > 0) {
+          if (done > 0) {
             ticketResolved();
-            showToast(`Resolved ${count} ticket${count > 1 ? 's' : ''}.`, { kind: 'success' });
+            showToast(`Resolved ${done} ticket${done > 1 ? 's' : ''}.`, { kind: 'success' });
+          }
+          if (refused > 0) {
+            reviewRefused();
+            showToast(
+              `${refused} still ${refused > 1 ? 'have' : 'has'} outstanding work — see the ` +
+                'review on each card.',
+              { kind: 'warn' },
+            );
           }
           selectedIds.clear();
           render();
@@ -681,40 +841,10 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       actions.appendChild(
         btn('Resolve', 'var(--accent)', () => {
           try {
-            queue.resolve(t.id, 'system' as UserId);
-            ticketStore.getState().incrementResolved();
-            ticketResolved();
-            selectedIds.delete(t.id);
-            showToast(`✓ Resolved: ${t.subject}`, { kind: 'success' });
-
-            // Marking it resolved is a claim; this checks it against the
-            // directory. The checks are instant and decide the verdict, so it
-            // is shown straight away — a model, if one is running, only
-            // rewrites the explanation afterwards.
-            const review = reviewTicketSync(
-              t,
-              {
-                dir: conductor.dir,
-                audit: conductor.audit,
-                pim: conductor.pim,
-                cloud: conductor.cloud,
-              },
-              'system' as UserId,
-            );
-            reviews.set(t.id, review);
-            if (!review.passed) {
-              showToast('The review found work still outstanding on that ticket.', {
-                kind: 'warn',
-              });
-            }
-            render();
-
-            void explainReview(t, review).then((written) => {
-              if (!written) return;
-              reviews.set(t.id, { ...review, summary: written, source: 'ollama' });
-              render();
-            });
-            return;
+            // Marking it resolved is a claim. The checks run first and decide
+            // whether it holds; they are instant, so the verdict appears at
+            // once and a model, if one is running, only rewrites the prose.
+            attemptResolve(t);
           } catch (e) {
             showToast(String(e), { kind: 'error' });
           }
@@ -1200,11 +1330,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       }
       if (target) {
         try {
-          queue.resolve(target.id, 'system' as UserId);
-          ticketStore.getState().incrementResolved();
-          ticketResolved();
-          selectedIds.delete(target.id);
-          showToast(`✓ Resolved: ${target.subject}`, { kind: 'success' });
+          attemptResolve(target);
         } catch (err) {
           showToast(String(err), { kind: 'error' });
         }
