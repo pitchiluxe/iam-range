@@ -25,6 +25,7 @@ import { renderRecycleBinWindow } from './consoles/recycleBinWindow';
 import { renderTutorWindow } from './consoles/tutorWindow';
 import { renderManualWindow } from './consoles/manualWindow';
 import { renderProjectWindow } from './consoles/projectWindow';
+import { renderInterviewWindow } from './consoles/interviewWindow';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
@@ -206,6 +207,14 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    id: 'interview',
+    title: 'Interview Prep',
+    icon: '🎤',
+    width: 860,
+    height: 640,
+    render: (_c, b) => renderInterviewWindow(b),
   },
   {
     // The plan view of the manual: which lessons are done, judged from the

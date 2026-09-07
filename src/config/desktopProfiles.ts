@@ -24,6 +24,8 @@ const BASELINE_APPS = [
   // manual is: knowing where you are in the course is not a departmental
   // entitlement.
   'lab-plan',
+  // Rehearsing the answers is part of the course, not a departmental perk.
+  'interview',
   'documentation',
   'explorer',
   'notepad',
