@@ -46,8 +46,11 @@ export const SEED_ADMINS: SeedUser[] = [
     department: 'IT',
     title: 'Domain Administrator',
     mfa: 'none',
-    // The built-in credential, changed at first sign-in.
-    password: '123!',
+    // The built-in credential. Shaped like a real default — upper, lower,
+    // digits, symbol — so the first thing a learner types is a password that
+    // would actually pass a domain policy, and changing it in Settings is a
+    // meaningful exercise rather than a formality.
+    password: 'Password123!',
     // No groups: a fresh domain has none, and the administrator's rights come
     // from being the built-in account rather than from membership.
     groups: [],

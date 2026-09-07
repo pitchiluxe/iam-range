@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { VmSession } from '@/vm/session';
 import type { Ticket } from '@/domain';
 import { readEnvironment } from '@/vm/environmentStage';
+import { SEED_ADMINS } from '@/config';
 
 describe('VmSession boot', () => {
   let session: VmSession;
@@ -103,7 +104,11 @@ describe('starting ticket backlog', () => {
   });
 
   it('the administrator can sign in with the shipped password', () => {
-    expect(session.idp.signIn('admin', '123!').ok).toBe(true);
+    // Read from the seed rather than repeated here: a test that hardcodes the
+    // credential passes while the login screen tells the learner a different
+    // one, which is the drift this whole suite exists to catch.
+    const admin = SEED_ADMINS[0]!;
+    expect(session.idp.signIn(admin.username, admin.password).ok).toBe(true);
   });
 
 

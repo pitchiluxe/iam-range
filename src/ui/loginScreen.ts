@@ -33,6 +33,131 @@ export interface LoginScreen {
 
 const FONT = "'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif";
 
+
+/**
+ * The lock screen's own stylesheet.
+ *
+ * Injected once rather than written inline on every element, because these
+ * are animations and pseudo-elements — neither of which a style attribute can
+ * express.
+ */
+const LOGIN_STYLES = `
+  @keyframes lock-rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes panel-in {
+    from { opacity: 0; transform: translateY(18px) scale(0.985); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes drift {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(-2.5%, -1.5%, 0) scale(1.06); }
+  }
+  @keyframes trace {
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes pulse-node {
+    0%, 100% { opacity: 0.30; r: 0.7; }
+    50%      { opacity: 0.75; r: 1.0; }
+  }
+  @keyframes shake {
+    10%, 90% { transform: translateX(-2px); }
+    30%, 70% { transform: translateX(3px); }
+    50%      { transform: translateX(-3px); }
+  }
+
+  .lock-rise { animation: lock-rise 620ms cubic-bezier(.2,.7,.3,1) both; }
+  .lock-glass {
+    background: rgba(255,255,255,0.10);
+    backdrop-filter: blur(26px) saturate(140%);
+    -webkit-backdrop-filter: blur(26px) saturate(140%);
+    border: 1px solid rgba(255,255,255,0.18);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.22);
+  }
+  .lock-panel { animation: panel-in 420ms cubic-bezier(.2,.7,.3,1) both; }
+  .lock-shake { animation: shake 420ms ease-in-out; }
+
+  /* The identity graph behind the glass: nodes joined to a centre, drawn once
+     and then drifting slowly. It is the shape of a directory, which is what
+     this workstation is about. */
+  /* Texture, not a subject. The viewBox is sliced across the whole screen, so
+     radii and stroke widths here are a fraction of a unit — a radius of 3 in a
+     100-unit box became a coaster on a 1440px display. */
+  .lock-graph {
+    position: absolute; inset: -6%;
+    pointer-events: none; opacity: 0.22;
+    animation: drift 40s ease-in-out infinite alternate;
+  }
+  .lock-graph path { stroke-dasharray: 120; stroke-dashoffset: 120;
+    animation: trace 2.8s ease-out forwards; }
+  .lock-graph circle.node { animation: pulse-node 4.5s ease-in-out infinite; }
+
+  .lock-input {
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.28);
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+  .lock-input:focus {
+    background: rgba(255,255,255,0.20);
+    border-color: rgba(255,255,255,0.55);
+  }
+  .lock-btn { transition: filter 140ms ease, transform 90ms ease; }
+  .lock-btn:hover { filter: brightness(1.12); }
+  .lock-btn:active { transform: translateY(1px); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lock-rise, .lock-panel, .lock-graph, .lock-graph path, .lock-graph circle.node,
+    .lock-shake { animation: none !important; }
+    .lock-graph path { stroke-dashoffset: 0; }
+  }
+`;
+
+/**
+ * The directory motif behind the glass.
+ *
+ * A small identity graph — one centre, several principals joined to it —
+ * traced on first paint. Built as an SVG string because it is decoration with
+ * no behaviour, and pointer-events are off so it can never intercept a click
+ * meant for the password field.
+ */
+function buildGraph(): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'lock-graph';
+  el.setAttribute('aria-hidden', 'true');
+
+  // Off-centre and irregular: a directory is not a snowflake, and a
+  // perfectly radial diagram reads as a decoration rather than a structure.
+  const nodes = [
+    [26, 21], [14, 44], [31, 68], [44, 12], [52, 82],
+    [69, 26], [83, 49], [74, 71], [61, 55], [38, 40],
+  ];
+  const paths = nodes
+    .map(([x, y], i) => {
+      const delay = 180 + i * 110;
+      return `<path d="M50 50 L${x} ${y}" stroke="rgba(255,255,255,0.55)" stroke-width="0.09"
+        fill="none" style="animation-delay:${delay}ms" />`;
+    })
+    .join('');
+  const dots = nodes
+    .map(([x, y], i) => {
+      return `<circle class="node" cx="${x}" cy="${y}" r="0.7" fill="rgba(255,255,255,0.8)"
+        style="animation-delay:${i * 420}ms" />`;
+    })
+    .join('');
+
+  el.innerHTML = `
+    <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"
+         style="width:100%;height:100%;display:block;">
+      ${paths}
+      ${dots}
+      <circle cx="50" cy="50" r="1.8" fill="none" stroke="rgba(255,255,255,0.6)"
+              stroke-width="0.12" />
+      <circle cx="50" cy="50" r="0.85" fill="rgba(255,255,255,0.9)" />
+    </svg>`;
+  return el;
+}
+
 export function createLoginScreen(login: LoginSession, onSignedIn: () => void): LoginScreen {
   let overlay: HTMLElement | null = null;
   let locked = true;
@@ -52,8 +177,25 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
    */
   let temporaryPassword: string | null = null;
 
+  /**
+   * Empty the overlay without throwing away its stylesheet or the motif
+   * behind the glass — innerHTML = '' used to take both, so the animation
+   * restarted on every render and the blur had nothing to blur.
+   */
+  function clearContent(): void {
+    if (!overlay) return;
+    for (const child of Array.from(overlay.children)) {
+      if (child.tagName === 'STYLE' || child.classList.contains('lock-graph')) continue;
+      child.remove();
+    }
+  }
+
   function build(): HTMLElement {
     const el = document.createElement('div');
+    const style = document.createElement('style');
+    style.textContent = LOGIN_STYLES;
+    el.appendChild(style);
+    el.appendChild(buildGraph());
     el.style.cssText =
       'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;' +
       // The account strip is absolutely positioned, so it takes no part in
@@ -69,13 +211,16 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
 
   function renderLock(): void {
     if (!overlay) return;
-    overlay.innerHTML = '';
+    clearContent();
 
     const wrap = document.createElement('div');
+    wrap.className = 'lock-rise';
     // Centred, not pinned near the bottom. The overlay is a flex container
     // that already centres its child, so the clock sits in the middle of the
     // screen the way Windows puts it rather than a fifth of the way up.
-    wrap.style.cssText = 'text-align:center;user-select:none;';
+    wrap.style.cssText =
+      'text-align:center;user-select:none;position:relative;z-index:1;' +
+      'text-shadow:0 2px 24px rgba(0,0,0,0.45);';
 
     const time = document.createElement('div');
     time.style.cssText = 'font-size:68px;font-weight:200;letter-spacing:-1px;line-height:1;';
@@ -144,7 +289,7 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
 
   function renderSignIn(): void {
     if (!overlay) return;
-    overlay.innerHTML = '';
+    clearContent();
 
     // On a fresh install there is exactly one account. Windows selects it for
     // you, and leaving it unselected here meant typing the administrator's
@@ -155,9 +300,16 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     }
 
     const panel = document.createElement('div');
-    // Lifted slightly above true centre, which is where Windows puts it.
+    panel.className = 'lock-panel';
+    // Lifted slightly above true centre, which is where Windows puts it, and
+    // sitting on acrylic so the wallpaper reads through it.
     panel.style.cssText =
-      'text-align:center;width:340px;position:relative;top:-6vh;';
+      'text-align:center;width:360px;position:relative;top:-4vh;z-index:1;' +
+      'padding:30px 26px 26px;border-radius:14px;' +
+      'background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);' +
+      'backdrop-filter:blur(26px) saturate(140%);' +
+      '-webkit-backdrop-filter:blur(26px) saturate(140%);' +
+      'box-shadow:0 18px 50px rgba(0,0,0,0.35),inset 0 1px 0 rgba(255,255,255,0.22);';
 
     // Avatar
     const avatar = document.createElement('div');
@@ -190,15 +342,16 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     const input = document.createElement('input');
     input.type = 'password';
     input.placeholder = mustChangeFor ? 'New password' : 'Password';
+    input.className = 'lock-input';
     input.style.cssText =
-      'width:100%;box-sizing:border-box;padding:9px 12px;border-radius:4px;font-size:13px;' +
-      'background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.3);color:#fff;' +
-      `outline:none;font-family:${FONT};`;
+      'width:100%;box-sizing:border-box;padding:9px 12px;border-radius:6px;font-size:13px;' +
+      `color:#fff;outline:none;font-family:${FONT};`;
 
     const go = document.createElement('button');
     go.textContent = mustChangeFor ? 'Set password and sign in' : 'Sign in';
+    go.className = 'lock-btn';
     go.style.cssText =
-      'width:100%;margin-top:10px;padding:9px;border-radius:4px;border:none;cursor:pointer;' +
+      'width:100%;margin-top:10px;padding:9px;border-radius:6px;border:none;cursor:pointer;' +
       `background:#0e639c;color:#fff;font-size:13px;font-weight:600;font-family:${FONT};`;
 
     const submit = (): void => {
@@ -235,6 +388,11 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
 
       message.textContent = result.message;
       errorBeep();
+      // The panel shakes, which is the feedback Windows gives and is faster to
+      // read than the sentence underneath it.
+      panel.classList.remove('lock-shake');
+      void panel.offsetWidth; // restart the animation
+      panel.classList.add('lock-shake');
       if (result.reason === 'must-change-password') {
         mustChangeFor = selected.username;
         // Authentication succeeded; only the forced change refused it. Keep
