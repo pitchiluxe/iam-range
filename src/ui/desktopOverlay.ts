@@ -24,6 +24,7 @@ import { renderControlPanelWindow } from './consoles/controlPanelWindow';
 import { renderRecycleBinWindow } from './consoles/recycleBinWindow';
 import { renderTutorWindow } from './consoles/tutorWindow';
 import { renderManualWindow } from './consoles/manualWindow';
+import { renderProjectWindow } from './consoles/projectWindow';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
@@ -205,6 +206,16 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    // The plan view of the manual: which lessons are done, judged from the
+    // estate rather than from a box the learner ticked.
+    id: 'lab-plan',
+    title: 'Lab Plan',
+    icon: '📊',
+    width: 1080,
+    height: 660,
+    render: (c, b) => renderProjectWindow(b, c),
   },
   {
     id: 'tutor',

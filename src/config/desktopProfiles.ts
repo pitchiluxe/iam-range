@@ -20,6 +20,10 @@ const BASELINE_APPS = [
   // Learning is not a departmental entitlement.
   'tutor',
   'manual',
+  // The plan view of the manual. On every desktop for the same reason the
+  // manual is: knowing where you are in the course is not a departmental
+  // entitlement.
+  'lab-plan',
   'documentation',
   'explorer',
   'notepad',

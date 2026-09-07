@@ -1,0 +1,323 @@
+/**
+ * vm/labProgress.ts — which lessons have actually been done.
+ *
+ * The manual's four chapters and fifteen lessons are the curriculum. Nothing
+ * recorded whether any of them had been completed, so a learner could work
+ * through the whole thing with no idea what was left — and, more to the point,
+ * no evidence they had done any of it.
+ *
+ * The obvious implementation is a checklist you tick. That is exactly the
+ * mistake this project just removed from the ticket queue, where marking a
+ * ticket resolved was a claim nobody checked, and a learner could close the
+ * entire queue having done nothing. A self-ticked curriculum would teach the
+ * same habit one level up.
+ *
+ * So completion is derived, never asserted. Each lesson is a predicate over
+ * the directory, the audit log, the PIM service and the cloud tenants: the
+ * same evidence a real assessor would ask for. You cannot mark "Offboard
+ * somebody" complete; you complete it by offboarding somebody, and this
+ * notices.
+ *
+ * Three states, because two is not enough to be useful. "Not started" and
+ * "done" leaves a learner who is half way through a long lesson looking at the
+ * same thing as one who has not opened it.
+ */
+import { MANUAL } from '@/config/manual';
+import type { Chapter, Lesson } from '@/config/manual';
+import type { VmServices } from './session';
+
+export type LessonState = 'not-started' | 'in-progress' | 'done';
+
+export interface LessonProgress {
+  lesson: Lesson;
+  chapterId: string;
+  state: LessonState;
+  /** What was found, in the learner's language. Shown as the evidence column. */
+  evidence: string;
+  /** What is still missing, when the lesson is not finished. */
+  outstanding: string;
+}
+
+export interface ChapterProgress {
+  chapter: Chapter;
+  lessons: LessonProgress[];
+  /** Whole percent, rounded. A part-finished lesson counts as half. */
+  percent: number;
+}
+
+export interface Progress {
+  chapters: ChapterProgress[];
+  percent: number;
+  done: number;
+  total: number;
+}
+
+/**
+ * One lesson's rule.
+ *
+ * `done` is the finished state; `started` is evidence of work under way. A
+ * lesson with no meaningful partial state leaves `started` undefined and is
+ * simply not started until it is done.
+ */
+interface Rule {
+  done: (s: VmServices) => boolean;
+  started?: (s: VmServices) => boolean;
+  /** Describes what was found when done, and what is missing when not. */
+  evidence: (s: VmServices) => string;
+  outstanding: string;
+}
+
+const has = (s: VmServices, action: string): boolean =>
+  s.audit.byAction(action).length > 0;
+
+const count = (s: VmServices, action: string): number => s.audit.byAction(action).length;
+
+/** Accounts that are not the built-in administrator or a service account. */
+function staff(s: VmServices) {
+  return s.dir
+    .listUsers()
+    .filter((u) => u.username !== 'admin' && !u.username.startsWith('svc-'));
+}
+
+function anyTenant(s: VmServices) {
+  return s.cloud?.okta ?? s.cloud?.entra ?? null;
+}
+
+/**
+ * The rules, by lesson id.
+ *
+ * Keyed by the manual's own ids. A lesson with no rule here would silently
+ * never complete, so the drift guard in the tests walks MANUAL and requires
+ * one for every lesson — the same shape of guard the capability registry uses.
+ */
+const RULES: Record<string, Rule> = {
+  // --- 1. The directory ---
+  survey: {
+    // Reading is the lesson. Running any query at all is the evidence, and
+    // the terminal records what was asked.
+    done: (s) => s.dir.listOus().length > 0 || staff(s).length > 0 || has(s, 'signin.success'),
+    evidence: (s) =>
+      `${s.dir.listUsers().length} accounts, ${s.dir.listGroups().length} groups, ` +
+      `${s.dir.listOus().length} OUs on ${s.dir.listUsers().length > 0 ? 'a live domain' : 'a bare domain'}.`,
+    outstanding: 'Sign in and look at what the domain already contains.',
+  },
+  'ou-structure': {
+    done: (s) => s.dir.listOus().length >= 2,
+    started: (s) => s.dir.listOus().length >= 1,
+    evidence: (s) =>
+      s.dir.listOus().length === 0
+        ? 'No organisational units exist.'
+        : `${s.dir.listOus().length} OU(s): ${s.dir.listOus().map((o) => o.name).join(', ')}.`,
+    outstanding: 'Build at least a parent OU and one beneath it.',
+  },
+  'group-model': {
+    done: (s) => s.dir.listGroups().length >= 3,
+    started: (s) => s.dir.listGroups().length >= 1,
+    evidence: (s) =>
+      s.dir.listGroups().length === 0
+        ? 'No security groups exist.'
+        : `${s.dir.listGroups().length} group(s) defined.`,
+    outstanding: 'Define at least three security groups for the roles people hold.',
+  },
+
+  // --- 2. Joiner, mover, leaver ---
+  joiner: {
+    // An account is not onboarded until it has access and a place. The same
+    // standard the onboarding ticket review applies.
+    done: (s) =>
+      staff(s).some(
+        (u) => u.status === 'active' && u.ouId !== undefined &&
+          s.dir.listGroups().some((g) => g.memberIds.includes(u.id)),
+      ),
+    started: (s) => staff(s).length > 0,
+    evidence: (s) => {
+      const full = staff(s).filter(
+        (u) => u.status === 'active' && u.ouId !== undefined &&
+          s.dir.listGroups().some((g) => g.memberIds.includes(u.id)),
+      );
+      return full.length > 0
+        ? `${full.length} account(s) enabled, grouped and placed in an OU.`
+        : `${staff(s).length} staff account(s), none fully provisioned.`;
+    },
+    outstanding: 'Create an account, put it in a group, and place it in an OU.',
+  },
+  mover: {
+    done: (s) => has(s, 'user.moved') && has(s, 'group.remove') && has(s, 'group.add'),
+    started: (s) => has(s, 'user.moved') || has(s, 'group.remove'),
+    evidence: (s) =>
+      `${count(s, 'user.moved')} move(s), ${count(s, 'group.add')} grant(s), ` +
+      `${count(s, 'group.remove')} removal(s) recorded.`,
+    outstanding:
+      'Move an account and swap its access — both halves. Adding without removing is how privilege accumulates.',
+  },
+  leaver: {
+    done: (s) => {
+      const disabled = staff(s).some((u) => u.status === 'disabled');
+      const tenant = anyTenant(s);
+      if (!tenant) return disabled;
+      // Offboarding stops where deprovisioning stops, so the tenant side counts.
+      return disabled && has(s, 'cloud.session.revoked');
+    },
+    started: (s) => staff(s).some((u) => u.status === 'disabled'),
+    evidence: (s) => {
+      const disabled = staff(s).filter((u) => u.status === 'disabled').length;
+      return disabled === 0
+        ? 'No account has been disabled.'
+        : `${disabled} disabled on premises, ${count(s, 'cloud.session.revoked')} session revocation(s).`;
+    },
+    outstanding:
+      'Disable the account and close every other route — the tenant, the sessions, the applications.',
+  },
+  lockout: {
+    done: (s) => has(s, 'account.unlock'),
+    started: (s) => staff(s).some((u) => u.status === 'locked'),
+    evidence: (s) =>
+      has(s, 'account.unlock')
+        ? `${count(s, 'account.unlock')} unlock(s) recorded.`
+        : 'No account has been unlocked.',
+    outstanding: 'Unlock a locked account, and be able to say how it differs from a disabled one.',
+  },
+
+  // --- 3. Privileged access ---
+  standing: {
+    // Finding it is the lesson. Any PIM assignment existing means the estate
+    // has been looked at through the PIM console.
+    done: (s) => (s.pim?.list().length ?? 0) > 0 || has(s, 'pim.permanent'),
+    evidence: (s) => {
+      const standing = s.pim?.standingPrivilege().length ?? 0;
+      const all = s.pim?.list().length ?? 0;
+      return all === 0
+        ? 'No privileged assignments have been looked at.'
+        : `${all} assignment(s), ${standing} of them standing.`;
+    },
+    outstanding: 'Look at who holds privilege permanently.',
+  },
+  eligible: {
+    done: (s) => has(s, 'pim.eligible'),
+    evidence: (s) =>
+      has(s, 'pim.eligible')
+        ? `${count(s, 'pim.eligible')} eligibility grant(s).`
+        : 'Nobody has been made eligible.',
+    outstanding: 'Replace a permanent assignment with eligibility.',
+  },
+  activate: {
+    done: (s) => has(s, 'pim.activated'),
+    started: (s) => has(s, 'pim.requested'),
+    evidence: (s) =>
+      has(s, 'pim.activated')
+        ? `${count(s, 'pim.activated')} activation(s), ${count(s, 'pim.deactivated')} stood down.`
+        : 'No role has been activated.',
+    outstanding: 'Activate an eligible role for a change window.',
+  },
+  approval: {
+    done: (s) => has(s, 'pim.approved'),
+    started: (s) => has(s, 'pim.requested'),
+    evidence: (s) =>
+      has(s, 'pim.approved')
+        ? `${count(s, 'pim.approved')} approval(s) granted.`
+        : 'No activation has been approved.',
+    outstanding: 'Approve somebody else’s activation request.',
+  },
+
+  // --- 4. Cloud identity ---
+  authority: {
+    done: (s) => Boolean(anyTenant(s)?.isConnected()),
+    evidence: (s) => {
+      const t = anyTenant(s);
+      return t?.isConnected()
+        ? `Connected to ${t.vendor.label}; ${t.list().length} object(s) visible.`
+        : 'No cloud tenant is connected.';
+    },
+    outstanding: 'Connect a tenant and work out which side is authoritative.',
+  },
+  latency: {
+    done: (s) => has(s, 'cloud.synced'),
+    evidence: (s) =>
+      has(s, 'cloud.synced')
+        ? `${count(s, 'cloud.synced')} sync cycle(s) run.`
+        : 'No sync cycle has been run.',
+    outstanding: 'Run a sync and see what the delay does to a disabled account.',
+  },
+  scim: {
+    done: (s) => has(s, 'scim.enabled'),
+    evidence: (s) =>
+      has(s, 'scim.enabled')
+        ? `SCIM switched on ${count(s, 'scim.enabled')} time(s).`
+        : 'SCIM has not been switched on for any application.',
+    outstanding: 'Turn on SCIM so deprovisioning reaches inside the applications.',
+  },
+  duplicates: {
+    done: (s) => {
+      const t = anyTenant(s);
+      // Done when the estate has been examined and no duplicate remains.
+      return Boolean(t?.isConnected()) && (t?.duplicates().length ?? 1) === 0 && has(s, 'cloud.synced');
+    },
+    started: (s) => (anyTenant(s)?.duplicates().length ?? 0) > 0,
+    evidence: (s) => {
+      const t = anyTenant(s);
+      if (!t?.isConnected()) return 'No tenant connected, so nothing to compare.';
+      const d = t.duplicates().length;
+      return d === 0 ? 'One object per person.' : `${d} duplicate object(s) outstanding.`;
+    },
+    outstanding: 'Resolve the duplicate identities so each person has one object.',
+  },
+};
+
+/** Every lesson id the manual defines, in order. */
+export function lessonIds(): string[] {
+  return MANUAL.flatMap((c) => c.lessons.map((l) => l.id));
+}
+
+/** The rule table, exposed so the drift guard can compare it to the manual. */
+export function ruleIds(): string[] {
+  return Object.keys(RULES);
+}
+
+function stateOf(rule: Rule | undefined, s: VmServices): LessonState {
+  if (!rule) return 'not-started';
+  if (rule.done(s)) return 'done';
+  if (rule.started?.(s)) return 'in-progress';
+  return 'not-started';
+}
+
+/** Work out where the learner is, from the estate rather than from a checkbox. */
+export function computeProgress(s: VmServices): Progress {
+  const chapters: ChapterProgress[] = MANUAL.map((chapter) => {
+    const lessons: LessonProgress[] = chapter.lessons.map((lesson) => {
+      const rule = RULES[lesson.id];
+      const state = stateOf(rule, s);
+      return {
+        lesson,
+        chapterId: chapter.id,
+        state,
+        evidence: rule ? rule.evidence(s) : 'No rule defined for this lesson.',
+        outstanding: rule ? rule.outstanding : '',
+      };
+    });
+    // A lesson under way counts as half, so a chapter in progress does not
+    // read as untouched.
+    const score = lessons.reduce(
+      (acc, l) => acc + (l.state === 'done' ? 1 : l.state === 'in-progress' ? 0.5 : 0),
+      0,
+    );
+    return {
+      chapter,
+      lessons,
+      percent: lessons.length === 0 ? 0 : Math.round((score / lessons.length) * 100),
+    };
+  });
+
+  const all = chapters.flatMap((c) => c.lessons);
+  const done = all.filter((l) => l.state === 'done').length;
+  const score = all.reduce(
+    (acc, l) => acc + (l.state === 'done' ? 1 : l.state === 'in-progress' ? 0.5 : 0),
+    0,
+  );
+
+  return {
+    chapters,
+    done,
+    total: all.length,
+    percent: all.length === 0 ? 0 : Math.round((score / all.length) * 100),
+  };
+}
