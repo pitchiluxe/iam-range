@@ -1,6 +1,6 @@
-# Identity Operations Workstation
+# IAM Range
 
-A simulated Windows workstation for practising Identity and Access Management
+IAM Range is a simulated Windows workstation for practising Identity and Access Management
 and Privileged Identity Management. The directory behind it is real enough to
 be wrong: you can misconfigure it, and it will behave the way a misconfigured
 one behaves.
@@ -115,4 +115,4 @@ touches nothing on the host machine and opens no network connection of its own;
 the only outbound request it can make is to a local Ollama, and only if you
 install one.
 
-Built by Erick Omari.
+Built and published by Erick Omari.

@@ -4,6 +4,7 @@
  * Mimics Windows Explorer. Left sidebar has Quick Access + This PC.
  * Right pane shows folder contents as icons.
  */
+import { PRODUCT } from '@/config/product';
 
 export function renderFileExplorerWindow(body: HTMLElement): void {
   body.style.cssText =
@@ -205,9 +206,9 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     'C:\\Program Files': [
       {
         icon: '📁',
-        name: 'Apex Identity',
+        name: PRODUCT.installFolder,
         type: 'folder',
-        path: 'C:\\Program Files\\Apex Identity',
+        path: `C:\\Program Files\\${PRODUCT.installFolder}`,
         kind: 'File folder',
         size: '',
         modified: '8/12/2026 9:16 AM',
@@ -216,9 +217,9 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     'C:\\Program Files (x86)': [
       {
         icon: '📁',
-        name: 'Apex Identity',
+        name: PRODUCT.installFolder,
         type: 'folder',
-        path: 'C:\\Program Files (x86)\\Apex Identity',
+        path: `C:\\Program Files (x86)\\${PRODUCT.installFolder}`,
         kind: 'File folder',
         size: '',
         modified: '8/12/2026 9:16 AM',
@@ -337,7 +338,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
         modified: '9/2/2026 5:47 PM',
       },
     ],
-    'C:\\Program Files\\Apex Identity': [
+    [`C:\\Program Files\\${PRODUCT.installFolder}`]: [
       {
         icon: '🔐',
         name: 'IAM Console.exe',
@@ -384,7 +385,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
         modified: '8/12/2026 9:10 AM',
       },
     ],
-    'C:\\Program Files (x86)\\Apex Identity': [
+    [`C:\\Program Files (x86)\\${PRODUCT.installFolder}`]: [
       {
         icon: '📄',
         name: 'updater.exe',

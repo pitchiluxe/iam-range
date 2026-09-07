@@ -35,6 +35,7 @@ import {
 } from '@/util/desktopIcons';
 import { WALLPAPER_BY_ID, DEFAULT_WALLPAPER_ID, WALLPAPER_STORAGE_KEY } from '@/util/wallpapers';
 import { VM_HOST } from '@/config/vmHost';
+import { PRODUCT } from '@/config/product';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -900,10 +901,10 @@ export function createDesktopOverlay(): DesktopOverlay {
     header.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="width:36px;height:36px;background:#4ec9b0;border-radius:8px;display:flex;align-items:center;justify-content:center;">
-          <span style="font-size:20px;color:#0e1116;font-weight:bold;">A</span>
+          <span style="font-size:20px;color:#0e1116;font-weight:bold;">${PRODUCT.name.charAt(0)}</span>
         </div>
         <div>
-          <div style="font-size:14px;font-weight:600;color:#e6e6e6;">Apex Identity</div>
+          <div style="font-size:14px;font-weight:600;color:#e6e6e6;">${PRODUCT.name}</div>
           <div id="sm-subtitle" style="font-size:11px;color:#8b95a1;">Workstation</div>
         </div>
       </div>

@@ -2,7 +2,7 @@
   "name": "iam-vm-workstation",
   "type": "module",
   "version": "0.1.0",
-  "description": "Standalone IAM operator workstation — the virtual machine from the IAM & SSO 3D Lab, running on its own.",
+  "description": "IAM Range — a simulated Windows workstation for practising Identity and Access Management and Privileged Identity Management.",
   "engines": {
     "node": ">=22"
   },
@@ -38,8 +38,8 @@
   },
   "main": "electron/main.cjs",
   "build": {
-    "appId": "com.mydigitalsolutions.iamworkstation",
-    "productName": "Identity Operations Workstation",
+    "appId": "com.mydigitalsolutions.iamrange",
+    "productName": "IAM Range",
     "directories": {
       "output": "dist-installer",
       "buildResources": "build"
@@ -53,7 +53,7 @@
       {
         "provider": "github",
         "owner": "pitchiluxe",
-        "repo": "iam-workstation",
+        "repo": "iam-range",
         "releaseType": "release"
       }
     ],
@@ -67,7 +67,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "IAM-Workstation-Setup-${version}.${ext}"
+      "artifactName": "IAM-Range-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -75,21 +75,21 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Identity Operations Workstation"
+      "shortcutName": "IAM Range"
     },
     "linux": {
       "target": [
         "AppImage"
       ],
       "category": "Education",
-      "artifactName": "IAM-Workstation-${version}.${ext}"
+      "artifactName": "IAM-Range-${version}.${ext}"
     },
     "mac": {
       "target": [
         "dmg"
       ],
       "category": "public.app-category.education",
-      "artifactName": "IAM-Workstation-${version}.${ext}"
+      "artifactName": "IAM-Range-${version}.${ext}"
     }
   },
   "author": {

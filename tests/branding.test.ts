@@ -23,6 +23,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { COMPANY } from '@/config';
 import { VM_HOST } from '@/config/vmHost';
+import { PRODUCT } from '@/config/product';
 
 /**
  * Names this project has moved on from.
@@ -33,7 +34,21 @@ import { VM_HOST } from '@/config/vmHost';
  * everywhere it appears. A product name and an employer name are different
  * things, and only the employer was renamed.
  */
-const RETIRED_NAMES = ['northwind', 'erick omari', 'erickomari', 'apex-ops'];
+const RETIRED_NAMES = [
+  'northwind',
+  // The maintainer's old logon name, which the built-in account used to use.
+  // His *name* is allowed and expected — he publishes this — but no simulated
+  // account should be him. The vmHost test below is what enforces that.
+  'erickomari',
+  'apex-ops',
+  // The product's own placeholder names, before it was called IAM Range.
+  'apex identity',
+  'apex os',
+  'identity operations workstation',
+];
+
+/** Where the publisher's name legitimately appears: he publishes this. */
+const PUBLISHER_FILES = ['product.ts'];
 
 /**
  * Files allowed to name a retired identity.
@@ -42,7 +57,7 @@ const RETIRED_NAMES = ['northwind', 'erick omari', 'erickomari', 'apex-ops'];
  * what it replaced. Deleting that sentence to satisfy a lint rule would throw
  * away the reason the file exists.
  */
-const HISTORY_FILES = ['vmHost.ts'];
+const HISTORY_FILES = ['vmHost.ts', 'product.ts'];
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -82,10 +97,57 @@ describe('branding', () => {
     expect(VM_HOST.domainController.toLowerCase()).toContain(short);
   });
 
+  it('the surfaces outside TypeScript agree with the product definition', () => {
+    // The Electron main process is CommonJS and the landing page is static
+    // HTML; neither can import config/product.ts. Their copies are checked
+    // here rather than trusted, because a rename that reaches half the
+    // surfaces is worse than no rename — which is what "Northwind" was.
+    const main = readFileSync(join('electron', 'main.cjs'), 'utf8');
+    expect(main).toContain(PRODUCT.windowTitle);
+
+    const site = readFileSync(join('site', 'index.html'), 'utf8');
+    expect(site).toContain(PRODUCT.name);
+    expect(site).toContain(`https://github.com/${PRODUCT.repo}`);
+
+    const html = readFileSync('index.html', 'utf8');
+    expect(html).toContain(PRODUCT.windowTitle);
+  });
+
+  it('the installer is built under the product name and repository', () => {
+    // The auto-updater points at this repository for the life of every
+    // installed copy. It disagreeing with config/product.ts would mean
+    // shipping an app that checks the wrong URL for updates forever.
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      build: {
+        productName: string;
+        appId: string;
+        publish: { owner: string; repo: string }[];
+        nsis: { shortcutName: string };
+      };
+    };
+    expect(pkg.build.productName).toBe(PRODUCT.name);
+    expect(pkg.build.appId).toBe(PRODUCT.appId);
+    expect(pkg.build.nsis.shortcutName).toBe(PRODUCT.name);
+    expect(`${pkg.build.publish[0]!.owner}/${pkg.build.publish[0]!.repo}`).toBe(PRODUCT.repo);
+  });
+
   it('the built-in administrator is generic, not a person', () => {
-    // This ships to other people. The creator is credited on the website, not
-    // baked into the account they sign in as.
+    // This ships to other people. The publisher is credited on the installer
+    // and the landing page — never baked into the account they sign in as, or
+    // into the domain they administer.
     expect(VM_HOST.user).toBe('admin');
     expect(VM_HOST.email).toBe(`admin@${COMPANY.domain}`);
+    expect(VM_HOST.displayName).toBe('Administrator');
+    expect(PUBLISHER_FILES.length).toBeGreaterThan(0);
+  });
+
+  it('the publisher is named on the installer and the landing page', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      author?: { name?: string };
+    };
+    expect(pkg.author?.name).toBe(PRODUCT.publisher);
+
+    const site = readFileSync(join('site', 'index.html'), 'utf8');
+    expect(site).toContain(PRODUCT.publisher);
   });
 });

@@ -213,7 +213,9 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#0a0d12',
     show: false,
-    title: 'Identity Operations Workstation',
+    // Mirrors PRODUCT.windowTitle in src/config/product.ts, which this
+    // CommonJS module cannot import. tests/branding.test.ts checks them.
+    title: 'IAM Range — Identity Operations Workstation',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

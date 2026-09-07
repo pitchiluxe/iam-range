@@ -18,9 +18,9 @@ import { WALLPAPERS, WALLPAPER_STORAGE_KEY, DEFAULT_WALLPAPER_ID,
   DEFAULT_LOCK_SCREEN_ID,
 } from '@/util/wallpapers';
 import { updateManager, type UpdateStatus } from '@/util/updateManager';
-import { COMPANY } from '@/config';
 import { tutorAvailable } from '@/vm/tutor';
 import { openExternal, OLLAMA_DOWNLOAD_URL, OLLAMA_MODEL } from '@/util/externalLink';
+import { PRODUCT } from '@/config/product';
 
 const DENSITY_KEY = 'settings_density';
 const THEME_KEY = 'app_theme';
@@ -713,7 +713,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
       content.appendChild(box);
       const footer = document.createElement('div');
       footer.style.cssText = 'margin-top:16px;font-size:11px;color:#8b95a1;';
-      footer.textContent = `${COMPANY.name} — Identity Operations Workstation`;
+      footer.textContent = `${PRODUCT.name} — ${PRODUCT.publisher}`;
       content.appendChild(footer);
       return;
     }
