@@ -20,6 +20,9 @@
  * ticket resolved was a claim nobody checked.
  */
 import type { VmServices } from '@/vm/session';
+import { buildEvidencePack, packFilename } from '@/vm/evidencePack';
+import { FS } from '@/terminal/shellIntrinsics';
+import { showToast } from '@/ui/toast';
 import { computeProgress } from '@/vm/labProgress';
 import type { LessonProgress, LessonState } from '@/vm/labProgress';
 
@@ -129,6 +132,18 @@ export function renderProjectWindow(body: HTMLElement, conductor: VmServices): v
   }
 
   let selectedId: string | null = null;
+
+  /**
+   * The name on the cover of the pack.
+   *
+   * The signed-in account, not a hardcoded one: the pack belongs to whoever
+   * did the work, and on a shared machine that is not always the same person.
+   */
+  function operatorName(): string {
+    const signedIn = (window as unknown as { __vm?: { login?: { user?: { displayName?: string;
+      username?: string } } } }).__vm?.login?.user;
+    return signedIn?.displayName ?? signedIn?.username ?? 'the operator';
+  }
 
   const root = document.createElement('div');
   root.className = 'lp-root';
@@ -279,6 +294,43 @@ export function renderProjectWindow(body: HTMLElement, conductor: VmServices): v
     fill.style.width = `${progress.percent}%`;
     track.appendChild(fill);
     ribbon.appendChild(track);
+
+    /**
+     * Export the pack.
+     *
+     * It goes to two places. The download is the copy you attach to an
+     * application; the copy in Documents is the one Writer and File Explorer
+     * can open, which also means a learner who cannot find their browser's
+     * download folder still has it.
+     */
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = '\u{1F4E4} Evidence pack';
+    exportBtn.title = 'Everything you have done, with the audit trail behind it';
+    exportBtn.style.cssText =
+      'padding:5px 12px;border-radius:5px;cursor:pointer;font-size:11.5px;font-family:inherit;' +
+      'background:var(--accent);color:var(--on-accent);border:1px solid var(--accent);';
+    exportBtn.addEventListener('click', () => {
+      const markdown = buildEvidencePack(conductor, { operator: operatorName() });
+      const name = packFilename();
+
+      try {
+        FS.writeFile(`C:\\Users\\admin\\Documents\\${name}`, markdown);
+      } catch {
+        // The download below is the copy that matters; a full or read-only
+        // disk should not lose it.
+      }
+
+      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      showToast(`Evidence pack saved to Documents as ${name}.`, { kind: 'success' });
+    });
+    ribbon.appendChild(exportBtn);
 
     const refresh = document.createElement('button');
     refresh.textContent = '↻ Refresh';

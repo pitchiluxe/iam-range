@@ -36,6 +36,8 @@ export interface LessonProgress {
   evidence: string;
   /** What is still missing, when the lesson is not finished. */
   outstanding: string;
+  /** Audit actions whose entries prove this lesson's work. */
+  actions: readonly string[];
 }
 
 export interface ChapterProgress {
@@ -65,6 +67,14 @@ interface Rule {
   /** Describes what was found when done, and what is missing when not. */
   evidence: (s: VmServices) => string;
   outstanding: string;
+  /**
+   * The audit actions this lesson's work leaves behind.
+   *
+   * The evidence pack quotes the matching log entries under each completed
+   * task. A pack that says "complete" and nothing else is an assertion, which
+   * is the one thing this product refuses to accept anywhere else.
+   */
+  actions: readonly string[];
 }
 
 const has = (s: VmServices, action: string): boolean =>
@@ -100,6 +110,7 @@ const RULES: Record<string, Rule> = {
       `${s.dir.listUsers().length} accounts, ${s.dir.listGroups().length} groups, ` +
       `${s.dir.listOus().length} OUs on ${s.dir.listUsers().length > 0 ? 'a live domain' : 'a bare domain'}.`,
     outstanding: 'Sign in and look at what the domain already contains.',
+    actions: ['signin.success'],
   },
   'ou-structure': {
     done: (s) => s.dir.listOus().length >= 2,
@@ -109,6 +120,7 @@ const RULES: Record<string, Rule> = {
         ? 'No organisational units exist.'
         : `${s.dir.listOus().length} OU(s): ${s.dir.listOus().map((o) => o.name).join(', ')}.`,
     outstanding: 'Build at least a parent OU and one beneath it.',
+    actions: ['ou.created'],
   },
   'group-model': {
     done: (s) => s.dir.listGroups().length >= 3,
@@ -118,6 +130,7 @@ const RULES: Record<string, Rule> = {
         ? 'No security groups exist.'
         : `${s.dir.listGroups().length} group(s) defined.`,
     outstanding: 'Define at least three security groups for the roles people hold.',
+    actions: ['group.created'],
   },
 
   // --- 2. Joiner, mover, leaver ---
@@ -140,6 +153,7 @@ const RULES: Record<string, Rule> = {
         : `${staff(s).length} staff account(s), none fully provisioned.`;
     },
     outstanding: 'Create an account, put it in a group, and place it in an OU.',
+    actions: ['user.created', 'group.add', 'user.moved'],
   },
   mover: {
     done: (s) => has(s, 'user.moved') && has(s, 'group.remove') && has(s, 'group.add'),
@@ -149,6 +163,7 @@ const RULES: Record<string, Rule> = {
       `${count(s, 'group.remove')} removal(s) recorded.`,
     outstanding:
       'Move an account and swap its access — both halves. Adding without removing is how privilege accumulates.',
+    actions: ['user.moved', 'group.add', 'group.remove'],
   },
   leaver: {
     done: (s) => {
@@ -167,6 +182,7 @@ const RULES: Record<string, Rule> = {
     },
     outstanding:
       'Disable the account and close every other route — the tenant, the sessions, the applications.',
+    actions: ['user.disabled', 'cloud.user.disabled', 'cloud.session.revoked', 'session.revoked'],
   },
   lockout: {
     done: (s) => has(s, 'account.unlock'),
@@ -176,6 +192,7 @@ const RULES: Record<string, Rule> = {
         ? `${count(s, 'account.unlock')} unlock(s) recorded.`
         : 'No account has been unlocked.',
     outstanding: 'Unlock a locked account, and be able to say how it differs from a disabled one.',
+    actions: ['account.unlock'],
   },
 
   // --- 3. Privileged access ---
@@ -191,6 +208,7 @@ const RULES: Record<string, Rule> = {
         : `${all} assignment(s), ${standing} of them standing.`;
     },
     outstanding: 'Look at who holds privilege permanently.',
+    actions: ['pim.permanent', 'pim.eligible'],
   },
   eligible: {
     done: (s) => has(s, 'pim.eligible'),
@@ -199,6 +217,7 @@ const RULES: Record<string, Rule> = {
         ? `${count(s, 'pim.eligible')} eligibility grant(s).`
         : 'Nobody has been made eligible.',
     outstanding: 'Replace a permanent assignment with eligibility.',
+    actions: ['pim.eligible', 'pim.removed'],
   },
   activate: {
     done: (s) => has(s, 'pim.activated'),
@@ -208,6 +227,7 @@ const RULES: Record<string, Rule> = {
         ? `${count(s, 'pim.activated')} activation(s), ${count(s, 'pim.deactivated')} stood down.`
         : 'No role has been activated.',
     outstanding: 'Activate an eligible role for a change window.',
+    actions: ['pim.requested', 'pim.activated', 'pim.deactivated'],
   },
   approval: {
     done: (s) => has(s, 'pim.approved'),
@@ -217,6 +237,7 @@ const RULES: Record<string, Rule> = {
         ? `${count(s, 'pim.approved')} approval(s) granted.`
         : 'No activation has been approved.',
     outstanding: 'Approve somebody else’s activation request.',
+    actions: ['pim.approved'],
   },
 
   // --- 4. Cloud identity ---
@@ -229,6 +250,7 @@ const RULES: Record<string, Rule> = {
         : 'No cloud tenant is connected.';
     },
     outstanding: 'Connect a tenant and work out which side is authoritative.',
+    actions: ['cloud.synced'],
   },
   latency: {
     done: (s) => has(s, 'cloud.synced'),
@@ -237,6 +259,7 @@ const RULES: Record<string, Rule> = {
         ? `${count(s, 'cloud.synced')} sync cycle(s) run.`
         : 'No sync cycle has been run.',
     outstanding: 'Run a sync and see what the delay does to a disabled account.',
+    actions: ['cloud.synced', 'cloud.user.disabled'],
   },
   scim: {
     done: (s) => has(s, 'scim.enabled'),
@@ -245,6 +268,7 @@ const RULES: Record<string, Rule> = {
         ? `SCIM switched on ${count(s, 'scim.enabled')} time(s).`
         : 'SCIM has not been switched on for any application.',
     outstanding: 'Turn on SCIM so deprovisioning reaches inside the applications.',
+    actions: ['scim.enabled'],
   },
   duplicates: {
     done: (s) => {
@@ -260,6 +284,7 @@ const RULES: Record<string, Rule> = {
       return d === 0 ? 'One object per person.' : `${d} duplicate object(s) outstanding.`;
     },
     outstanding: 'Resolve the duplicate identities so each person has one object.',
+    actions: ['cloud.synced', 'cloud.user.created'],
   },
 };
 
@@ -292,6 +317,7 @@ export function computeProgress(s: VmServices): Progress {
         state,
         evidence: rule ? rule.evidence(s) : 'No rule defined for this lesson.',
         outstanding: rule ? rule.outstanding : '',
+        actions: rule ? rule.actions : [],
       };
     });
     // A lesson under way counts as half, so a chapter in progress does not
