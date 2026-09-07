@@ -16,6 +16,7 @@ import { login, LoginSession } from '@/vm/loginSession';
 import type { VmSession } from '@/vm/session';
 import { logoffChime } from '@/ui/sounds';
 import { applyTheme } from '@/ui/themes';
+import { startUpdateNotifier } from '@/ui/updateNotifier';
 
 // Before anything paints: the windows reference these variables in about a
 // hundred places and nothing defined them, so every one resolved to nothing.
@@ -47,6 +48,14 @@ const loginScreen = createLoginScreen(login, showDesktop);
 desktop.onExit = signOut;
 
 loginScreen.present();
+
+// Watch for updates and say so.
+//
+// This has to be at the top level. It first landed inside signOut(), which is
+// syntactically fine and completely dead: the subscription was only wired when
+// somebody signed out, so the one moment it mattered — an update arriving while
+// you work — was the one moment nothing was listening.
+startUpdateNotifier();
 
 /** Dev/test hook. */
 (

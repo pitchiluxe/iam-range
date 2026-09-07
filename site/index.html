@@ -322,6 +322,9 @@
               </a>
               <a class="btn btn-ghost" href="https://github.com/pitchiluxe/iam-range">Source on GitHub</a>
             </div>
+            <p class="meta" id="download-note">
+              Windows, macOS and Linux · free and offline
+            </p>
             <p class="meta">admin · Password123! · no account, no telemetry, no network</p>
           </div>
 
@@ -666,16 +669,57 @@ before the Corp/Users OU?</span>
     </footer>
 
     <script>
-      // Name the platform on the download button when the browser is confident.
-      // The link always points at the releases page, which lists every build —
-      // a wrong guess would send somebody to the wrong installer, so only the
-      // label changes, never the destination.
+      /*
+       * Point the download button straight at the installer for this platform.
+       *
+       * The markup links to the releases page, so the button works with
+       * JavaScript disabled and cannot break. This upgrades it to the actual
+       * file when it can, and says which version and how big.
+       *
+       * The asset name carries the version, so it is read from the API rather
+       * than hardcoded — a fixed filename would 404 the day after the next
+       * release.
+       */
       (function () {
         var btn = document.getElementById('download');
+        var note = document.getElementById('download-note');
         if (!btn) return;
+
         var ua = navigator.userAgent || '';
-        if (/Macintosh|Mac OS X/.test(ua)) btn.textContent = 'Download for macOS';
-        else if (/Linux/.test(ua) && !/Android/.test(ua)) btn.textContent = 'Download for Linux';
+        var platform = /Macintosh|Mac OS X/.test(ua)
+          ? { label: 'macOS', test: function (n) { return /\.dmg$/i.test(n); } }
+          : /Linux/.test(ua) && !/Android/.test(ua)
+            ? { label: 'Linux', test: function (n) { return /\.AppImage$/i.test(n); } }
+            : { label: 'Windows', test: function (n) { return /\.exe$/i.test(n); } };
+
+        btn.textContent = 'Download for ' + platform.label;
+
+        fetch('https://api.github.com/repos/pitchiluxe/iam-range/releases/latest', {
+          headers: { Accept: 'application/vnd.github+json' },
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('release lookup failed');
+            return r.json();
+          })
+          .then(function (release) {
+            var asset = (release.assets || []).filter(function (a) {
+              return platform.test(a.name);
+            })[0];
+            if (!asset) return;
+
+            btn.href = asset.browser_download_url;
+            if (note) {
+              var mb = Math.round(asset.size / 1048576);
+              note.textContent =
+                release.tag_name + ' · ' + mb + ' MB · ' + platform.label +
+                ' · macOS and Linux builds on the releases page · free and offline';
+            }
+          })
+          .catch(function () {
+            /* Rate limited, offline, or blocked: the button still goes to the
+               releases page, which is a correct answer rather than a broken
+               one. */
+          });
       })();
     </script>
   </body>
