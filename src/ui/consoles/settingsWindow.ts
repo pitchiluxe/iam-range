@@ -12,7 +12,11 @@
  */
 import { VM_ACCOUNT, VM_HOST } from '@/config/vmHost';
 import { isMuted, setMuted, blip } from '@/ui/audio';
-import { WALLPAPERS, WALLPAPER_STORAGE_KEY, DEFAULT_WALLPAPER_ID } from '@/util/wallpapers';
+import { WALLPAPERS, WALLPAPER_STORAGE_KEY, DEFAULT_WALLPAPER_ID,
+  LOCK_SCREENS,
+  LOCK_SCREEN_STORAGE_KEY,
+  DEFAULT_LOCK_SCREEN_ID,
+} from '@/util/wallpapers';
 import { updateManager, type UpdateStatus } from '@/util/updateManager';
 import { COMPANY } from '@/config';
 
@@ -325,6 +329,59 @@ export function renderSettingsWindow(body: HTMLElement): void {
       }
       content.appendChild(grid);
 
+      // Lock screen — a separate choice from the desktop's, as Windows has it.
+      const lockLabel = document.createElement('div');
+      lockLabel.textContent = 'Lock screen';
+      lockLabel.style.cssText =
+        'font-size:12px;color:#8b95a1;margin:22px 0 10px;text-transform:uppercase;' +
+        'letter-spacing:0.06em;';
+      content.appendChild(lockLabel);
+
+      const lockGrid = document.createElement('div');
+      lockGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:14px;';
+      let currentLock = DEFAULT_LOCK_SCREEN_ID;
+      try {
+        currentLock = localStorage.getItem(LOCK_SCREEN_STORAGE_KEY) ?? DEFAULT_LOCK_SCREEN_ID;
+      } catch {
+        /* private mode — the default is correct */
+      }
+      for (const ls of LOCK_SCREENS) {
+        const card = document.createElement('button');
+        const isSel = ls.id === currentLock;
+        card.style.cssText = `
+          width:120px;height:72px;border-radius:8px;cursor:pointer;
+          background:${ls.gradient};border:2px solid ${isSel ? '#4ec9b0' : 'transparent'};
+          display:flex;align-items:flex-end;padding:6px;position:relative;
+        `;
+        const name = document.createElement('span');
+        name.textContent = ls.label;
+        name.style.cssText =
+          'font-size:11px;color:#e6e6e6;text-shadow:0 1px 3px rgba(0,0,0,0.8);';
+        card.appendChild(name);
+        if (isSel) {
+          const tick = document.createElement('span');
+          tick.textContent = '✓';
+          tick.style.cssText = 'position:absolute;top:6px;right:6px;color:#4ec9b0;font-size:14px;';
+          card.appendChild(tick);
+        }
+        card.addEventListener('click', () => {
+          try {
+            localStorage.setItem(LOCK_SCREEN_STORAGE_KEY, ls.id);
+          } catch {
+            /* ignore */
+          }
+          // Applied the next time the screen locks, which is when it is seen.
+          renderContent();
+        });
+        lockGrid.appendChild(card);
+      }
+      content.appendChild(lockGrid);
+
+      const lockNote = document.createElement('div');
+      lockNote.textContent = 'Shown the next time you sign out or lock the workstation.';
+      lockNote.style.cssText = 'font-size:11px;color:#6b7482;margin-top:8px;';
+      content.appendChild(lockNote);
+
       content.appendChild(
         toggleRow(
           'Compact taskbar',
@@ -377,7 +434,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
       card.innerHTML = `
         <div style="width:52px;height:52px;border-radius:50%;background:#4ec9b0;display:flex;align-items:center;justify-content:center;font-size:22px;color:#0e1116;font-weight:700;">A</div>
         <div>
-          <div style="font-size:14px;color:#e6e6e6;font-weight:600;">admin@northwind.local</div>
+          <div style="font-size:14px;color:#e6e6e6;font-weight:600;">${VM_HOST.email}</div>
           <div style="font-size:11px;color:#8b95a1;">IAM Administrator</div>
         </div>
       `;
@@ -573,7 +630,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
       content.appendChild(sectionTitle('About'));
       const box = document.createElement('div');
       box.innerHTML =
-        infoRow('Edition', 'Apex OS 11 Enterprise') +
+        infoRow('Edition', VM_HOST.edition) +
         infoRow('Version', '24H2') +
         infoRow('Installed on', '8/12/2026') +
         infoRow('Product ID', '00330-80000-00000-AA457');

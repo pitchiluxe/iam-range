@@ -11,6 +11,7 @@ import { renderActiveDirectoryWindow } from './consoles/activeDirectoryWindow';
 import { renderTicketConsole } from './consoles/ticketConsole';
 import { renderSecOpsDashboard } from './consoles/secOpsDashboard';
 import { renderNotepadWindow } from './consoles/notepadWindow';
+import { renderWriterWindow } from './consoles/writerWindow';
 import { renderCalculatorWindow } from './consoles/calculatorWindow';
 import { renderStickyNotesWindow } from './consoles/stickyNotesWindow';
 import { renderFileExplorerWindow } from './consoles/fileExplorerWindow';
@@ -33,6 +34,7 @@ import {
   onDesktopIconsChanged,
 } from '@/util/desktopIcons';
 import { WALLPAPER_BY_ID, DEFAULT_WALLPAPER_ID, WALLPAPER_STORAGE_KEY } from '@/util/wallpapers';
+import { VM_HOST } from '@/config/vmHost';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,6 +95,14 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 560,
     height: 480,
     render: (_c, b) => renderNotepadWindow(b),
+  },
+  {
+    id: 'writer',
+    title: 'Writer',
+    icon: '📄',
+    width: 880,
+    height: 660,
+    render: (_c, b) => renderWriterWindow(b),
   },
   {
     id: 'calculator',
@@ -964,7 +974,7 @@ export function createDesktopOverlay(): DesktopOverlay {
     userPill.innerHTML = `
       <div style="width:28px;height:28px;background:#4ec9b0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:#0e1116;font-weight:700;flex-shrink:0;">A</div>
       <div style="text-align:left;">
-        <div style="font-size:12px;font-weight:500;">admin@northwind.local</div>
+        <div style="font-size:12px;font-weight:500;">${VM_HOST.email}</div>
         <div style="font-size:10px;color:#8b95a1;">IAM Administrator</div>
       </div>
     `;

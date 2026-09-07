@@ -67,7 +67,7 @@ const APPLETS: Applet[] = [
     label: 'Devices and Printers',
     render: () => `
       <h3 style="margin:0 0 12px 0;color:#e6e6e6;font-size:14px;">Devices</h3>
-      ${row('APEX-OPS-01', 'This PC', '', '')}
+      ${row(VM_HOST.name, 'This PC', '', '')}
       ${row(`${VM_HOST.netbiosDomain}-PRINT-02`, 'Printer · Ready', '', '')}
       ${row('USB Input Device', 'Keyboard', '', '')}
     `,
@@ -78,11 +78,11 @@ const APPLETS: Applet[] = [
     label: 'System',
     render: () => `
       <h3 style="margin:0 0 12px 0;color:#e6e6e6;font-size:14px;">System properties</h3>
-      ${kv('Computer name', 'APEX-OPS-01')}
-      ${kv('Domain', 'northwind.local')}
-      ${kv('Processor', 'Apex vCPU @ 3.2 GHz')}
-      ${kv('RAM', '16.0 GB')}
-      ${kv('Edition', 'Apex OS 11 Enterprise')}
+      ${kv('Computer name', VM_HOST.name)}
+      ${kv('Domain', VM_HOST.domain)}
+      ${kv('Processor', VM_HOST.processor)}
+      ${kv('RAM', VM_HOST.ram)}
+      ${kv('Edition', VM_HOST.edition)}
     `,
   },
   {

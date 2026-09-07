@@ -22,6 +22,7 @@ const BASELINE_APPS = [
   'documentation',
   'explorer',
   'notepad',
+  'writer',
   'calculator',
   'sticky-notes',
   'browser',

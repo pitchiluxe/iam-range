@@ -8,6 +8,13 @@
  * learner is meant to trust that what is on screen is the estate they are
  * administering.
  *
+ * The same guard covers the machine's own identity. config/vmHost.ts was
+ * written to end exactly this drift once already — Settings called the host
+ * APEX-OPS-01 while the terminal called it something else — and it came back
+ * in the Control Panel, the Settings account card and the Start menu, where
+ * the signed-in account read admin@northwind.local on a workstation the login
+ * screen had just called iamlab.com.
+ *
  * The names live in config. This makes putting them back in a source file a
  * test failure rather than something noticed months later.
  */
@@ -26,7 +33,16 @@ import { VM_HOST } from '@/config/vmHost';
  * everywhere it appears. A product name and an employer name are different
  * things, and only the employer was renamed.
  */
-const RETIRED_NAMES = ['Northwind', 'Erick Omari', 'ERICKOMARI', 'erickomari'];
+const RETIRED_NAMES = ['northwind', 'erick omari', 'erickomari', 'apex-ops'];
+
+/**
+ * Files allowed to name a retired identity.
+ *
+ * vmHost.ts is the definition that ended the drift, and its header records
+ * what it replaced. Deleting that sentence to satisfy a lint rule would throw
+ * away the reason the file exists.
+ */
+const HISTORY_FILES = ['vmHost.ts'];
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -42,9 +58,14 @@ describe('branding', () => {
   it('no source file names a company this project has retired', () => {
     const offenders: string[] = [];
     for (const file of sourceFiles('src')) {
+      if (HISTORY_FILES.some((f) => file.endsWith(f))) continue;
       const text = readFileSync(file, 'utf8');
+      // Case-insensitive: the first version of this guard missed
+      // "northwind.local" in the Control Panel because it only looked for the
+      // capitalised form.
+      const lower = text.toLowerCase();
       for (const name of RETIRED_NAMES) {
-        if (text.includes(name)) offenders.push(`${file}: ${name}`);
+        if (lower.includes(name)) offenders.push(`${file}: ${name}`);
       }
     }
     expect(offenders).toEqual([]);

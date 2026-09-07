@@ -50,3 +50,15 @@ export const PRIVILEGED_ROLES = [
   'role-domain-admins',
   'role-server-admins',
 ] as const;
+
+/**
+ * Domain the seeded applications live on.
+ *
+ * `.example` is reserved by the IETF for exactly this, so nothing here can
+ * ever resolve to somebody's real site. Derived from COMPANY so the estate
+ * cannot end up belonging to a company this project has renamed away from.
+ */
+export const APP_DOMAIN = `${COMPANY.domain.split('.')[0]}.example`;
+
+/** Issuer the mock identity provider signs assertions with. */
+export const IDP_ISSUER = `${COMPANY.domain.split('.')[0]}-idp`;

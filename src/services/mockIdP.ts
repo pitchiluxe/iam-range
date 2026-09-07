@@ -16,6 +16,7 @@ import type {
 import { mkSessionId, SYSTEM_ACTOR } from '@/domain';
 import type { MockAuditLog } from './mockAuditLog';
 import type { MockDirectory } from './mockDirectory';
+import { IDP_ISSUER } from '@/config';
 
 export type PasswordResolver = (username: string) => string | undefined;
 
@@ -206,7 +207,7 @@ export class MockIdP {
     if (!u) return { ok: false, reason: 'unknown-user' };
     if (u.status === 'disabled') return { ok: false, reason: 'user-disabled' };
     if (u.mfa === 'none' && this.requiresMfa(appId)) return { ok: false, reason: 'mfa-required' };
-    const xml = `<saml:Assertion issuer="northwind-idp" subject="${u.username}" roles="${u.groupIds.join(',')}" />`;
+    const xml = `<saml:Assertion issuer="${IDP_ISSUER}" subject="${u.username}" roles="${u.groupIds.join(',')}" />`;
     return { ok: true, xml };
   }
 

@@ -54,3 +54,58 @@ export const WALLPAPER_BY_ID: Record<string, string> = Object.fromEntries(
 
 export const DEFAULT_WALLPAPER_ID = 'iamlab-dark';
 export const WALLPAPER_STORAGE_KEY = 'settings_wallpaper';
+
+/**
+ * Lock screen backgrounds.
+ *
+ * A separate set from the desktop's, because Windows treats them separately
+ * and because they are read at different moments: the lock screen is the first
+ * thing anyone sees, before any account has been chosen, so it cannot depend
+ * on a signed-in user's preferences.
+ */
+export const LOCK_SCREENS: Wallpaper[] = [
+  {
+    id: 'deep-blue',
+    label: 'Deep Blue',
+    gradient: 'linear-gradient(150deg,#0b3a5e 0%,#123f63 40%,#0e2438 100%)',
+  },
+  {
+    id: 'slate',
+    label: 'Slate',
+    gradient: 'linear-gradient(150deg,#141a21 0%,#1e262f 45%,#0d1117 100%)',
+  },
+  {
+    id: 'dusk',
+    label: 'Dusk',
+    gradient: 'linear-gradient(160deg,#2a1b3d 0%,#44318d 45%,#1b1032 100%)',
+  },
+  {
+    id: 'forest',
+    label: 'Forest',
+    gradient: 'linear-gradient(150deg,#0d2818 0%,#14432a 45%,#08170f 100%)',
+  },
+  {
+    id: 'iamlab',
+    label: 'IAMLab',
+    gradient: wordmarkWallpaper('#0a1420', 'IAMLab', '#4f6b86'),
+  },
+];
+
+export const LOCK_SCREEN_BY_ID: Record<string, string> = Object.fromEntries(
+  LOCK_SCREENS.map((w) => [w.id, w.gradient]),
+);
+
+export const DEFAULT_LOCK_SCREEN_ID = 'deep-blue';
+export const LOCK_SCREEN_STORAGE_KEY = 'settings_lock_screen';
+
+/** The chosen lock screen, falling back to the default if the store is
+ *  unavailable or holds an id that no longer exists. */
+export function currentLockScreen(): string {
+  let id = DEFAULT_LOCK_SCREEN_ID;
+  try {
+    id = localStorage.getItem(LOCK_SCREEN_STORAGE_KEY) ?? DEFAULT_LOCK_SCREEN_ID;
+  } catch {
+    /* private mode — the default is correct */
+  }
+  return LOCK_SCREEN_BY_ID[id] ?? LOCK_SCREEN_BY_ID[DEFAULT_LOCK_SCREEN_ID]!;
+}

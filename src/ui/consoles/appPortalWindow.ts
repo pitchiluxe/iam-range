@@ -18,6 +18,7 @@
 import type { VmServices } from '@/vm/session';
 import type { AppId, Application, User } from '@/domain';
 import { COMPANY } from '@/config';
+import { APP_DOMAIN } from '@/config';
 
 /** Failure reasons from ssoLogin, rendered as the page a user would meet. */
 const FAILURE_PAGES: Record<
@@ -287,7 +288,7 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
         app.protocol === 'SAML'
           ? [
               ['Subject (NameID)', user.username],
-              ['Issuer', app.issuer ?? 'https://idp.northwind.example'],
+              ['Issuer', app.issuer ?? `https://idp.${APP_DOMAIN}`],
               ['Entity ID', app.entityId ?? app.clientId],
               ['ACS URL', app.redirectUri],
               ['MFA satisfied', app.mfaRequired ? `yes (${user.mfa})` : 'not required'],

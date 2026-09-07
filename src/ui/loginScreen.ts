@@ -15,6 +15,7 @@ import type { LoginSession } from '@/vm/loginSession';
 import { VM_HOST } from '@/config/vmHost';
 import { logonChime, errorBeep } from './sounds';
 import { SEED_ADMINS } from '@/config';
+import { currentLockScreen } from '@/util/wallpapers';
 
 /** Shown on the sign-in panel for the built-in account. Read from the seed so
  *  the screen cannot drift from the credential that actually works. */
@@ -55,8 +56,9 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
       // this centring — the panel sits in the middle of the screen, as it
       // does in Windows, rather than in the space above the strip.
       'justify-content:center;overflow:hidden;' +
-      // A calm gradient rather than a photo: no third-party image to ship.
-      'background:linear-gradient(150deg,#0b3a5e 0%,#123f63 40%,#0e2438 100%);' +
+      // Gradients rather than photographs: nothing third-party to ship, and
+      // the choice is the learner's, made in Settings.
+      `background:${currentLockScreen()};` +
       `font-family:${FONT};color:#fff;`;
     return el;
   }

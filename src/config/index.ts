@@ -10,6 +10,8 @@ export {
   GROUP_NAMES,
   SERVICE_ACCOUNT_NAMES,
   PRIVILEGED_ROLES,
+  APP_DOMAIN,
+  IDP_ISSUER,
 } from './company';
 export { SEED_USERS, SEED_ADMINS, seedEmail } from './credentials';
 export type { SeedUser } from './credentials';
