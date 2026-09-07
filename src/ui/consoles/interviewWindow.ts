@@ -18,6 +18,7 @@
  * keeps free of them.
  */
 import { MANUAL } from '@/config/manual';
+import { appButton } from '@/ui/appChrome';
 import {
   allQuestions,
   critiqueAnswer,
@@ -51,13 +52,11 @@ const STYLES = `
     padding: 9px 14px; border-bottom: 1px solid var(--border);
     background: var(--panel-alt); flex-wrap: wrap;
   }
-  .iv-bar select, .iv-bar button {
-    font-family: inherit; font-size: 11.5px; padding: 5px 11px;
-    border-radius: 5px; cursor: pointer;
+  /* Buttons come from the shared chrome (.app-btn). */
+  .iv-bar select {
+    height: 28px; padding: 0 9px; border-radius: 4px; box-sizing: border-box;
+    font-family: inherit; font-size: 12px; cursor: pointer;
     background: var(--panel); color: var(--fg); border: 1px solid var(--border);
-  }
-  .iv-bar button.primary {
-    background: var(--accent); color: var(--on-accent); border-color: var(--accent);
   }
   .iv-clock {
     margin-left: auto; font-variant-numeric: tabular-nums; font-size: 15px;
@@ -157,11 +156,7 @@ export function renderInterviewWindow(body: HTMLElement): void {
   }
 
   function button(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (primary) b.className = 'primary';
-    b.addEventListener('click', onClick);
-    return b;
+    return appButton(label, onClick, primary ? { variant: 'primary' } : {});
   }
 
   function start(): void {

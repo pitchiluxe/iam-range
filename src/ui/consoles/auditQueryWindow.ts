@@ -14,6 +14,7 @@
  * running something opaque, so the next query can be edited from it.
  */
 import type { VmServices } from '@/vm/session';
+import { appButton } from '@/ui/appChrome';
 import { runQuery, SAVED_QUERIES, toCsv } from '@/vm/auditQuery';
 import type { AuditRow } from '@/vm/auditQuery';
 import { showToast } from '@/ui/toast';
@@ -44,14 +45,7 @@ const STYLES = `
     font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
   }
   .ls-input:focus { outline: none; border-color: var(--accent); }
-  .ls-bar button {
-    font-family: inherit; font-size: 11.5px; padding: 6px 12px; border-radius: 5px;
-    cursor: pointer; background: transparent; color: var(--muted);
-    border: 1px solid var(--border); white-space: nowrap;
-  }
-  .ls-bar button.primary {
-    background: var(--accent); color: var(--on-accent); border-color: var(--accent);
-  }
+  /* Buttons come from the shared chrome (.app-btn). */
   .ls-split { flex: 1 1 auto; min-height: 0; display: flex; }
   .ls-side {
     flex: 0 0 232px; border-right: 1px solid var(--border); overflow: auto;
@@ -145,11 +139,7 @@ export function renderAuditQueryWindow(body: HTMLElement, conductor: VmServices)
   status.className = 'ls-status';
 
   function button(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (primary) b.className = 'primary';
-    b.addEventListener('click', onClick);
-    return b;
+    return appButton(label, onClick, primary ? { variant: 'primary' } : {});
   }
 
   bar.append(

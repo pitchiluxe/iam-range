@@ -20,6 +20,7 @@
  * ticket resolved was a claim nobody checked.
  */
 import type { VmServices } from '@/vm/session';
+import { appButton } from '@/ui/appChrome';
 import { buildEvidencePack, packFilename } from '@/vm/evidencePack';
 import { FS } from '@/terminal/shellIntrinsics';
 import { showToast } from '@/ui/toast';
@@ -303,13 +304,7 @@ export function renderProjectWindow(body: HTMLElement, conductor: VmServices): v
      * can open, which also means a learner who cannot find their browser's
      * download folder still has it.
      */
-    const exportBtn = document.createElement('button');
-    exportBtn.textContent = '\u{1F4E4} Evidence pack';
-    exportBtn.title = 'Everything you have done, with the audit trail behind it';
-    exportBtn.style.cssText =
-      'padding:5px 12px;border-radius:5px;cursor:pointer;font-size:11.5px;font-family:inherit;' +
-      'background:var(--accent);color:var(--on-accent);border:1px solid var(--accent);';
-    exportBtn.addEventListener('click', () => {
+    const exportBtn = appButton('\u{1F4E4} Evidence pack', () => {
       const markdown = buildEvidencePack(conductor, { operator: operatorName() });
       const name = packFilename();
 
@@ -329,16 +324,13 @@ export function renderProjectWindow(body: HTMLElement, conductor: VmServices): v
       URL.revokeObjectURL(url);
 
       showToast(`Evidence pack saved to Documents as ${name}.`, { kind: 'success' });
+    }, {
+      variant: 'primary',
+      title: 'Everything you have done, with the audit trail behind it',
     });
     ribbon.appendChild(exportBtn);
 
-    const refresh = document.createElement('button');
-    refresh.textContent = '↻ Refresh';
-    refresh.style.cssText =
-      'padding:5px 12px;border-radius:5px;cursor:pointer;font-size:11.5px;font-family:inherit;' +
-      'background:transparent;color:var(--muted);border:1px solid var(--border);';
-    refresh.addEventListener('click', render);
-    ribbon.appendChild(refresh);
+ribbon.appendChild(appButton('↻ Refresh', render, { variant: 'quiet' }));
 
     // ----- Grid -----
     gridPane.innerHTML = '';

@@ -16,11 +16,18 @@ import { login, LoginSession } from '@/vm/loginSession';
 import type { VmSession } from '@/vm/session';
 import { logoffChime } from '@/ui/sounds';
 import { applyTheme } from '@/ui/themes';
+import { installAppChrome } from '@/ui/appChrome';
 import { startUpdateNotifier } from '@/ui/updateNotifier';
 
 // Before anything paints: the windows reference these variables in about a
 // hundred places and nothing defined them, so every one resolved to nothing.
 applyTheme();
+
+// The shared window chrome. Installed once at boot rather than per window: a
+// rule that only exists after the right window has been opened is a rule that
+// does not exist, and the baseline it carries fixes typography in every window
+// without any of them being edited.
+installAppChrome();
 
 const appEl = document.getElementById('app');
 if (!appEl) throw new Error('[vm] #app container is missing from index.html');

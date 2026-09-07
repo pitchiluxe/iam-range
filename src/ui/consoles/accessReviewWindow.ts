@@ -19,6 +19,7 @@
  * certification exists to break.
  */
 import type { VmServices } from '@/vm/session';
+import { appButton } from '@/ui/appChrome';
 import type { AccessReview, GroupId, ReviewId, UserId } from '@/domain';
 import { PENDING } from '@/services/mockAccessReviews';
 import { showToast } from '@/ui/toast';
@@ -33,14 +34,13 @@ const STYLES = `
     flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--panel-alt);
   }
-  .ar-bar button, .ar-bar select {
-    font-family: inherit; font-size: 11.5px; padding: 6px 12px; border-radius: 5px;
-    cursor: pointer; background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+  /* Buttons come from the shared chrome (.app-btn). Only the select, which
+     the chrome does not build, is styled here. */
+  .ar-bar select {
+    height: 28px; padding: 0 9px; border-radius: 4px; box-sizing: border-box;
+    font-family: inherit; font-size: 12px; cursor: pointer;
+    background: var(--panel); color: var(--fg); border: 1px solid var(--border);
   }
-  .ar-bar button.primary {
-    background: var(--accent); color: var(--on-accent); border-color: var(--accent);
-  }
-  .ar-bar button:disabled { opacity: 0.45; cursor: not-allowed; }
   .ar-progress { margin-left: auto; display: flex; align-items: center; gap: 10px; }
   .ar-track { width: 150px; height: 8px; border-radius: 4px; background: var(--border);
     overflow: hidden; }
@@ -102,11 +102,7 @@ export function renderAccessReviewWindow(body: HTMLElement, conductor: VmService
     (conductor.dir.getUserByUsername('admin')?.id ?? ('admin-1' as UserId));
 
   function button(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (primary) b.className = 'primary';
-    b.addEventListener('click', onClick);
-    return b;
+    return appButton(label, onClick, primary ? { variant: 'primary' } : {});
   }
 
   /** A campaign name that reads like a real one: quarter and year. */

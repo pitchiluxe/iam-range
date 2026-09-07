@@ -22,6 +22,7 @@
  * they should survive a reload, and nothing else needs to read them.
  */
 import { DECK_TEMPLATES, DECK_TEMPLATE_BY_ID } from '@/config/slideTemplates';
+import { appButton } from '@/ui/appChrome';
 import { FS } from '@/terminal/shellIntrinsics';
 import { showToast } from '@/ui/toast';
 
@@ -82,13 +83,11 @@ const STYLES = `
     flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px;
     background: var(--panel-alt); border-bottom: 1px solid var(--border); flex-wrap: wrap;
   }
-  .sl-bar button, .sl-bar select {
-    font-family: inherit; font-size: 11.5px; padding: 5px 11px; border-radius: 5px;
-    cursor: pointer; background: var(--panel); color: var(--fg);
-    border: 1px solid var(--border);
-  }
-  .sl-bar button.primary {
-    background: var(--accent); color: var(--on-accent); border-color: var(--accent);
+  /* Buttons come from the shared chrome (.app-btn). */
+  .sl-bar select {
+    height: 28px; padding: 0 9px; border-radius: 4px; box-sizing: border-box;
+    font-family: inherit; font-size: 12px; cursor: pointer;
+    background: var(--panel); color: var(--fg); border: 1px solid var(--border);
   }
   .sl-deck-name {
     font-weight: 650; font-size: 13px; background: transparent; border: 1px solid transparent;
@@ -182,11 +181,7 @@ export function renderSlidesWindow(body: HTMLElement): void {
   }
 
   function button(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (primary) b.className = 'primary';
-    b.addEventListener('click', onClick);
-    return b;
+    return appButton(label, onClick, primary ? { variant: 'primary' } : {});
   }
 
   function newDeck(templateId: string): void {

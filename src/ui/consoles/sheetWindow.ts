@@ -28,6 +28,7 @@ import {
   FUNCTION_NAMES,
 } from '@/vm/spreadsheet';
 import type { Grid, Sheet } from '@/vm/spreadsheet';
+import { appButton } from '@/ui/appChrome';
 import { FS } from '@/terminal/shellIntrinsics';
 import { showToast } from '@/ui/toast';
 
@@ -43,11 +44,7 @@ const STYLES = `
     flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 7px 10px;
     background: var(--panel-alt); border-bottom: 1px solid var(--border); flex-wrap: wrap;
   }
-  .sh-bar button {
-    font-family: inherit; font-size: 11.5px; padding: 5px 11px; border-radius: 5px;
-    cursor: pointer; background: var(--panel); color: var(--fg);
-    border: 1px solid var(--border); white-space: nowrap;
-  }
+  /* Buttons come from the shared chrome (.app-btn). */
   .sh-formula-row {
     flex-shrink: 0; display: flex; align-items: stretch; gap: 6px; padding: 6px 10px;
     background: var(--panel-alt); border-bottom: 1px solid var(--border);
@@ -147,11 +144,7 @@ export function renderSheetWindow(body: HTMLElement): void {
   }
 
   function button(label: string, onClick: () => void, title = ''): HTMLButtonElement {
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (title) b.title = title;
-    b.addEventListener('click', onClick);
-    return b;
+    return appButton(label, onClick, title ? { title } : {});
   }
 
   // ---- Toolbar -----------------------------------------------------------

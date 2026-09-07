@@ -18,6 +18,7 @@
  * drill is deliberately allowed to run when the posture is not ready.
  */
 import type { VmServices } from '@/vm/session';
+import { appButton } from '@/ui/appChrome';
 import type { UserId } from '@/domain';
 import {
   BREAK_GLASS_NAMES,
@@ -47,17 +48,7 @@ const STYLES = `
   }
   .bg-banner-text { flex: 1; min-width: 220px; line-height: 1.55; }
   .bg-banner-title { font-weight: 650; margin-bottom: 2px; }
-  .bg-banner button, .bg-actions button {
-    font-family: inherit; font-size: 11.5px; padding: 6px 13px; border-radius: 5px;
-    cursor: pointer; background: transparent; color: var(--fg);
-    border: 1px solid var(--border); white-space: nowrap;
-  }
-  .bg-banner button.danger {
-    background: var(--err); color: #12161c; border-color: var(--err); font-weight: 600;
-  }
-  .bg-banner button.primary {
-    background: var(--accent); color: var(--on-accent); border-color: var(--accent);
-  }
+  /* Buttons come from the shared chrome (.app-btn). */
   .bg-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px 18px; }
   .bg-section-title {
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em;
@@ -95,11 +86,7 @@ export function renderBreakGlassWindow(body: HTMLElement, conductor: VmServices)
   const actor = (): UserId => conductor.dir.getUserByUsername('admin')?.id ?? ('admin-1' as UserId);
 
   function button(label: string, kind: '' | 'primary' | 'danger', onClick: () => void): HTMLButtonElement {
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (kind) b.className = kind;
-    b.addEventListener('click', onClick);
-    return b;
+    return appButton(label, onClick, kind ? { variant: kind } : {});
   }
 
   /**
