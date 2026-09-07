@@ -76,7 +76,7 @@ export class VmSession implements VmServices {
     this.idp = new MockIdP(this.audit, this.dir);
     this.apps = new MockAppServer(this.dir, this.idp, this.audit);
     this.tickets = new MockTicketQueue(this.audit);
-    this.reviews = new MockAccessReviews();
+    this.reviews = new MockAccessReviews(this.audit);
     this.incidents = new MockIncidents();
     this.pim = new MockPim(this.audit);
     this.cloud = {

@@ -27,6 +27,7 @@ import { renderManualWindow } from './consoles/manualWindow';
 import { renderProjectWindow } from './consoles/projectWindow';
 import { renderInterviewWindow } from './consoles/interviewWindow';
 import { renderAuditQueryWindow } from './consoles/auditQueryWindow';
+import { renderAccessReviewWindow } from './consoles/accessReviewWindow';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
@@ -208,6 +209,14 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    id: 'access-reviews',
+    title: 'Access Reviews',
+    icon: '📋',
+    width: 1000,
+    height: 620,
+    render: (c, b) => renderAccessReviewWindow(b, c),
   },
   {
     id: 'log-search',

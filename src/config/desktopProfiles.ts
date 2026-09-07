@@ -41,6 +41,9 @@ const BASELINE_APPS = [
 
 /** Identity administration — the tools that change other people's access. */
 const IDENTITY_ADMIN_APPS = [
+  // Certification belongs to whoever administers access, because the campaign
+  // is about the access they granted.
+  'access-reviews',
   'active-directory',
   'terminal',
   'script-editor',

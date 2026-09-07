@@ -338,7 +338,13 @@ export interface AuditEvent {
     /** A ticket passed its response target. The badge turned red and said
      *  OVERDUE and nothing was recorded, so a breach could not be reviewed
      *  afterwards -- and an SLA nobody can review is not an SLA. */
-    | 'ticket.slaBreached';
+    | 'ticket.slaBreached'
+    /** Access certification. A campaign whose decisions leave no trace cannot
+     *  be shown to an auditor, which is the whole reason it exists. */
+    | 'review.opened'
+    | 'review.approved'
+    | 'review.revoked'
+    | 'review.completed';
   /** Polysemous target: UserId | GroupId | RoleId | AppId | TicketId | SessionId */
   targetId?: string;
   /** For events that involve a subject distinct from the actor/target (group/role grants). */
