@@ -127,7 +127,14 @@ function objectsFor(nodeId: string, dir: VmServices['dir']): AdObject[] {
   // an OU — which is what real AD does, and why "move it to the right OU" is
   // a real piece of work rather than bookkeeping.
   if (nodeId === 'users') {
-    return [...users.filter((u) => !u.ouId).map(toUserRow), ...dir.listGroups().map(toGroupRow)];
+    return [
+      ...users.filter((u) => !u.ouId).map(toUserRow),
+      // Only the groups nobody has placed. This used to list every group in
+      // the domain, so a group created inside an OU appeared here instead --
+      // and appeared nowhere else, which read as the console ignoring the
+      // container you had selected.
+      ...dir.listGroups().filter((g) => !g.ouId).map(toGroupRow),
+    ];
   }
   if (nodeId.startsWith('ou:')) {
     const ouId = nodeId.slice('ou:'.length) as OuId;
@@ -136,7 +143,11 @@ function objectsFor(nodeId: string, dir: VmServices['dir']): AdObject[] {
       .listOus()
       .filter((o) => o.parentId === ouId)
       .map((o) => ({ name: o.name, type: 'Organizational Unit', description: o.description }));
-    return [...children, ...users.filter((u) => u.ouId === ouId).map(toUserRow)];
+    return [
+      ...children,
+      ...users.filter((u) => u.ouId === ouId).map(toUserRow),
+      ...dir.listGroups().filter((g) => g.ouId === ouId).map(toGroupRow),
+    ];
   }
   // Domain root: the containers themselves are the tree, as the snap-in does.
   return [];
@@ -479,6 +490,38 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     ]);
   }
 
+  /**
+   * Move a group into an OU.
+   *
+   * The counterpart to the account's Move. Without it, a group created before
+   * the OU existed -- or created while CN=Users was selected -- could only be
+   * deleted and made again.
+   */
+  function moveGroupDialog(g: Group): void {
+    const ous = conductor.dir.listOus();
+    if (ous.length === 0) {
+      modal(`Move — ${g.name}`, (b) => {
+        const note = document.createElement('div');
+        note.textContent =
+          'There are no OUs yet. Create one first, then move the group into it.';
+        note.style.cssText = 'font-size:12px;color:var(--muted);';
+        b.appendChild(note);
+      });
+      return;
+    }
+    let readOu = (): string => '';
+    modal(
+      `Move — ${g.name}`,
+      (b) => {
+        readOu = field(b, 'Move to OU:', {
+          options: ous.map((o) => o.name),
+          value: ous.find((o) => o.id === g.ouId)?.name ?? ous[0]?.name ?? '',
+        });
+      },
+      () => run('user.move', { Identity: g.name, TargetPath: readOu() }),
+    );
+  }
+
   function groupContextMenu(e: MouseEvent, g: Group): void {
     contextMenu(e, [
       {
@@ -495,6 +538,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
           });
         },
       },
+      { label: 'Move…', onClick: () => moveGroupDialog(g) },
       { separator: true },
       {
         label: 'Delete',
@@ -664,16 +708,30 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     );
   }
 
+  /**
+   * New group, created inside whichever OU is selected.
+   *
+   * New OU already worked this way; New Group did not, so selecting
+   * Corps > Groups and creating one silently filed it under CN=Users. The
+   * title names the destination for the same reason the snap-in does: so the
+   * container you are about to write into is visible before you commit.
+   */
   function newGroupDialog(): void {
     let readName = (): string => '';
     let readDesc = (): string => '';
+    const parent = selectedParentOuName();
     modal(
-      'New Object — Group',
+      parent ? `New Object — Group (in ${parent})` : 'New Object — Group',
       (b) => {
         readName = field(b, 'Group name:');
         readDesc = field(b, 'Description:');
       },
-      () => run('group.create', { Name: readName().trim(), Description: readDesc() }),
+      () =>
+        run('group.create', {
+          Name: readName().trim(),
+          Description: readDesc(),
+          ...(parent ? { Path: parent } : {}),
+        }),
     );
   }
 

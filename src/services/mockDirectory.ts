@@ -74,13 +74,36 @@ export class MockDirectory {
   deleteOu(id: OuId, actor: UserId = SYSTEM_ACTOR): void {
     const ou = this.ous.get(id);
     if (!ou) throw new Error(`[directory] deleteOu: OU ${id} not found`);
-    const occupied = this.listUsers().some((u) => u.ouId === id);
+    // Groups count. Deleting an OU out from under one would leave it pointing
+    // at an OU that no longer exists, which is the drift this project keeps
+    // being bitten by.
+    const occupied =
+      this.listUsers().some((u) => u.ouId === id) ||
+      this.listGroups().some((g) => g.ouId === id);
     const hasChildren = this.childOus(id).length > 0;
     if (occupied || hasChildren) {
       throw new Error(`[directory] deleteOu: '${ou.name}' is not empty.`);
     }
     this.ous.delete(id);
     this.audit.record({ actorId: actor, action: 'ou.deleted', targetId: id });
+  }
+
+  /**
+   * Move a group into an OU (or out to CN=Users with `undefined`).
+   *
+   * The counterpart to setUserOu. Without it a group created in the wrong
+   * place could only be deleted and remade, which is not how the snap-in
+   * behaves and not what an operator would do.
+   */
+  setGroupOu(groupId: GroupId, ouId: OuId | undefined, actor: UserId = SYSTEM_ACTOR): void {
+    const g = this.groups.get(groupId);
+    if (!g) throw new Error(`[directory] setGroupOu: group ${groupId} not found`);
+    if (ouId && !this.ous.has(ouId)) {
+      throw new Error(`[directory] setGroupOu: OU ${ouId} not found`);
+    }
+    if (ouId) g.ouId = ouId;
+    else delete g.ouId;
+    this.audit.record({ actorId: actor, action: 'group.updated', targetId: groupId });
   }
 
   /** Move an account into an OU. */
@@ -247,9 +270,21 @@ export class MockDirectory {
     return Array.from(this.groups.values()).find((g) => g.name === name);
   }
 
-  createGroup(name: string, description: string, actor: UserId = SYSTEM_ACTOR): Group {
+  /**
+   * Create a security group, optionally inside an OU.
+   *
+   * `ouId` is last and optional so the seed and every existing caller are
+   * unchanged: omitting it means CN=Users, which is where AD puts an object
+   * nobody placed.
+   */
+  createGroup(
+    name: string,
+    description: string,
+    actor: UserId = SYSTEM_ACTOR,
+    ouId?: OuId,
+  ): Group {
     const id = mkGroupId(name);
-    const g: Group = { id, name, description, memberIds: [] };
+    const g: Group = { id, name, description, memberIds: [], ...(ouId ? { ouId } : {}) };
     this.groups.set(id, g);
     this.audit.record({ actorId: actor, action: 'group.created', targetId: id });
     return g;

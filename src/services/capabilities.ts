@@ -296,19 +296,43 @@ export const CAPABILITIES: readonly IamCapability[] = [
   {
     id: 'user.move',
     label: 'Move / Transfer',
-    synopsis: 'Transfer a user to a different department.',
+    synopsis: 'Move an object into an OU, or transfer a user to another department.',
     consoleSection: 'users',
     cmdlet: 'Move-ADObject',
     validator: 'user-moved',
     params: [
       P.identity,
-      { name: 'TargetDepartment', label: 'New department', kind: 'text', required: true },
+      // -TargetPath is what the manual teaches and what real AD uses to place
+      // an object in an OU. It was documented in two places and implemented in
+      // none: the cmdlet only ever changed a department attribute, so the OU
+      // structure the first tickets ask you to build could not be populated.
+      { name: 'TargetPath', label: 'Target OU', kind: 'text', required: false },
+      { name: 'TargetDepartment', label: 'New department', kind: 'text', required: false },
     ],
     resolvesTicketKinds: ['mover', 'transfer'],
     run(ctx, a) {
+      // An OU move applies to any object, so groups are resolved too -- a
+      // group is a directory object placed in an OU exactly as an account is.
+      if (a.TargetPath) {
+        const ou = ctx.dir.getOuByName(a.TargetPath);
+        if (!ou) return err(`Cannot find an OU named '${a.TargetPath}'.`);
+
+        const user = findUser(ctx, a.Identity ?? '');
+        if (user) {
+          ctx.dir.setUserOu(user.id, ou.id, ctx.actor);
+          return ok(`Moved ${user.username} to ${ou.name}.`);
+        }
+        const group = ctx.dir.getGroupByName(a.Identity ?? '');
+        if (group) {
+          ctx.dir.setGroupOu(group.id, ou.id, ctx.actor);
+          return ok(`Moved ${group.name} to ${ou.name}.`);
+        }
+        return err(`Cannot find an object with identity '${a.Identity}'.`);
+      }
+
       const u = findUser(ctx, a.Identity ?? '');
       if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
-      if (!a.TargetDepartment) return err('TargetDepartment is required.');
+      if (!a.TargetDepartment) return err('TargetPath or TargetDepartment is required.');
       ctx.dir.moveUser(u.id, a.TargetDepartment, ctx.actor);
       return ok(`Moved ${u.username} to ${a.TargetDepartment}.`);
     },
@@ -543,13 +567,18 @@ export const CAPABILITIES: readonly IamCapability[] = [
     params: [
       { name: 'Name', label: 'Group name', kind: 'text', required: true },
       { name: 'Description', label: 'Description', kind: 'text', required: false },
+      // Named to match New-ADGroup -Path, and resolved the same way
+      // New-ADOrganizationalUnit resolves its parent.
+      { name: 'Path', label: 'Target OU', kind: 'text', required: false },
     ],
     resolvesTicketKinds: [],
     run(ctx, a) {
       if (!a.Name) return err('Name is required.');
       if (ctx.dir.getGroupByName(a.Name)) return err(`Group '${a.Name}' already exists.`);
-      const g = ctx.dir.createGroup(a.Name, a.Description ?? '', ctx.actor);
-      return ok(`Created group ${g.name}.`);
+      const target = a.Path ? ctx.dir.getOuByName(a.Path) : undefined;
+      if (a.Path && !target) return err(`Cannot find an OU named '${a.Path}'.`);
+      const g = ctx.dir.createGroup(a.Name, a.Description ?? '', ctx.actor, target?.id);
+      return ok(`Created group ${g.name}${target ? ` in ${target.name}` : ''}.`);
     },
   },
   {

@@ -140,6 +140,13 @@ export interface Group {
   description: string;
   memberIds: UserId[];
   ownerRoleId?: RoleId;
+  /** The OU this group sits in. Absent means CN=Users, as in real AD.
+   *
+   *  A group is an object in the directory exactly like an account is, and it
+   *  is placed in an OU for the same reason: that is where delegation and
+   *  Group Policy attach. This was missing, so every group was pinned to
+   *  CN=Users no matter which container was selected when it was created. */
+  ouId?: OuId;
 }
 
 export interface RoleRecord {
