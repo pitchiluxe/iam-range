@@ -13,7 +13,7 @@
 import type { VmServices } from '@/vm/session';
 import type { Group, OrganizationalUnit, OuId, User, UserId } from '@/domain';
 import { CAPABILITY_BY_ID, type CapabilityContext } from '@/services';
-import { DEPARTMENTS } from '@/config';
+import { DEPARTMENTS, COMPANY } from '@/config';
 import { VM_HOST } from '@/config/vmHost';
 import { showToast } from '@/ui/toast';
 
@@ -221,12 +221,138 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
   menubar.style.cssText =
     'display:flex;gap:2px;padding:3px 6px;background:var(--panel-alt);border-bottom:1px solid var(--border);' +
     'flex-shrink:0;font-size:11.5px;';
+  /**
+   * What each menu contains.
+   *
+   * These were spans with a hover colour and no click handler -- four menus
+   * that had never opened. In a snap-in the learner is meant to recognise
+   * that is worse than having no menu bar at all: somebody who has used ADUC
+   * clicks Action looking for New User, gets nothing, and concludes the app
+   * is broken rather than that the menu is decorative.
+   *
+   * Built lazily, because the items depend on what is selected when the menu
+   * is opened rather than on what was selected when the window was built.
+   */
+  const MENUS: Record<string, () => MenuItem[]> = {
+    File: () => [
+      { label: 'New  \u25b8  User', onClick: () => newUserDialog() },
+      { label: 'New  \u25b8  Group', onClick: () => newGroupDialog() },
+      { label: 'New  \u25b8  Organizational Unit', onClick: () => newOuDialog() },
+      { separator: true },
+      {
+        label: 'Properties',
+        disabled: !selectedObject?.user,
+        onClick: () => {
+          if (selectedObject?.user) propertiesDialog(selectedObject.user);
+        },
+      },
+    ],
+    Action: () => {
+      const user = selectedObject?.user;
+      const group = selectedObject?.group;
+      return [
+        { label: 'New  \u25b8  User', onClick: () => newUserDialog() },
+        { label: 'New  \u25b8  Group', onClick: () => newGroupDialog() },
+        { label: 'New  \u25b8  Organizational Unit', onClick: () => newOuDialog() },
+        { separator: true },
+        {
+          label: 'Reset Password\u2026',
+          disabled: !user,
+          onClick: () => {
+            if (user) resetPasswordDialog(user);
+          },
+        },
+        {
+          label: 'Add to Group\u2026',
+          disabled: !user,
+          onClick: () => {
+            if (user) addToGroupDialog(user);
+          },
+        },
+        {
+          label: 'Move\u2026',
+          disabled: !user && !group,
+          onClick: () => {
+            if (user) moveDialog(user);
+            else if (group) moveGroupDialog(group);
+          },
+        },
+        { separator: true },
+        {
+          label: user?.status === 'disabled' ? 'Enable Account' : 'Disable Account',
+          disabled: !user,
+          onClick: () => {
+            if (user) {
+              run(user.status === 'disabled' ? 'user.enable' : 'user.disable', {
+                Identity: user.username,
+              });
+            }
+          },
+        },
+        {
+          label: 'Unlock Account',
+          disabled: !user,
+          onClick: () => {
+            if (user) run('account.unlock', { Identity: user.username });
+          },
+        },
+      ];
+    },
+    View: () => [
+      { label: 'Refresh', onClick: () => refresh() },
+      { separator: true },
+      {
+        label: 'Expand all',
+        onClick: () => {
+          expanded.add('domain');
+          for (const ou of conductor.dir.listOus()) expanded.add(`ou:${ou.id}`);
+          refresh();
+        },
+      },
+      {
+        label: 'Collapse all',
+        onClick: () => {
+          expanded.clear();
+          expanded.add('domain');
+          refresh();
+        },
+      },
+    ],
+    Help: () => [
+      {
+        label: 'About Active Directory Users and Computers',
+        onClick: () => {
+          modal('About', (b) => {
+            const p = document.createElement('div');
+            p.style.cssText = 'font-size:12px;line-height:1.7;color:var(--fg);';
+            p.textContent =
+              `The directory console for ${COMPANY.name}. Everything it does is also a ` +
+              'cmdlet in the terminal — Get-Help lists them. The tree shows what exists, ' +
+              'not a scaffold, so an empty domain looks empty.';
+            b.appendChild(p);
+          });
+        },
+      },
+    ],
+  };
+
   for (const label of ['File', 'Action', 'View', 'Help']) {
     const m = document.createElement('span');
     m.textContent = label;
-    m.style.cssText = 'padding:2px 8px;border-radius:3px;cursor:default;color:var(--fg);';
+    m.style.cssText = 'padding:2px 8px;border-radius:3px;cursor:pointer;color:var(--fg);';
     m.addEventListener('mouseenter', () => (m.style.background = 'var(--border)'));
     m.addEventListener('mouseleave', () => (m.style.background = 'transparent'));
+    m.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Opened under the label, the way a menu bar behaves, rather than at
+      // the pointer like a context menu.
+      const rect = m.getBoundingClientRect();
+      contextMenu(
+        { clientX: rect.left, clientY: rect.bottom + 2, preventDefault: () => {} } as MouseEvent,
+        MENUS[label]!(),
+      );
+    });
     menubar.appendChild(m);
   }
   root.appendChild(menubar);

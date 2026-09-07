@@ -1234,6 +1234,10 @@ export function createDesktopOverlay(): DesktopOverlay {
     sm.style.cssText = `
       display: none; position: absolute; bottom: 52px; left: 8px;
       width: 340px;
+      /* Windows sizes the Start menu to its contents and lets the desktop
+         show around it. This was unbounded, so on a tall window it grew to
+         777px of an 835px viewport and covered the screen. */
+      max-height: min(620px, calc(100vh - 96px));
       background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
       border: 1px solid var(--glass-border); border-radius: 10px;
       color: var(--glass-text);
@@ -1269,8 +1273,12 @@ export function createDesktopOverlay(): DesktopOverlay {
     sm.appendChild(pinnedLabel);
 
     const appsGrid = document.createElement('div');
+    // The pinned list is the only part that grows, so it is the part that
+    // scrolls. Capping the menu without this would clip the apps instead --
+    // and the footer with the power button sits below it.
     appsGrid.style.cssText =
-      'padding: 0 8px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px;';
+      'padding: 0 8px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px;' +
+      'overflow-y: auto; min-height: 0; flex: 1 1 auto; align-content: start;';
     sm.appendChild(appsGrid);
 
     // Re-run whenever isIT changes (entering a different zone's VM) so the
@@ -1360,7 +1368,11 @@ export function createDesktopOverlay(): DesktopOverlay {
 
     const powerMenu = document.createElement('div');
     powerMenu.style.cssText = `
-      display: none; position: absolute; bottom: calc(100% + 4px); right: 0;
+      /* flex-direction matters: the toggle sets display:flex, and without a
+         column these four items lay out in a row and squash into a 60px
+         strip -- present, correctly positioned, and unreadable. */
+      display: none; flex-direction: column;
+      position: absolute; bottom: calc(100% + 4px); right: 0;
       width: 200px; background: rgba(27, 31, 36, 0.97);
       border: 1px solid var(--border); border-radius: 8px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.6); padding: 6px;
