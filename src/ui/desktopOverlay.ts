@@ -414,18 +414,27 @@ class WindowManager {
       left: ${80 + Math.random() * 200}px;
       top: ${60 + Math.random() * 120}px;
       background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 8px 8px 4px 4px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 9px;
+      box-shadow: 0 18px 48px rgba(0,0,0,0.62), 0 0 0 1px rgba(0,0,0,0.55);
       overflow: hidden;
       resize: both;
     `;
 
     const titleBar = document.createElement('div');
     titleBar.className = 'apex-window-titlebar';
+    // Glass on the frame. The window body below stays opaque: Aero blurred
+    // the chrome and never the document, and a see-through directory listing
+    // with the desktop bleeding through it is unreadable — which matters more
+    // here than anywhere, because reading the screen accurately is the skill.
     titleBar.style.cssText = `
       display: flex; align-items: center; justify-content: space-between;
-      padding: 8px 12px; background: #1b1f24; border-bottom: 1px solid #2d343d;
+      padding: 8px 12px;
+      background: linear-gradient(180deg, rgba(58,72,88,0.72), rgba(30,38,48,0.62));
+      backdrop-filter: blur(20px) saturate(150%);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
       cursor: move; user-select: none; flex-shrink: 0;
     `;
 
@@ -700,9 +709,11 @@ export function createDesktopOverlay(): DesktopOverlay {
     tb.id = 'apex-taskbar';
     tb.style.cssText = `
       position: absolute; bottom: 0; left: 0; right: 0; height: 48px;
-      background: rgba(27, 31, 36, 0.85);
-      border-top: 1px solid #2d343d;
-      backdrop-filter: blur(12px);
+      background: linear-gradient(180deg, rgba(40,52,66,0.62), rgba(18,24,32,0.78));
+      border-top: 1px solid rgba(255,255,255,0.12);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 -8px 24px rgba(0,0,0,0.35);
+      backdrop-filter: blur(26px) saturate(150%);
+      -webkit-backdrop-filter: blur(26px) saturate(150%);
       display: flex; align-items: center; gap: 4px;
       padding: 0 8px; z-index: 50;
     `;
@@ -899,10 +910,12 @@ export function createDesktopOverlay(): DesktopOverlay {
     sm.id = 'start-menu';
     sm.style.cssText = `
       display: none; position: absolute; bottom: 52px; left: 8px;
-      width: 340px; background: rgba(27, 31, 36, 0.95);
-      border: 1px solid #2d343d; border-radius: 8px;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
-      backdrop-filter: blur(12px);
+      width: 340px;
+      background: linear-gradient(180deg, rgba(38,50,64,0.80), rgba(16,22,30,0.88));
+      border: 1px solid rgba(255,255,255,0.14); border-radius: 10px;
+      box-shadow: 0 20px 56px rgba(0,0,0,0.62), inset 0 1px 0 rgba(255,255,255,0.16);
+      backdrop-filter: blur(30px) saturate(160%);
+      -webkit-backdrop-filter: blur(30px) saturate(160%);
       z-index: 100; overflow: hidden;
       flex-direction: column;
     `;

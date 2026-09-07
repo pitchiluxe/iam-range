@@ -28,6 +28,22 @@ ipcMain.on('env:get:sync', (event) => {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * The shipped administrator credential, read from the seed rather than
+ * repeated here.
+ *
+ * It was repeated here, and when the default changed this script carried on
+ * typing the old one: sign-in failed silently and the "desktop" screenshot on
+ * the landing page was actually the lock screen. Reading it means the script
+ * cannot disagree with the application it is photographing.
+ */
+function seededAdminPassword() {
+  const src = fs.readFileSync(path.join(ROOT, 'src', 'config', 'credentials.ts'), 'utf8');
+  const match = /password:\s*'([^']+)'/.exec(src);
+  if (!match) throw new Error('Could not read the seeded administrator password.');
+  return match[1];
+}
+
 /** Ask the renderer to open one of the desktop applications. */
 const OPEN_APP = (id) =>
   `document.dispatchEvent(new CustomEvent('apex-launch-app',{detail:{appId:'${id}'}}))`;
@@ -42,7 +58,7 @@ const ENTER_PASSWORD = `
   (() => {
     const pw = document.querySelector('input[type=password]');
     if (!pw) return 'no field';
-    pw.value = '123!';
+    pw.value = ${JSON.stringify(seededAdminPassword())};
     const btn = Array.from(document.querySelectorAll('button'))
       .find((b) => b.textContent.trim() === 'Sign in');
     if (!btn) return 'no button';
@@ -96,17 +112,62 @@ const SHOTS = [
     },
   },
   {
+    // The hero shot on the landing page. A bare desktop: it is the first thing
+    // anyone sees of the product and it should show what they get on signing
+    // in, which is a clean workstation rather than somebody else's open
+    // windows.
+    file: 'shot-desktop.png',
+    caption: 'the desktop, nothing open',
+    async setup(win) {
+      const signedIn = await win.webContents.executeJavaScript(ENTER_PASSWORD);
+      if (signedIn !== 'ok') throw new Error('Sign-in failed: ' + signedIn);
+      await wait(1000);
+      // If the sign-in silently failed, __vm is still there but the desktop is
+      // not — check before seeding, so the failure is loud.
+      const onDesktop = await win.webContents.executeJavaScript(
+        "Boolean(document.getElementById('apex-taskbar'))",
+      );
+      if (!onDesktop) throw new Error('Signed in but no desktop appeared.');
+      await win.webContents.executeJavaScript(SEED_DOMAIN);
+      await wait(500);
+      // Close anything a previous run left behind, so this is genuinely bare.
+      await win.webContents.executeJavaScript(`
+        (() => {
+          document.querySelectorAll('[title="close"]').forEach((b) => b.click());
+          return true;
+        })()`);
+      await wait(600);
+    },
+  },
+  {
     file: 'shot-directory.png',
     caption: 'Active Directory Users and Computers with the ticket queue',
     async setup(win) {
-      await win.webContents.executeJavaScript(ENTER_PASSWORD);
-      await wait(900);
-      await win.webContents.executeJavaScript(SEED_DOMAIN);
-      await wait(400);
       await win.webContents.executeJavaScript(OPEN_APP('active-directory'));
-      await wait(400);
+      await wait(500);
       await win.webContents.executeJavaScript(OPEN_APP('ticket-console'));
       await wait(900);
+      // Tile them, rather than letting the random open offset stack one on
+      // top of the other — the point of the shot is that both are visible.
+      await win.webContents.executeJavaScript(`
+        (() => {
+          const wins = Array.from(document.querySelectorAll('.apex-window'));
+          const gap = 16;
+          const h = Math.min(660, window.innerHeight - 110);
+          const y = 28;
+          const widths = [800, 560];
+          const total = widths[0] + gap + widths[1];
+          let x = Math.round((window.innerWidth - total) / 2);
+          wins.slice(0, 2).forEach((el, i) => {
+            el.style.left = x + 'px';
+            el.style.top = y + 'px';
+            el.style.width = widths[i] + 'px';
+            el.style.height = h + 'px';
+            x += widths[i] + gap;
+          });
+          return wins.length;
+        })()`);
+      await wait(500);
     },
   },
   {
