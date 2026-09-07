@@ -16,6 +16,10 @@ import { VM_HOST } from '@/config/vmHost';
 import { logonChime, errorBeep } from './sounds';
 import { SEED_ADMINS } from '@/config';
 import { currentLockScreen } from '@/util/wallpapers';
+import { PRODUCT } from '@/config/product';
+// The sign-in screen is rebuilt on every present(), so it reads the current
+// picture without needing to subscribe to changes.
+import { paintAvatar } from '@/util/profilePictures';
 
 /** Shown on the sign-in panel for the built-in account. Read from the seed so
  *  the screen cannot drift from the credential that actually works. */
@@ -107,6 +111,23 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     hint.style.cssText = 'margin-top:26px;font-size:13px;opacity:0.6;';
 
     wrap.append(time, date, hint);
+
+    // The product name sits top-left and the author bottom-right, the way an
+    // OEM build of Windows carries both. It is the first thing anyone sees,
+    // and on a workstation that ships to other people it should say what it
+    // is and who made it.
+    const brand = document.createElement('div');
+    brand.textContent = PRODUCT.name;
+    brand.style.cssText =
+      'position:absolute;top:26px;left:30px;font-size:15px;font-weight:600;' +
+      'letter-spacing:0.3px;opacity:0.9;';
+
+    const author = document.createElement('div');
+    author.textContent = `Created by ${PRODUCT.publisher}`;
+    author.style.cssText =
+      'position:absolute;bottom:22px;right:28px;font-size:11.5px;opacity:0.55;';
+
+    overlay.append(brand, author);
     overlay.appendChild(wrap);
 
     const unlock = (): void => {
@@ -140,11 +161,16 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
 
     // Avatar
     const avatar = document.createElement('div');
-    avatar.textContent = selected ? selected.displayName.slice(0, 1).toUpperCase() : '👤';
     avatar.style.cssText =
       'width:104px;height:104px;border-radius:50%;margin:0 auto 16px;' +
       'background:rgba(255,255,255,0.16);display:flex;align-items:center;' +
-      'justify-content:center;font-size:42px;font-weight:300;border:1px solid rgba(255,255,255,0.2);';
+      'justify-content:center;font-size:42px;font-weight:300;overflow:hidden;' +
+      'border:1px solid rgba(255,255,255,0.2);';
+    // Their photograph if they have set one, their initial if not — the same
+    // rule Windows uses, for the same reason: a face confirms who you are
+    // about to sign in as faster than a letter does.
+    if (selected) paintAvatar(avatar, selected.username, selected.displayName);
+    else avatar.textContent = '👤';
 
     const name = document.createElement('div');
     name.textContent = selected ? selected.displayName : 'Sign in';
@@ -155,6 +181,7 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     upn.style.cssText = 'font-size:12px;opacity:0.7;margin-bottom:18px;';
 
     panel.append(avatar, name, upn);
+    panel.appendChild(buildAccountPicker());
 
     const message = document.createElement('div');
     message.style.cssText =
@@ -245,59 +272,122 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     }
 
     overlay.appendChild(panel);
-    overlay.appendChild(buildAccountList());
     setTimeout(() => input.focus(), 30);
   }
 
-  /** The other-users strip along the bottom-left, as Windows shows. */
-  function buildAccountList(): HTMLElement {
-    const bar = document.createElement('div');
-    bar.style.cssText =
-      'position:absolute;left:0;right:0;bottom:0;padding:14px 18px;display:flex;' +
-      'gap:8px;flex-wrap:wrap;align-items:flex-end;background:rgba(0,0,0,0.18);' +
-      'max-height:38%;overflow:auto;';
+  /**
+   * The account picker.
+   *
+   * A dropdown rather than the strip that used to run along the bottom of the
+   * screen. The strip was fine with three accounts; this workstation is meant
+   * to be staffed by the learner, and twenty of them became a scrolling band
+   * across the bottom third of the display. This also puts the choice next to
+   * the password field rather than a screen away from it.
+   */
+  function buildAccountPicker(): HTMLElement {
+    const accounts = login.listAccounts();
 
-    for (const u of login.listAccounts()) {
-      const chip = document.createElement('button');
-      const isSel = selected?.id === u.id;
-      chip.style.cssText =
-        'display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:4px;' +
-        'cursor:pointer;font-size:12px;text-align:left;' +
-        `font-family:${FONT};` +
-        (isSel
-          ? 'background:rgba(255,255,255,0.24);border:1px solid rgba(255,255,255,0.4);color:#fff;'
-          : 'background:rgba(255,255,255,0.08);border:1px solid transparent;color:#e8e8e8;');
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;margin-bottom:12px;text-align:left;';
 
-      const dot = document.createElement('span');
-      dot.textContent = u.displayName.slice(0, 1).toUpperCase();
-      dot.style.cssText =
-        'width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,0.2);' +
-        'display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;';
+    const toggle = document.createElement('button');
+    toggle.style.cssText =
+      'width:100%;display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:4px;' +
+      'background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.3);color:#fff;' +
+      `cursor:pointer;font-size:12.5px;font-family:${FONT};text-align:left;`;
+
+    const toggleAvatar = document.createElement('span');
+    toggleAvatar.style.cssText =
+      'width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.2);flex-shrink:0;' +
+      'display:flex;align-items:center;justify-content:center;font-size:11px;overflow:hidden;';
+
+    const toggleLabel = document.createElement('span');
+    toggleLabel.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+
+    const caret = document.createElement('span');
+    caret.textContent = '\u25BE';
+    caret.style.cssText = 'flex-shrink:0;opacity:0.7;font-size:10px;';
+
+    toggle.append(toggleAvatar, toggleLabel, caret);
+
+    if (selected) {
+      paintAvatar(toggleAvatar, selected.username, selected.displayName);
+      toggleLabel.textContent = `${selected.displayName} · ${selected.department}`;
+    } else {
+      toggleAvatar.textContent = '\u{1F464}';
+      toggleLabel.textContent =
+        accounts.length === 0 ? 'No accounts in the directory' : 'Choose an account';
+    }
+
+    const list = document.createElement('div');
+    list.hidden = true;
+    list.style.cssText =
+      'position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;max-height:240px;' +
+      'overflow-y:auto;border-radius:4px;background:rgba(16,26,38,0.97);' +
+      'border:1px solid rgba(255,255,255,0.22);box-shadow:0 8px 28px rgba(0,0,0,0.5);';
+
+    for (const u of accounts) {
+      const row = document.createElement('button');
+      row.style.cssText =
+        'display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;border:none;' +
+        `cursor:pointer;text-align:left;font-family:${FONT};font-size:12px;` +
+        'background:transparent;color:#e8e8e8;';
+      row.addEventListener('mouseenter', () => {
+        row.style.background = 'rgba(255,255,255,0.12)';
+      });
+      row.addEventListener('mouseleave', () => {
+        row.style.background = 'transparent';
+      });
+
+      const pic = document.createElement('span');
+      pic.style.cssText =
+        'width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,0.18);' +
+        'display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;' +
+        'overflow:hidden;';
+      paintAvatar(pic, u.username, u.displayName);
 
       const text = document.createElement('span');
-      const label = document.createElement('div');
-      label.textContent = u.displayName;
+      text.style.cssText = 'min-width:0;';
+      const name = document.createElement('div');
+      name.textContent = u.displayName;
       const sub = document.createElement('div');
-      // Say plainly when an account will refuse — the point is to see the
-      // consequence of what you did in Active Directory.
-      sub.textContent =
-        u.status === 'active' ? u.department : `${u.department} · ${u.status}`;
-      sub.style.cssText = `font-size:10.5px;opacity:${u.status === 'active' ? '0.65' : '0.9'};${
+      // Say plainly when an account will refuse. Seeing "locked" here, then
+      // being refused, is the consequence of what you did in Active Directory.
+      sub.textContent = u.status === 'active' ? u.department : `${u.department} \u00b7 ${u.status}`;
+      sub.style.cssText = `font-size:10.5px;opacity:${u.status === 'active' ? '0.6' : '0.95'};${
         u.status === 'active' ? '' : 'color:#ffb4b4;'
       }`;
-      text.append(label, sub);
+      text.append(name, sub);
 
-      chip.append(dot, text);
-      chip.addEventListener('click', () => {
+      row.append(pic, text);
+      row.addEventListener('click', () => {
         selected = u;
         mustChangeFor = null;
         // Never carry one account's credential across to another.
         temporaryPassword = null;
         renderSignIn();
       });
-      bar.appendChild(chip);
+      list.appendChild(row);
     }
-    return bar;
+
+    if (accounts.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = 'Create a user in Active Directory and they will appear here.';
+      empty.style.cssText = 'padding:10px;font-size:11px;opacity:0.7;line-height:1.5;';
+      list.appendChild(empty);
+    }
+
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      list.hidden = !list.hidden;
+    });
+    // Clicking anywhere else closes it, as a dropdown should.
+    overlay?.addEventListener('click', () => {
+      list.hidden = true;
+    });
+
+    wrap.append(toggle, list);
+    return wrap;
   }
 
   function finish(): void {

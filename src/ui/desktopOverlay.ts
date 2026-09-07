@@ -57,7 +57,7 @@ export interface DesktopOverlay {
    *   applications the desktop contains — see config/desktopProfiles.ts.
    *   Omitted means "everything", which is only right before sign-in.
    */
-  show(conductor: VmServices, department?: string): void;
+  show(conductor: VmServices, department?: string, username?: string): void;
   hide(): void;
   isVisible(): boolean;
   openWindow(id: string, conductor: VmServices): void;
@@ -527,6 +527,8 @@ export function createDesktopOverlay(): DesktopOverlay {
   // tooling) or a plain consumer PC — set on every show() call so exiting an
   // IT zone's VM and entering a non-IT one's swaps the app set correctly.
   let currentDepartment = 'IT';
+  /** Logon name of the signed-in user, for the per-account window memory. */
+  let currentUser = 'unknown';
   // The services the desktop is currently bound to. Held so a cross-window
   // launch request (util/appLauncher) opens against the current lab rather
   // than whatever was live when the overlay was first built.
@@ -1138,43 +1140,49 @@ export function createDesktopOverlay(): DesktopOverlay {
    * Supervisor and other apps remain accessible from the Start menu
    * and taskbar but are NOT opened by default to keep the desktop calm.
    */
-  function layoutDefaultWindows(wm: WindowManager | null): void {
+  /**
+   * Windows this account had open when it last signed out.
+   *
+   * Per account, because two people sharing a workstation should not inherit
+   * each other's screen, and because signing in as somebody else to see what
+   * their desktop looks like is a real diagnostic step here.
+   */
+  function sessionKey(): string {
+    return `desktop_open_windows:${currentDepartment}:${currentUser}`;
+  }
+
+  function rememberOpenWindows(): void {
+    const wm = wmCtx.current;
+    if (!wm || !visible) return;
+    try {
+      localStorage.setItem(sessionKey(), JSON.stringify(wm.getOpenIds()));
+    } catch {
+      /* private mode — the desktop simply starts clean next time */
+    }
+  }
+
+  function restoreWindows(wm: WindowManager | null): void {
     if (!wm) return;
-
-    // Helper: open + immediately pin the window to a specific position
-    const openPinned = (id: string, x: number, y: number, w: number, h: number) => {
+    let ids: string[] = [];
+    try {
+      const raw = localStorage.getItem(sessionKey());
+      ids = raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      ids = [];
+    }
+    for (const id of ids) {
+      // Still filtered by entitlement: a saved window for an app this
+      // department no longer has must not come back.
+      if (!appAllowed(id)) continue;
       const def = APP_BY_ID[id];
-      if (!def) return;
-      wm.open(def);
-      // After open() positions the window with random offset, pin it precisely
-      const ws = wm.windows.get(id);
-      if (ws) {
-        ws.el.style.left = `${x}px`;
-        ws.el.style.top = `${y}px`;
-        ws.el.style.width = `${w}px`;
-        ws.el.style.height = `${h}px`;
-      }
-    };
-
-    // Two-pane opening layout: the directory on the left, the work queue on the
-    // right. The 3D lab pairs the console with its Objectives panel; a standing
-    // workstation has no objectives, and this is the pairing an operator
-    // actually keeps open all day.
-    const GAP = 16;
-    const iamW = 700;
-    const queueW = 460;
-    const totalW = iamW + GAP + queueW;
-    const x0 = Math.round((window.innerWidth - totalW) / 2);
-    const h = Math.min(620, window.innerHeight - 80);
-    const y0 = Math.round((window.innerHeight - 48 - h) / 2); // above the taskbar
-
-    openPinned('active-directory', x0, y0, iamW, h);
-    openPinned('ticket-console', x0 + iamW + GAP, y0, queueW, h);
+      if (def) wm.open(def);
+    }
   }
 
   const api: DesktopOverlay = {
-    show(conductor: VmServices, department?: string) {
+    show(conductor: VmServices, department?: string, username?: string) {
       currentDepartment = department ?? 'IT';
+      currentUser = username ?? 'unknown';
       currentServices = conductor;
       allowedAppIds = department ? new Set(appsForDepartment(department)) : null;
 
@@ -1182,10 +1190,12 @@ export function createDesktopOverlay(): DesktopOverlay {
         container = buildContainer();
         buildDesktop(container);
         buildTaskbar(container, conductor);
-        // Open the two-pane working layout for people who administer
-        // identity. Everyone else starts on a plain desktop — Finance has no
-        // use for Active Directory sitting open.
-        if (appAllowed('active-directory')) layoutDefaultWindows(wmCtx.current);
+        // Nothing is opened for you. Signing in used to lay out Active
+        // Directory and the Ticket Queue automatically, which meant closing
+        // them was pointless: they came back at the next sign-in. The desktop
+        // now restores exactly what this account left open, and an account
+        // that left nothing open gets a clean desktop.
+        restoreWindows(wmCtx.current);
       } else {
         // Re-entering the VM: reuse the existing WindowManager and its DOM
         // instead of building a new one. Recreating the WindowManager here
@@ -1201,18 +1211,17 @@ export function createDesktopOverlay(): DesktopOverlay {
             if (!appAllowed(id)) wm.close(id);
           }
 
-          const stillOpen = wm.getOpenIds();
-          if (stillOpen.length > 0) {
+          // Signing in as a different person: put up what *they* left open,
+          // not what the last account happened to have on screen.
+          for (const id of wm.getOpenIds()) wm.close(id);
+          restoreWindows(wm);
+
+          for (const id of wm.getOpenIds()) {
             // Re-render the service-backed windows so they show current state
             // rather than whatever was there when they were first opened.
-            for (const id of stillOpen) {
-              if (CONDUCTOR_BACKED_WINDOW_IDS.has(id)) wm.refresh(id);
-            }
-            wm.updateTaskbar();
-          } else if (appAllowed('active-directory')) {
-            // Nothing left open — restore the working layout.
-            layoutDefaultWindows(wm);
+            if (CONDUCTOR_BACKED_WINDOW_IDS.has(id)) wm.refresh(id);
           }
+          wm.updateTaskbar();
         }
       }
 
@@ -1225,6 +1234,9 @@ export function createDesktopOverlay(): DesktopOverlay {
       visible = true;
     },
     hide() {
+      // Save before hiding: what is on screen right now is what this account
+      // should find next time.
+      rememberOpenWindows();
       const overlay = document.getElementById('desktop-overlay');
       if (overlay) overlay.style.display = 'none';
       if (visible) {

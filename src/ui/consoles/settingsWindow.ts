@@ -24,6 +24,13 @@ import { PRODUCT } from '@/config/product';
 import { login } from '@/vm/loginSession';
 import { COMPANY } from '@/config';
 import { isIdentityAdmin } from '@/config/desktopProfiles';
+import {
+  paintAvatar,
+  getProfilePicture,
+  setProfilePicture,
+  clearProfilePicture,
+  readImageAsAvatar,
+} from '@/util/profilePictures';
 
 const DENSITY_KEY = 'settings_density';
 const THEME_KEY = 'app_theme';
@@ -450,10 +457,12 @@ export function renderSettingsWindow(body: HTMLElement): void {
         'display:flex;align-items:center;gap:14px;padding:16px;background:#1b1f24;' +
         'border-radius:8px;margin-bottom:16px;';
       const avatar = document.createElement('div');
-      avatar.textContent = initial;
       avatar.style.cssText =
         'width:52px;height:52px;border-radius:50%;background:#4ec9b0;display:flex;' +
-        'align-items:center;justify-content:center;font-size:22px;color:#0e1116;font-weight:700;';
+        'align-items:center;justify-content:center;font-size:22px;color:#0e1116;' +
+        'font-weight:700;overflow:hidden;flex-shrink:0;';
+      if (user) paintAvatar(avatar, user.username, user.displayName);
+      else avatar.textContent = initial;
       const who = document.createElement('div');
       const line1 = document.createElement('div');
       line1.textContent = user?.displayName ?? VM_HOST.displayName;
@@ -467,6 +476,66 @@ export function renderSettingsWindow(body: HTMLElement): void {
       who.append(line1, line2);
       card.append(avatar, who);
       content.appendChild(card);
+
+      if (user) {
+        const picRow = document.createElement('div');
+        picRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:16px;';
+
+        // A hidden file input driven by a button: the browser's own control is
+        // unstyleable and says "No file chosen" next to it forever.
+        const file = document.createElement('input');
+        file.type = 'file';
+        file.accept = 'image/*';
+        file.hidden = true;
+
+        const choose = document.createElement('button');
+        choose.textContent = getProfilePicture(user.username)
+          ? 'Change picture'
+          : 'Choose a picture';
+        choose.style.cssText =
+          'padding:6px 12px;border-radius:4px;border:1px solid #2d343d;background:#161b22;' +
+          'color:#c9d1d9;font-size:11.5px;cursor:pointer;font-family:inherit;';
+        choose.addEventListener('click', () => file.click());
+
+        const picMessage = document.createElement('span');
+        picMessage.style.cssText = 'font-size:11px;color:#8b95a1;';
+        picMessage.textContent = 'Shown on the sign-in screen.';
+
+        file.addEventListener('change', () => {
+          const chosen = file.files?.[0];
+          if (!chosen) return;
+          readImageAsAvatar(chosen)
+            .then((dataUri) => {
+              if (!setProfilePicture(user.username, dataUri)) {
+                picMessage.textContent = 'Not enough room in local storage to save it.';
+                picMessage.style.color = '#ff9a8a';
+                return;
+              }
+              renderContent();
+            })
+            .catch((err: Error) => {
+              picMessage.textContent = err.message;
+              picMessage.style.color = '#ff9a8a';
+            });
+        });
+
+        picRow.append(choose, file, picMessage);
+
+        if (getProfilePicture(user.username)) {
+          const remove = document.createElement('button');
+          remove.textContent = 'Remove';
+          remove.style.cssText =
+            'padding:6px 12px;border-radius:4px;border:1px solid #2d343d;background:#161b22;' +
+            'color:#c9d1d9;font-size:11.5px;cursor:pointer;font-family:inherit;';
+          remove.addEventListener('click', () => {
+            clearProfilePicture(user.username);
+            renderContent();
+          });
+          picRow.insertBefore(remove, picMessage);
+        }
+
+        content.appendChild(picRow);
+      }
 
       const box = document.createElement('div');
       box.innerHTML =
