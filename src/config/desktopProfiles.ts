@@ -19,6 +19,7 @@ const BASELINE_APPS = [
   // The tutor and the reference are on every desktop, including Finance's.
   // Learning is not a departmental entitlement.
   'tutor',
+  'manual',
   'documentation',
   'explorer',
   'notepad',

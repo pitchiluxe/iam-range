@@ -23,6 +23,7 @@ import { renderSettingsWindow } from './consoles/settingsWindow';
 import { renderControlPanelWindow } from './consoles/controlPanelWindow';
 import { renderRecycleBinWindow } from './consoles/recycleBinWindow';
 import { renderTutorWindow } from './consoles/tutorWindow';
+import { renderManualWindow } from './consoles/manualWindow';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
@@ -194,6 +195,14 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 640,
     render: (c, b) => renderCloudIdentityWindow(b, c),
+  },
+  {
+    id: 'manual',
+    title: 'IAM Range Manual',
+    icon: '📖',
+    width: 900,
+    height: 660,
+    render: (_c, b) => renderManualWindow(b),
   },
   {
     id: 'tutor',

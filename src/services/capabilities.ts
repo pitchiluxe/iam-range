@@ -477,6 +477,31 @@ export const CAPABILITIES: readonly IamCapability[] = [
     },
   },
   {
+    id: 'user.memberships',
+    label: 'Group Membership',
+    synopsis: 'List the groups a person belongs to — the check after a transfer.',
+    consoleSection: 'groups',
+    cmdlet: 'Get-ADPrincipalGroupMembership',
+    readOnly: true,
+    params: [P.identity],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const u = findUser(ctx, a.Identity ?? '');
+      if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
+      const rows = ctx.dir
+        .listGroups()
+        .filter((g) => g.memberIds.includes(u.id))
+        .map((g) => ({ Name: g.name, Description: g.description || '-' }));
+      return ok(
+        rows.length === 0
+          ? `${u.username} is not a member of any group.`
+          : `${u.username} is a member of ${rows.length} group(s). After a transfer, the old ` +
+            'role should not be among them.',
+        rows,
+      );
+    },
+  },
+  {
     id: 'group.members',
     label: 'Group Members',
     synopsis: 'List the members of a group, or the size of every group.',
