@@ -3,6 +3,8 @@
  * (personalization picker) and desktopOverlay.ts (applies the gradient +
  * reads the persisted choice on VM open).
  */
+import { generateWallpaper, idToSeed } from './wallpaperGenerator';
+
 export interface Wallpaper {
   id: string;
   label: string;
@@ -95,6 +97,92 @@ export const LOCK_SCREEN_BY_ID: Record<string, string> = Object.fromEntries(
   LOCK_SCREENS.map((w) => [w.id, w.gradient]),
 );
 
+// ---------------------------------------------------------------------------
+// Generated wallpapers
+// ---------------------------------------------------------------------------
+
+/** Where the generated queue is kept. Ids only — see wallpaperGenerator. */
+export const GENERATED_WALL_KEY = 'settings_wallpapers_generated';
+export const GENERATED_LOCK_KEY = 'settings_lock_screens_generated';
+
+const genKey = (kind: 'wall' | 'lock'): string =>
+  kind === 'wall' ? GENERATED_WALL_KEY : GENERATED_LOCK_KEY;
+
+/** The ids in the generated queue, oldest first. */
+export function generatedIds(kind: 'wall' | 'lock'): string[] {
+  try {
+    const raw = localStorage.getItem(genKey(kind));
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    // Unreadable or not JSON: an empty queue is the right answer, and better
+    // than throwing on a cosmetic feature during boot.
+    return [];
+  }
+}
+
+/**
+ * How many generated wallpapers the queue holds.
+ *
+ * Capped because these are kept forever otherwise, and a picker with four
+ * hundred thumbnails in it is not a picker. The oldest fall off the end.
+ */
+export const GENERATED_LIMIT = 24;
+
+export function saveGeneratedIds(kind: 'wall' | 'lock', ids: readonly string[]): void {
+  try {
+    localStorage.setItem(genKey(kind), JSON.stringify(ids.slice(-GENERATED_LIMIT)));
+  } catch {
+    /* private mode — the queue lasts this session only, which is not fatal */
+  }
+}
+
+/** Rebuild the generated queue from its seeds. */
+export function generatedWallpapers(kind: 'wall' | 'lock'): Wallpaper[] {
+  return generatedIds(kind)
+    .map((id) => {
+      const parsed = idToSeed(id);
+      return parsed ? generateWallpaper(parsed.seed, parsed.kind) : null;
+    })
+    .filter((w): w is Wallpaper => w !== null);
+}
+
+/** Built-in plus generated, which is what a picker should show. */
+export function allWallpapers(): Wallpaper[] {
+  return [...WALLPAPERS, ...generatedWallpapers('wall')];
+}
+
+export function allLockScreens(): Wallpaper[] {
+  return [...LOCK_SCREENS, ...generatedWallpapers('lock')];
+}
+
+/**
+ * Turn a saved id into something to paint.
+ *
+ * A generated id is regenerated from its own seed rather than looked up, so
+ * it resolves even at first paint — before Settings has been opened, and
+ * whether or not the id is still in the queue.
+ */
+function resolve(id: string, table: Record<string, string>, fallbackId: string): string {
+  const built = table[id];
+  if (built) return built;
+  const parsed = idToSeed(id);
+  if (parsed) return generateWallpaper(parsed.seed, parsed.kind).gradient;
+  return table[fallbackId]!;
+}
+
+/** The chosen desktop wallpaper, generated or built-in. */
+export function currentWallpaper(): string {
+  let id = DEFAULT_WALLPAPER_ID;
+  try {
+    id = localStorage.getItem(WALLPAPER_STORAGE_KEY) ?? DEFAULT_WALLPAPER_ID;
+  } catch {
+    /* private mode — the default is correct */
+  }
+  return resolve(id, WALLPAPER_BY_ID, DEFAULT_WALLPAPER_ID);
+}
+
 export const DEFAULT_LOCK_SCREEN_ID = 'deep-blue';
 export const LOCK_SCREEN_STORAGE_KEY = 'settings_lock_screen';
 
@@ -107,5 +195,5 @@ export function currentLockScreen(): string {
   } catch {
     /* private mode — the default is correct */
   }
-  return LOCK_SCREEN_BY_ID[id] ?? LOCK_SCREEN_BY_ID[DEFAULT_LOCK_SCREEN_ID]!;
+  return resolve(id, LOCK_SCREEN_BY_ID, DEFAULT_LOCK_SCREEN_ID);
 }

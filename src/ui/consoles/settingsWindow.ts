@@ -12,8 +12,10 @@
  */
 import { VM_ACCOUNT, VM_HOST } from '@/config/vmHost';
 import { isMuted, setMuted, blip } from '@/ui/audio';
-import { WALLPAPERS, WALLPAPER_STORAGE_KEY, DEFAULT_WALLPAPER_ID,
-  LOCK_SCREENS,
+import { generateBatch } from '@/util/wallpaperGenerator';
+import { allWallpapers, allLockScreens, generatedIds, saveGeneratedIds,
+  GENERATED_LIMIT,
+  WALLPAPER_STORAGE_KEY, DEFAULT_WALLPAPER_ID,
   LOCK_SCREEN_STORAGE_KEY,
   DEFAULT_LOCK_SCREEN_ID,
 } from '@/util/wallpapers';
@@ -280,6 +282,55 @@ export function renderSettingsWindow(body: HTMLElement): void {
     }
 
     if (active === 'personalization') {
+      /**
+       * The Generate row.
+       *
+       * There is no image model behind this and the wording does not pretend
+       * there is: the pictures are drawn from a seed, which is why it is
+       * instant and works with no network. Six at a time because a picker is
+       * for choosing from, not for scrolling.
+       */
+      function generateRow(kind: 'wall' | 'lock', blurb: string): HTMLElement {
+        const row = document.createElement('div');
+        row.style.cssText =
+          'display:flex;align-items:center;gap:10px;margin:0 0 12px;flex-wrap:wrap;';
+
+        const make = document.createElement('button');
+        make.textContent = '✨ Generate';
+        make.style.cssText =
+          'padding:6px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-family:inherit;' +
+          'background:var(--accent);color:var(--on-accent);border:1px solid var(--accent);';
+        make.addEventListener('click', () => {
+          const existing = generatedIds(kind);
+          const fresh = generateBatch(6, kind, existing);
+          saveGeneratedIds(kind, [...existing, ...fresh.map((w) => w.id)]);
+          renderContent();
+        });
+
+        const note = document.createElement('span');
+        const held = generatedIds(kind).length;
+        note.textContent =
+          held > 0 ? `${blurb} ${held} of ${GENERATED_LIMIT} kept.` : blurb;
+        note.style.cssText = 'font-size:11.5px;color:var(--muted);';
+
+        row.append(make, note);
+
+        if (held > 0) {
+          const clear = document.createElement('button');
+          clear.textContent = 'Clear generated';
+          clear.style.cssText =
+            'padding:6px 12px;border-radius:5px;cursor:pointer;font-size:12px;' +
+            'font-family:inherit;background:transparent;color:var(--muted);' +
+            'border:1px solid var(--border);';
+          clear.addEventListener('click', () => {
+            saveGeneratedIds(kind, []);
+            renderContent();
+          });
+          row.appendChild(clear);
+        }
+        return row;
+      }
+
       content.appendChild(sectionTitle('Personalization'));
 
       // Themes. This was a light/dark switch that set an attribute no
@@ -350,10 +401,14 @@ export function renderSettingsWindow(body: HTMLElement): void {
         'font-size:12px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.06em;';
       content.appendChild(label);
 
+      content.appendChild(
+        generateRow('wall', 'Add six more desktop backgrounds to the queue.'),
+      );
+
       const grid = document.createElement('div');
       grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:14px;';
       const current = localStorage.getItem(WALLPAPER_STORAGE_KEY) ?? DEFAULT_WALLPAPER_ID;
-      for (const wp of WALLPAPERS) {
+      for (const wp of allWallpapers()) {
         const card = document.createElement('button');
         const isSel = wp.id === current;
         card.style.cssText = `
@@ -385,6 +440,10 @@ export function renderSettingsWindow(body: HTMLElement): void {
         'letter-spacing:0.06em;';
       content.appendChild(lockLabel);
 
+      content.appendChild(
+        generateRow('lock', 'Add six more lock screens to the queue.'),
+      );
+
       const lockGrid = document.createElement('div');
       lockGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:14px;';
       let currentLock = DEFAULT_LOCK_SCREEN_ID;
@@ -393,7 +452,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
       } catch {
         /* private mode — the default is correct */
       }
-      for (const ls of LOCK_SCREENS) {
+      for (const ls of allLockScreens()) {
         const card = document.createElement('button');
         const isSel = ls.id === currentLock;
         card.style.cssText = `

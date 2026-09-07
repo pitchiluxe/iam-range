@@ -36,7 +36,7 @@ import {
   deleteIcon,
   onDesktopIconsChanged,
 } from '@/util/desktopIcons';
-import { WALLPAPER_BY_ID, DEFAULT_WALLPAPER_ID, WALLPAPER_STORAGE_KEY } from '@/util/wallpapers';
+import { currentWallpaper } from '@/util/wallpapers';
 import { VM_HOST } from '@/config/vmHost';
 import { PRODUCT } from '@/config/product';
 
@@ -697,12 +697,12 @@ export function createDesktopOverlay(): DesktopOverlay {
 
   function buildDesktop(c: HTMLElement): void {
     const bg = document.createElement('div');
-    const savedWallpaperId = localStorage.getItem(WALLPAPER_STORAGE_KEY) ?? DEFAULT_WALLPAPER_ID;
-    const savedWallpaper =
-      WALLPAPER_BY_ID[savedWallpaperId] ?? WALLPAPER_BY_ID[DEFAULT_WALLPAPER_ID]!;
+    // Generated wallpapers resolve from their own seed, so a chosen one
+    // paints at first render without Settings ever having been opened.
+    const wallpaper = currentWallpaper();
     bg.style.cssText = `
       position: absolute; inset: 0; bottom: 48px;
-      background: ${savedWallpaper};
+      background: ${wallpaper};
     `;
     document.addEventListener('apex-wallpaper-changed', (e) => {
       bg.style.background = (e as CustomEvent<string>).detail;
