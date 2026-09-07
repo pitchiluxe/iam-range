@@ -24,11 +24,14 @@
  * and never wrong, because it is quoting material rather than generating it.
  */
 import { searchArticles, type Article } from '@/config/knowledgeBase';
+import {
+  OLLAMA_GENERATE_URL,
+  OLLAMA_MODEL,
+  ollamaAvailable,
+} from '@/config/ollama';
 import type { EnvironmentState } from './environmentStage';
 import { describeForPrompt, STAGE_SUMMARY } from './environmentStage';
 
-const OLLAMA_URL = 'http://localhost:11434';
-const OLLAMA_MODEL = 'llama3.2';
 
 /**
  * How much the tutor is willing to give away.
@@ -241,17 +244,9 @@ function excerpt(body: string, paragraphs: number): string {
 // Asking
 // ---------------------------------------------------------------------------
 
-export async function tutorAvailable(timeoutMs = 1200): Promise<boolean> {
-  try {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), timeoutMs);
-    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctl.signal });
-    clearTimeout(t);
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
+/** Whether the tutor will compose an answer or quote one. Named for what the
+ *  caller is asking about; the probe itself is shared. */
+export const tutorAvailable = ollamaAvailable;
 
 /**
  * Ask the tutor.
@@ -274,7 +269,7 @@ export async function askTutor(
     // Generous, because the first question after boot also pays for loading
     // the model. Subsequent ones are much faster thanks to keep_alive below.
     const t = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 120_000);
-    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+    const res = await fetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

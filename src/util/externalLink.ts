@@ -50,8 +50,7 @@ export function openExternal(url: string): void {
   window.open(parsed.toString(), '_blank', 'noopener,noreferrer');
 }
 
-/** Where to get the local model runtime the tutor and ticket generator use. */
-export const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download';
-
-/** The model those features ask for by name. */
-export const OLLAMA_MODEL = 'llama3.2';
+// The Ollama constants live in config/ollama.ts. Re-exported here only so
+// callers that already import from this module keep working; the definition
+// is not duplicated.
+export { OLLAMA_DOWNLOAD_URL, OLLAMA_MODEL } from '@/config/ollama';

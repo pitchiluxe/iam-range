@@ -28,6 +28,7 @@ import type {
 } from '@/services';
 import type { Ticket, TicketKind, UserId } from '@/domain';
 import { COMPANY } from '@/config';
+import { OLLAMA_GENERATE_URL, OLLAMA_MODEL, ollamaAvailable } from '@/config/ollama';
 import { readEnvironment, type EnvironmentState, type Stage } from './environmentStage';
 import { describeForPrompt } from './environmentStage';
 
@@ -371,22 +372,7 @@ function scenariosFor(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
 // Ollama
 // ---------------------------------------------------------------------------
 
-const OLLAMA_URL = 'http://localhost:11434';
-const OLLAMA_MODEL = 'llama3.2';
-
-/** Whether a local Ollama is answering. Cached per call site, not globally:
- *  the user may start it while the workstation is open. */
-export async function ollamaAvailable(timeoutMs = 1200): Promise<boolean> {
-  try {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), timeoutMs);
-    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctl.signal });
-    clearTimeout(t);
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
+export { ollamaAvailable } from '@/config/ollama';
 
 /**
  * Ask Ollama to rewrite a scenario as a ticket a colleague would actually send.
@@ -414,7 +400,7 @@ async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Sce
   ].join('\n');
 
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+    const res = await fetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false, format: 'json' }),
