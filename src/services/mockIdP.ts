@@ -21,10 +21,20 @@ import { IDP_ISSUER } from '@/config';
 export type PasswordResolver = (username: string) => string | undefined;
 
 export interface IdPConditionalPolicy {
+  /** A name, so a policy can be excluded from or reported on by identity. */
+  name?: string;
   userId?: UserId;
   roleId?: RoleId;
   requireMfa: boolean;
   blockIf?: (ctx: { user: User; ip?: string; asn?: string }) => boolean;
+  /**
+   * Accounts this policy does not apply to.
+   *
+   * The mechanism of emergency access. A break-glass account is defined by
+   * being outside the policies that can lock everybody else out, and without
+   * an exclude list that lesson can only be described, never performed.
+   */
+  excludeUserIds?: UserId[];
 }
 
 export class MockIdP {
@@ -33,6 +43,14 @@ export class MockIdP {
   private policies: IdPConditionalPolicy[] = [];
   /** Time source — overridable for fault injection. */
   now: () => number = () => Date.now();
+
+  /**
+   * When true, every MFA challenge fails.
+   *
+   * The outage break-glass exists for. Held here rather than in a separate
+   * fault service so that completeMfa() cannot forget to consult it.
+   */
+  private mfaOutage = false;
 
   constructor(
     private readonly audit: MockAuditLog,
@@ -99,6 +117,17 @@ export class MockIdP {
   completeMfa(sessionId: SessionId, _method: MfaMethod): MfaResult {
     const s = this.sessions.get(sessionId);
     if (!s) return { ok: false, reason: 'session-not-found' };
+    // The outage. An account excluded from every MFA policy is never asked to
+    // complete a challenge, which is exactly why it can still get in.
+    if (this.mfaOutage && !this.isExcludedFromMfa(s.userId)) {
+      this.audit.record({
+        actorId: s.userId,
+        action: 'signin.failure',
+        targetId: s.userId,
+        note: 'MFA challenge failed: the identity provider is not answering.',
+      });
+      return { ok: false, reason: 'mfa-provider-unavailable' };
+    }
     s.mfaCompleted = true;
     const user = this.dir.getUser(s.userId);
     if (user) {
@@ -196,6 +225,61 @@ export class MockIdP {
   }
   hasMfaPolicy(): boolean {
     return this.policies.some((p) => p.requireMfa);
+  }
+
+  /** Every conditional policy currently in force. */
+  listPolicies(): IdPConditionalPolicy[] {
+    return [...this.policies];
+  }
+
+  /**
+   * Whether an account is outside every policy that requires MFA.
+   *
+   * "Excluded from one of the two" is not emergency access: the policy that
+   * still applies is the one that will block the recovery.
+   */
+  isExcludedFromMfa(userId: UserId): boolean {
+    const mfaPolicies = this.policies.filter((p) => p.requireMfa);
+    if (mfaPolicies.length === 0) return false;
+    return mfaPolicies.every((p) => p.excludeUserIds?.includes(userId) ?? false);
+  }
+
+  /** Add an account to a named policy's exclude list. */
+  excludeFromPolicy(name: string, userId: UserId, by: UserId = SYSTEM_ACTOR): boolean {
+    const policy = this.policies.find((p) => p.name === name);
+    if (!policy) return false;
+    policy.excludeUserIds = [...(policy.excludeUserIds ?? []), userId].filter(
+      (id, i, all) => all.indexOf(id) === i,
+    );
+    this.audit.record({
+      actorId: by,
+      action: 'policy.updated',
+      subjectId: userId,
+      note: `Excluded from "${name}". A break-glass exclusion is a risk accepted on purpose.`,
+    });
+    return true;
+  }
+
+  /**
+   * Break or repair MFA across the tenant.
+   *
+   * Recorded, because an outage nobody can see afterwards is not something a
+   * post-incident note can be written about.
+   */
+  setMfaOutage(broken: boolean, by: UserId = SYSTEM_ACTOR): void {
+    if (this.mfaOutage === broken) return;
+    this.mfaOutage = broken;
+    this.audit.record({
+      actorId: by,
+      action: 'policy.updated',
+      note: broken
+        ? 'Identity provider fault: every MFA challenge is now failing.'
+        : 'Identity provider recovered: MFA challenges are succeeding again.',
+    });
+  }
+
+  isMfaBroken(): boolean {
+    return this.mfaOutage;
   }
 
   samlAssertion(

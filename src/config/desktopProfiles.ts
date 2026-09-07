@@ -56,7 +56,9 @@ const IDENTITY_ADMIN_APPS = [
 const SERVICE_DESK_APPS = ['ticket-console', 'log-search'] as const;
 // Reading the audit log is an investigation skill, so it sits with the
 // investigation tools rather than on a Finance desktop.
-const SECURITY_APPS = ['secops-dashboard', 'log-search'] as const;
+// Emergency access is designed by whoever owns the controls it is exempt
+// from, which is Security and IT rather than the service desk.
+const SECURITY_APPS = ['secops-dashboard', 'log-search', 'break-glass'] as const;
 
 /**
  * Extra applications per department, on top of BASELINE_APPS.

@@ -28,6 +28,7 @@ import { renderProjectWindow } from './consoles/projectWindow';
 import { renderInterviewWindow } from './consoles/interviewWindow';
 import { renderAuditQueryWindow } from './consoles/auditQueryWindow';
 import { renderAccessReviewWindow } from './consoles/accessReviewWindow';
+import { renderBreakGlassWindow } from './consoles/breakGlassWindow';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
@@ -209,6 +210,14 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    id: 'break-glass',
+    title: 'Emergency Access',
+    icon: '🚨',
+    width: 880,
+    height: 640,
+    render: (c, b) => renderBreakGlassWindow(b, c),
   },
   {
     id: 'access-reviews',
