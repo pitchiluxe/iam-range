@@ -101,6 +101,9 @@ interface AdObject {
   /** Present for directory principals; absent for display-only rows. */
   user?: User;
   group?: Group;
+  /** Present for a child-OU row. Without it the row had no context menu at
+   *  all: the handler dispatched on user and group, and an OU is neither. */
+  ou?: OrganizationalUnit;
 }
 
 function objectsFor(nodeId: string, dir: VmServices['dir']): AdObject[] {
@@ -142,7 +145,7 @@ function objectsFor(nodeId: string, dir: VmServices['dir']): AdObject[] {
     const children: AdObject[] = dir
       .listOus()
       .filter((o) => o.parentId === ouId)
-      .map((o) => ({ name: o.name, type: 'Organizational Unit', description: o.description }));
+      .map((o) => ({ name: o.name, type: 'Organizational Unit', description: o.description, ou: o }));
     return [
       ...children,
       ...users.filter((u) => u.ouId === ouId).map(toUserRow),
@@ -327,11 +330,30 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         e.preventDefault();
         selectedNodeId = node.id;
         renderTree();
+        // Only an OU can be deleted. Builtin, Computers, Domain Controllers
+        // and CN=Users are containers the domain ships with; offering to
+        // delete them would describe an operation AD does not have.
+        const ou = node.id.startsWith('ou:')
+          ? conductor.dir.listOus().find((o) => `ou:${o.id}` === node.id)
+          : undefined;
         contextMenu(e, [
           { label: 'New  ▸  Organizational Unit', onClick: () => newOuDialog() },
           { label: 'New  ▸  User', onClick: () => newUserDialog() },
           { label: 'New  ▸  Group', onClick: () => newGroupDialog() },
           { label: 'Refresh', onClick: () => refresh() },
+          ...(ou
+            ? [
+                { separator: true } as MenuItem,
+                {
+                  label: 'Delete',
+                  onClick: () => {
+                    if (window.confirm(`Delete "${ou.name}"? The OU must be empty.`)) {
+                      run('ou.delete', { Name: ou.name });
+                    }
+                  },
+                } as MenuItem,
+              ]
+            : []),
         ]);
       });
       treePane.appendChild(row);
@@ -403,6 +425,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         renderList();
         if (obj.user) userContextMenu(e, obj.user);
         else if (obj.group) groupContextMenu(e, obj.group);
+        else if (obj.ou) ouContextMenu(e, obj.ou);
       });
       table.appendChild(row);
     }
@@ -522,6 +545,30 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     );
   }
 
+  /**
+   * What you can do to an OU: make things in it, or remove it.
+   *
+   * Delete refuses while anything is still inside, and says so. That refusal
+   * is the lesson -- in AD you empty an OU before removing it -- so the error
+   * is surfaced rather than the button being hidden.
+   */
+  function ouContextMenu(e: MouseEvent, ou: OrganizationalUnit): void {
+    contextMenu(e, [
+      { label: 'New  \u25b8  Organizational Unit', onClick: () => newOuDialog() },
+      { label: 'New  \u25b8  User', onClick: () => newUserDialog() },
+      { label: 'New  \u25b8  Group', onClick: () => newGroupDialog() },
+      { separator: true },
+      {
+        label: 'Delete',
+        onClick: () => {
+          if (window.confirm(`Delete "${ou.name}"? The OU must be empty.`)) {
+            run('ou.delete', { Name: ou.name });
+          }
+        },
+      },
+    ]);
+  }
+
   function groupContextMenu(e: MouseEvent, g: Group): void {
     contextMenu(e, [
       {
@@ -543,10 +590,12 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
       {
         label: 'Delete',
         onClick: () => {
-          if (window.confirm(`Delete group "${g.name}"?`)) {
-            conductor.dir.deleteGroup(g.id);
-            showToast(`Deleted ${g.name}.`, { kind: 'success' });
-            refresh();
+          // Through the registry, not straight at the directory. Calling
+          // dir.deleteGroup here is why there was no Remove-ADGroup cmdlet:
+          // the console had its own private path and nobody noticed the shell
+          // could not do it.
+          if (window.confirm(`Delete group "${g.name}"? This cannot be undone.`)) {
+            run('group.delete', { Name: g.name });
           }
         },
       },

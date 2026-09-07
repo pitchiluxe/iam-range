@@ -421,6 +421,11 @@ export type ValidatorKind =
   | 'users-provisioned'
   /** An organisational unit was created — the first task on a bare domain. */
   | 'ou-created'
+  /** An organisational unit was removed. AD refuses while anything is still
+   *  inside it, so a lab can assert the learner emptied it first. */
+  | 'ou-deleted'
+  /** A security group was removed, and its memberships with it. */
+  | 'group-deleted'
   /** A directory sync cycle was run against a cloud tenant. */
   | 'cloud-synced'
   /** SCIM provisioning was switched on for an application. */

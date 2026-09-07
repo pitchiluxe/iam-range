@@ -436,6 +436,30 @@ export const CAPABILITIES: readonly IamCapability[] = [
   // ── Groups ───────────────────────────────────────────────────────────────
   // ── Organisational units ─────────────────────────────────────────────────
   {
+    id: 'ou.delete',
+    legacyConsoleForm: true,
+    label: 'Delete Organizational Unit',
+    synopsis: 'Remove an empty organisational unit.',
+    consoleSection: 'users',
+    cmdlet: 'Remove-ADOrganizationalUnit',
+    validator: 'ou-deleted',
+    params: [{ name: 'Name', label: 'OU name', kind: 'text', required: true }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const ou = ctx.dir.getOuByName(a.Name ?? '');
+      if (!ou) return err(`Cannot find an OU named '${a.Name}'.`);
+      try {
+        // deleteOu refuses while accounts, groups or child OUs are still in
+        // there. Surfacing that refusal is the point: in AD you empty an OU
+        // before you remove it, and finding that out is part of the lesson.
+        ctx.dir.deleteOu(ou.id, ctx.actor);
+      } catch (e) {
+        return err(e instanceof Error ? e.message.replace('[directory] deleteOu: ', '') : String(e));
+      }
+      return ok(`Removed OU ${ou.name}.`);
+    },
+  },
+  {
     id: 'ou.create',
     label: 'New Organizational Unit',
     synopsis: 'Create an organisational unit under the domain or another OU.',
@@ -579,6 +603,25 @@ export const CAPABILITIES: readonly IamCapability[] = [
       if (a.Path && !target) return err(`Cannot find an OU named '${a.Path}'.`);
       const g = ctx.dir.createGroup(a.Name, a.Description ?? '', ctx.actor, target?.id);
       return ok(`Created group ${g.name}${target ? ` in ${target.name}` : ''}.`);
+    },
+  },
+  {
+    id: 'group.delete',
+    legacyConsoleForm: true,
+    label: 'Delete Group',
+    synopsis: 'Permanently remove a security group.',
+    consoleSection: 'groups',
+    cmdlet: 'Remove-ADGroup',
+    validator: 'group-deleted',
+    params: [{ name: 'Name', label: 'Group name', kind: 'text', required: true }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const g = ctx.dir.getGroupByName(a.Name ?? '');
+      if (!g) return err(`Cannot find a group named '${a.Name}'.`);
+      // Members are removed first by deleteGroup, so every membership loss is
+      // audited rather than vanishing with the group.
+      ctx.dir.deleteGroup(g.id, ctx.actor);
+      return ok(`Removed group ${g.name}.`);
     },
   },
   {
