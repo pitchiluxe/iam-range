@@ -25,6 +25,27 @@
 import { MANUAL } from '@/config/manual';
 import type { Chapter, Lesson } from '@/config/manual';
 import type { VmServices } from './session';
+import { assessPosture, breakGlassAccounts, drillStatus } from './breakGlass';
+import { FS } from '@/terminal/shellIntrinsics';
+
+/**
+ * Has an evidence pack been written?
+ *
+ * Read from the workstation's own disk rather than from a flag, for the same
+ * reason every other rule here reads the estate: the lesson is producing the
+ * artifact, so the artifact is the evidence.
+ */
+function evidencePackExists(): boolean {
+  try {
+    // list() returns null when the folder does not exist, which is an
+    // ordinary state on a workstation nobody has saved anything on yet.
+    const entries = FS.list('C:\\Users\\admin\\Documents') ?? [];
+    return entries.some((entry) => /^iam-range-evidence-.*\.md$/i.test(entry.name));
+  } catch {
+    // No such folder yet, which means no pack.
+    return false;
+  }
+}
 
 export type LessonState = 'not-started' | 'in-progress' | 'done';
 
@@ -270,6 +291,55 @@ const RULES: Record<string, Rule> = {
     outstanding: 'Turn on SCIM so deprovisioning reaches inside the applications.',
     actions: ['scim.enabled'],
   },
+  // --- 5. Review, recovery and evidence ---
+  certification: {
+    // Completed, not merely decided. A campaign everybody decided and nobody
+    // finished removed no access, which is the lesson.
+    done: (s) => has(s, 'review.completed'),
+    started: (s) => has(s, 'review.opened'),
+    evidence: (s) => {
+      const opened = count(s, 'review.opened');
+      const done = count(s, 'review.completed');
+      if (opened === 0) return 'No access review has been opened.';
+      return `${opened} campaign(s) opened, ${done} completed, ` +
+        `${count(s, 'review.revoked')} membership(s) marked for removal.`;
+    },
+    outstanding:
+      'Open a campaign, decide every row, and complete it. Until it is completed nothing has ' +
+      'been removed.',
+    actions: ['review.opened', 'review.approved', 'review.revoked', 'review.completed'],
+  },
+  'emergency-access': {
+    // Both halves: a posture that would survive the outage, and having
+    // actually run the drill rather than assuming it.
+    done: (s) => assessPosture(s).ready && drillStatus(s).state === 'recovered',
+    started: (s) => breakGlassAccounts(s).length > 0,
+    evidence: (s) => {
+      const accounts = breakGlassAccounts(s);
+      if (accounts.length === 0) return 'No break-glass account exists.';
+      const posture = assessPosture(s);
+      const passed = posture.checks.filter((c) => c.passed).length;
+      return `${accounts.length} account(s), ${passed} of ${posture.checks.length} posture ` +
+        `checks passing, drill ${drillStatus(s).state}.`;
+    },
+    outstanding:
+      'Create two accounts, exclude both from every MFA policy, alert on them, then run the ' +
+      'drill and recover from it.',
+    actions: ['policy.updated', 'signin.failure'],
+  },
+  evidence: {
+    // The artifact itself. Producing it is the lesson, and a file on disk is
+    // the only honest way to know it was produced.
+    done: () => evidencePackExists(),
+    evidence: () =>
+      evidencePackExists()
+        ? 'An evidence pack has been written to Documents.'
+        : 'No evidence pack has been produced yet.',
+    outstanding:
+      'Investigate something in Log Search, then export the evidence pack from Lab Plan.',
+    actions: ['ticket.review.passed', 'review.completed'],
+  },
+
   duplicates: {
     done: (s) => {
       const t = anyTenant(s);

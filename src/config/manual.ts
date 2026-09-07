@@ -439,6 +439,102 @@ export const MANUAL: readonly Chapter[] = [
       },
     ],
   },
+  {
+    id: 'operations',
+    title: '5 \u00b7 Review, recovery and evidence',
+    summary:
+      'The standing jobs. Certifying access you granted, proving you can still get in when the '
+      + 'identity provider fails, and producing something an auditor or an interviewer can read.',
+    lessons: [
+      {
+        id: 'certification',
+        title: 'Run an access review',
+        objective: 'Certify every membership in the directory, and remove what is not needed.',
+        why:
+          'Certification is the standing quarterly job and the control an auditor asks about '
+          + 'first. It is also the one most often performed without effect: a campaign where '
+          + 'every reviewer decided and nobody completed it has removed no access at all. '
+          + 'Entitlement accumulates because leavers and movers are handled one at a time and '
+          + 'nobody ever looks at the whole picture.',
+        steps: [
+          { do: 'Open Access Reviews and start a campaign. It scopes itself to every membership that exists.' },
+          {
+            do: 'Work the list. The last sign-in column is the argument \u2014 access nobody has used is the easiest to justify removing.',
+          },
+          { do: 'Decide every row. The campaign refuses to complete while any is undecided, because approving by default is rubber-stamping.' },
+          { do: 'Complete it. Nothing is removed until you do; the button says how many memberships it is about to take away.' },
+          { do: 'Read back what happened.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action review' },
+          { do: 'Export the result to Sheets if you need to count or chart it for a readout.' },
+        ],
+        verify:
+          'The revoked accounts are out of their groups in Active Directory, and the audit log '
+          + 'holds one review.completed entry naming how many were revoked and how many kept. '
+          + 'If the memberships are unchanged, the campaign was decided but never completed.',
+        interview:
+          '"How do you run an access review?" Scope it, get a decision on every line, and '
+          + 'complete it. Say that revocations apply on completion \u2014 the campaign nobody '
+          + 'finished is the commonest way a review removes nothing.',
+        app: 'access-reviews',
+      },
+      {
+        id: 'emergency-access',
+        title: 'Stand up break-glass, then prove it works',
+        objective: 'Build an emergency way in, and test it by breaking the normal one.',
+        why:
+          'A break-glass account is how you get back in when the identity provider is refusing '
+          + 'every MFA challenge and the administrators are locked out. It sits outside the '
+          + 'controls protecting everyone else, which makes it the most valuable account in the '
+          + 'estate and the one most worth watching. Emergency access nobody has exercised is a '
+          + 'belief rather than a control.',
+        steps: [
+          { do: 'Open Emergency Access and read the posture. Every unticked item says what it needs.' },
+          { do: 'Create two accounts, not one. One is a single point of failure \u2014 lose the credential or the person holding it and the recovery path is gone when it is needed.' },
+          { do: 'Exclude both from every policy that requires MFA. Excluded from one of two is not emergency access; the policy that still applies is the one that blocks the recovery.' },
+          { do: 'Turn on sign-in alerting. Watching them is the price of exempting them.' },
+          { do: 'Run the drill. It breaks MFA across the tenant, so the excluded accounts are the only way in.' },
+          { do: 'Recover, then rotate. A used emergency credential is a spent one.' },
+          { do: 'Write the post-incident note in Slides \u2014 the template carries the sections the room expects.' },
+        ],
+        verify:
+          'During the drill the break-glass accounts are excluded from MFA and an ordinary '
+          + 'administrator is not. The audit log records the fault, the recovery and the '
+          + 'exclusion as a risk accepted on purpose.',
+        interview:
+          '"Why two break-glass accounts, and who holds the credentials?" Two because one is a '
+          + 'single point of failure. Say they are excluded from conditional access on purpose, '
+          + 'alerted on every sign-in, and rotated after any use.',
+        app: 'break-glass',
+      },
+      {
+        id: 'evidence',
+        title: 'Answer a question from the log, and produce the evidence',
+        objective: 'Investigate what happened, and hand somebody proof they can check.',
+        why:
+          'The audit log is the most valuable thing this estate produces and the least used. '
+          + '"Who granted this?", "what changed on Tuesday?" and "show me every privileged '
+          + 'activation" are weekly questions, and the answer has to be something another person '
+          + 'can verify rather than a sentence claiming it. Evidence is also what separates '
+          + '"I did a course" from "here is the estate I built and the log behind it".',
+        steps: [
+          { do: 'Open Log Search and narrow with field terms: actor, action, target, since. action: matches a family, so action:pim. finds every privileged event.' },
+          { do: 'Read the same log from the shell when you want it in a pipeline.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action group.add' },
+          { do: 'Export to CSV and open it in Sheets to count. COUNTIF answers "how many of these are stale".' },
+          { do: 'Capture what you found with Snip & Annotate, and redact the names that should not travel \u2014 an opaque block, never a blur, because a blur can be undone.' },
+          { do: 'Use Screen Pen when you need to point at something on a live console rather than a captured picture.' },
+          { do: 'Produce the evidence pack from Lab Plan. It carries what you completed, the log entries behind each claim, and what is still outstanding.' },
+        ],
+        verify:
+          'The pack is in Documents, names the tasks you actually finished, and quotes the audit '
+          + 'entries under each one. If it claims work the directory cannot show, it is wrong and '
+          + 'so is the claim.',
+        interview:
+          '"How would you prove that change was authorised?" Name the log, the fields you would '
+          + 'filter on, and the fact that you would redact other people\u2019s data before '
+          + 'attaching anything. Then say you would keep the raw export alongside the summary.',
+        app: 'log-search',
+      },
+    ],
+  },
 ];
 
 export const ALL_LESSONS: readonly Lesson[] = MANUAL.flatMap((c) => c.lessons);

@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { VmSession } from '@/vm/session';
 import { buildEvidencePack, packFilename } from '@/vm/evidencePack';
+import { MANUAL } from '@/config/manual';
 import type { UserId } from '@/domain';
 
 const ACTOR = 'admin-1' as UserId;
@@ -54,7 +55,10 @@ describe('a pack from a domain where nothing was done', () => {
     // The single most damaging failure: a portfolio asserting work that never
     // happened, handed to somebody who will ask about it.
     const md = buildEvidencePack(bare());
-    expect(md).toContain('0 of 15 tasks complete');
+    // Counted from the manual rather than hardcoded, so adding a chapter
+    // does not quietly turn this into a test of an old curriculum.
+    const total = MANUAL.flatMap((c) => c.lessons).length;
+    expect(md).toContain(`0 of ${total} tasks complete`);
   });
 
   it('lists what is outstanding rather than staying silent', () => {

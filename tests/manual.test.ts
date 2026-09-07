@@ -88,6 +88,15 @@ describe('manual integrity', () => {
     // there is an account. The manual follows the same chronology the ticket
     // generator uses, so working it top to bottom builds the domain the
     // tickets then ask about.
-    expect(MANUAL.map((c) => c.id)).toEqual(['directory', 'lifecycle', 'privileged', 'cloud']);
+    expect(MANUAL.map((c) => c.id)).toEqual([
+      'directory',
+      'lifecycle',
+      'privileged',
+      'cloud',
+      // Review, recovery and evidence come last because they are about work
+      // already done: you cannot certify access you have not granted, and an
+      // evidence pack of an empty domain proves nothing.
+      'operations',
+    ]);
   });
 });
