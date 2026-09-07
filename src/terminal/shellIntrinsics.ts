@@ -12,7 +12,7 @@
  * this is a lab, and leaking the real host's details would be both wrong and
  * a privacy problem.
  */
-import type { CapabilityContext } from '@/services';
+import { CAPABILITIES, type CapabilityContext } from '@/services';
 import { formatTable } from './format';
 import { MockFileSystem } from '@/services';
 
@@ -21,6 +21,33 @@ import { VM_ACCOUNT, VM_HOST } from '@/config/vmHost';
 /** The simulated workstation. Shared with the Settings app via config/vmHost.ts
  *  so the two cannot describe the same machine differently. */
 const HOST = VM_HOST;
+
+/**
+ * What `where` can find.
+ *
+ * Built from the help table and the capability registry rather than listed
+ * again here, so a cmdlet added to the registry is findable without anyone
+ * remembering to update a second list.
+ */
+function knownCommands(): string[] {
+  const shell = INTRINSIC_HELP.map(([command]) => command.split(' ')[0]!.split(' / ')[0]!);
+  const cmdlets = CAPABILITIES.map((c) => c.cmdlet);
+  return [...new Set([...shell, ...cmdlets])].sort();
+}
+
+/** `pushd` / `popd`, which people use to go somewhere and come back. */
+const dirStack: string[] = [];
+
+/** What `tasklist` reports. Plausible for a managed workstation, and fixed so
+ *  the same command twice does not invent different numbers. */
+const PROCESSES: ReadonlyArray<{ name: string; pid: number; mem: number }> = [
+  { name: 'System', pid: 4, mem: 148 },
+  { name: 'lsass.exe', pid: 812, mem: 14892 },
+  { name: 'services.exe', pid: 796, mem: 9204 },
+  { name: 'explorer.exe', pid: 3244, mem: 62140 },
+  { name: 'powershell.exe', pid: 5108, mem: 78320 },
+  { name: 'mmc.exe', pid: 6420, mem: 54188 },
+];
 
 /**
  * The workstation's disk.
@@ -34,6 +61,14 @@ export const FS = new MockFileSystem();
 export interface IntrinsicResult {
   output: string;
   control?: 'clear' | 'exit';
+  /**
+   * Whether the command succeeded. Absent means yes.
+   *
+   * Everything used to return text alone and the dispatcher called all of it
+   * success, so `cd nowhere && mkdir x` still created x — the `&&` had nothing
+   * to test.
+   */
+  ok?: boolean;
 }
 
 /** `dir` output, laid out the way cmd.exe lays it out. */
@@ -161,7 +196,7 @@ export function runIntrinsic(
     case 'md':
     case 'new-item': {
       const target = pathArg(args);
-      if (!target) return { output: 'mkdir: a directory name is required.' };
+      if (!target) return { output: 'mkdir: a directory name is required.', ok: false };
       // mkdir always makes a directory. New-Item makes whichever -ItemType
       // says, defaulting to a directory here because that is what it is
       // reached for in this lab.
@@ -170,7 +205,7 @@ export function runIntrinsic(
         (args.some((a) => /^file$/i.test(a)) ||
           (switches['ItemType'] ?? switches['itemtype'] ?? '').toLowerCase() === 'file');
       const res = wantsFile ? FS.writeFile(target, '') : FS.makeDir(target);
-      return { output: res.ok ? (res.message ?? '') : res.error };
+      return { output: res.ok ? (res.message ?? '') : res.error, ok: res.ok };
     }
 
     case 'rmdir':
@@ -180,20 +215,20 @@ export function runIntrinsic(
     case 'rm':
     case 'remove-item': {
       const target = pathArg(args);
-      if (!target) return { output: 'A path is required.' };
+      if (!target) return { output: 'A path is required.', ok: false };
       const recurse = flag('recurse', 'r', 's', 'force');
       const res = FS.remove(target, recurse);
-      return { output: res.ok ? (res.message ?? '') : res.error };
+      return { output: res.ok ? (res.message ?? '') : res.error, ok: res.ok };
     }
 
     case 'type':
     case 'cat':
     case 'get-content': {
       const target = pathArg(args);
-      if (!target) return { output: 'A file name is required.' };
+      if (!target) return { output: 'A file name is required.', ok: false };
       const content = FS.readFile(target);
       if (content === null) {
-        return { output: `Cannot find the file '${target}'.` };
+        return { output: `Cannot find the file '${target}'.`, ok: false };
       }
       return { output: content };
     }
@@ -202,9 +237,9 @@ export function runIntrinsic(
     case 'cp':
     case 'copy-item': {
       const paths = args.filter((a) => !a.startsWith('-')).map(unquote);
-      if (paths.length < 2) return { output: 'Usage: copy <source> <destination>' };
+      if (paths.length < 2) return { output: 'Usage: copy <source> <destination>', ok: false };
       const res = FS.copy(paths[0]!, paths[1]!);
-      return { output: res.ok ? (res.message ?? '') : res.error };
+      return { output: res.ok ? (res.message ?? '') : res.error, ok: res.ok };
     }
 
     case 'move':
@@ -214,9 +249,9 @@ export function runIntrinsic(
     case 'rename':
     case 'rename-item': {
       const paths = args.filter((a) => !a.startsWith('-')).map(unquote);
-      if (paths.length < 2) return { output: 'Usage: move <source> <destination>' };
+      if (paths.length < 2) return { output: 'Usage: move <source> <destination>', ok: false };
       const res = FS.move(paths[0]!, paths[1]!);
-      return { output: res.ok ? (res.message ?? '') : res.error };
+      return { output: res.ok ? (res.message ?? '') : res.error, ok: res.ok };
     }
 
     case 'cd':
@@ -225,11 +260,113 @@ export function runIntrinsic(
       const target = pathArg(args);
       if (!target) return { output: FS.getCwd() };
       const res = FS.setCwd(target);
-      if (!res.ok) return { output: `cd : ${res.error}` };
+      if (!res.ok) return { output: `cd : ${res.error}`, ok: false };
       // The caller owns the prompt string, so keep it in step.
       cwd.path = FS.getCwd();
       return { output: '' };
     }
+
+    case 'pushd': {
+      const target = pathArg(args);
+      dirStack.push(FS.getCwd());
+      if (!target) return { output: FS.getCwd() };
+      const res = FS.setCwd(target);
+      if (!res.ok) {
+        dirStack.pop();
+        return { output: `pushd : ${res.error}`, ok: false };
+      }
+      cwd.path = FS.getCwd();
+      return { output: '' };
+    }
+
+    case 'popd': {
+      const previous = dirStack.pop();
+      if (!previous) return { output: 'popd : the directory stack is empty.', ok: false };
+      FS.setCwd(previous);
+      cwd.path = FS.getCwd();
+      return { output: '' };
+    }
+
+    case 'where':
+    case 'which':
+    case 'get-command': {
+      const needle = pathArg(args).toLowerCase();
+      if (!needle) return { output: 'Usage: where <command>' };
+      const known = knownCommands().filter((c) => c.toLowerCase().includes(needle));
+      return {
+        output:
+          known.length === 0
+            ? `INFO: Could not find files for the given pattern(s).`
+            : known.join('\n'),
+      };
+    }
+
+    case 'set':
+    case 'get-childitem-env': {
+      // The environment a domain-joined session actually carries. Values come
+      // from config, so they cannot disagree with the rest of the workstation.
+      return {
+        output: [
+          `COMPUTERNAME=${HOST.name}`,
+          `USERDOMAIN=${HOST.netbiosDomain}`,
+          `USERNAME=${HOST.user}`,
+          `USERDNSDOMAIN=${HOST.domain.toUpperCase()}`,
+          `LOGONSERVER=\\\\${HOST.domainController}`,
+          `HOMEDRIVE=C:`,
+          `HOMEPATH=\\Users\\${HOST.user}`,
+          `OS=Windows_NT`,
+          `PROCESSOR_ARCHITECTURE=AMD64`,
+        ].join('\n'),
+      };
+    }
+
+    case 'tasklist':
+    case 'get-process':
+      return {
+        output: formatTable(
+          PROCESSES.map((p) => ({
+            'Image Name': p.name,
+            PID: String(p.pid),
+            'Session Name': 'Console',
+            'Mem Usage': `${p.mem.toLocaleString()} K`,
+          })),
+        ),
+      };
+
+    case 'taskkill':
+    case 'stop-process': {
+      const target = pathArg(args) || args.join(' ');
+      // Refused rather than faked: nothing here has a process to end, and a
+      // command that reports success without doing anything is the exact
+      // dishonesty this project keeps removing.
+      return {
+        output: target
+          ? `taskkill : access denied. Processes on this workstation are managed by the system.`
+          : 'Usage: taskkill /IM <image name>',
+        ok: false,
+      };
+    }
+
+    case 'title':
+      return { output: '' };
+
+    case 'attrib': {
+      const target = pathArg(args);
+      const node = target ? FS.node(FS.resolvePath(target)) : undefined;
+      if (target && !node) return { output: `File not found - ${target}`, ok: false };
+      const entries = target ? [node!] : (FS.list() ?? []);
+      return {
+        output: entries
+          .map((e) => `${e.readonly ? 'R' : ' '}  ${e.kind === 'dir' ? 'D' : ' '}    ${e.name}`)
+          .join('\n'),
+      };
+    }
+
+    case 'history':
+    case 'get-history':
+      // The window owns the scrollback and the history list; the intrinsic
+      // cannot see them, so it says so rather than printing an empty list.
+      return { output: 'Use the up and down arrow keys to walk back through this session.' };
 
     case 'pwd':
     case 'get-location':
@@ -274,11 +411,11 @@ export function runIntrinsic(
       if (redirect !== -1) {
         const target = unquote(args.slice(redirect + 1).join(' ')).trim();
         const text = unquote(args.slice(0, redirect).join(' '));
-        if (!target) return { output: 'A file name is required after >.' };
+        if (!target) return { output: 'A file name is required after >.', ok: false };
         const existing = args[redirect] === '>>' ? (FS.readFile(target) ?? '') : '';
         const body = existing ? `${existing}\n${text}` : text;
         const res = FS.writeFile(target, body);
-        return { output: res.ok ? '' : res.error };
+        return { output: res.ok ? '' : res.error, ok: res.ok };
       }
       return { output: unquote(args.join(' ')) };
     }
@@ -354,6 +491,13 @@ export const INTRINSIC_HELP: ReadonlyArray<[string, string]> = [
   ['copy <a> <b>', 'Copy a file or directory'],
   ['move / ren <a> <b>', 'Move or rename'],
   ['echo <text> > <file>', 'Write a file (>> appends)'],
+  ['pushd / popd', 'Go somewhere and come back'],
+  ['where <name>', 'Find a command'],
+  ['set', 'Show the session environment'],
+  ['tasklist', 'List running processes'],
+  ['attrib [path]', 'Show file attributes'],
+  ['a ; b   a && b', 'Run several commands on one line'],
+  ['<cmd> | findstr <text>', 'Filter output — also sort, select, more'],
   ['whoami', 'Show the signed-in operator'],
   ['hostname', 'Show the workstation name'],
   ['ipconfig', 'Show network configuration'],

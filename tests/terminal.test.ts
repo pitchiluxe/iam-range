@@ -319,6 +319,97 @@ describe('Windows shell built-ins', () => {
     expect(out).toContain('Documents');
   });
 
+  it('cd.. works without a space, as it does in cmd', () => {
+    // Reported as broken. cmd has always let the directory commands run
+    // straight into their argument, and everybody types it.
+    const shell = createShellState();
+    dispatch('cd Scripts', ctx, shell);
+    const r = dispatch('cd..', ctx, shell);
+
+    expect(r.output).not.toMatch(/not recognized/i);
+    expect(dispatch('pwd', ctx, shell).output).not.toContain('Scripts');
+  });
+
+  it('the other glued forms work too', () => {
+    const shell = createShellState();
+    dispatch('mkdir glued', ctx, shell);
+
+    // cd\ goes to the drive root; cd.. goes up; md<path> makes a directory.
+    dispatch('cd glued', ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).toContain('glued');
+    dispatch('cd\\', ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).toBe('C:\\');
+  });
+
+  it('.. on its own goes up', () => {
+    const shell = createShellState();
+    dispatch('cd Documents', ctx, shell);
+    dispatch('..', ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).not.toContain('Documents');
+  });
+
+  it('cdx is not cd x', () => {
+    // The unglue rule only fires when the argument starts like a path, so an
+    // unknown command is still reported as unknown rather than silently
+    // becoming a directory change.
+    const shell = createShellState();
+    const before = dispatch('pwd', ctx, shell).output;
+    dispatch('cdx', ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).toBe(before);
+  });
+
+  it('several commands run on one line', () => {
+    const shell = createShellState();
+    dispatch('mkdir chained; cd chained', ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).toContain('chained');
+  });
+
+  it('&& stops when the first command fails', () => {
+    const shell = createShellState();
+    const before = dispatch('pwd', ctx, shell).output;
+    dispatch('cd nowhere-at-all && mkdir should-not-exist', ctx, shell);
+
+    expect(dispatch('dir', ctx, shell).output).not.toContain('should-not-exist');
+    expect(dispatch('pwd', ctx, shell).output).toBe(before);
+  });
+
+  it('output can be filtered through a pipe', () => {
+    const shell = createShellState();
+    dispatch('mkdir alpha', ctx, shell);
+    dispatch('mkdir beta', ctx, shell);
+
+    const filtered = dispatch('dir | findstr alpha', ctx, shell).output;
+    expect(filtered).toContain('alpha');
+    expect(filtered).not.toContain('beta');
+  });
+
+  it('where finds a cmdlet from the registry rather than a second list', () => {
+    const out = dispatch('where New-ADUser', ctx).output;
+    expect(out).toContain('New-ADUser');
+  });
+
+  it('set reports the domain session, from config', () => {
+    const out = dispatch('set', ctx).output;
+    expect(out).toContain('COMPUTERNAME=IAMLAB-WS01');
+    expect(out).toContain('USERDOMAIN=IAMLAB');
+  });
+
+  it('pushd and popd go somewhere and come back', () => {
+    const shell = createShellState();
+    const home = dispatch('pwd', ctx, shell).output;
+    dispatch('pushd Scripts', ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).toContain('Scripts');
+    dispatch('popd', ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).toBe(home);
+  });
+
+  it('taskkill refuses rather than pretending', () => {
+    // A command that reports success without doing anything is the exact
+    // dishonesty this project keeps removing.
+    const out = dispatch('taskkill /IM explorer.exe', ctx).output;
+    expect(out).toMatch(/denied|managed/i);
+  });
+
   it('whoami reports the simulated operator, not the real machine user', () => {
     const out = dispatch('whoami', ctx).output;
     expect(out).toBe(String.raw`IAMLAB\admin`);

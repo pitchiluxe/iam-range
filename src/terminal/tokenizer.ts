@@ -46,8 +46,34 @@ function splitRespectingQuotes(line: string): string[] {
 
 const isParamName = (t: string): boolean => /^-[A-Za-z]/.test(t);
 
+/**
+ * Commands cmd.exe lets run straight into their argument.
+ *
+ * `cd..`, `cd\\`, `cd/`, `md\\foo` — no space, because these predate the
+ * convention that a command is one word. Everybody types `cd..`, so a shell
+ * that rejects it reads as broken however many cmdlets work.
+ */
+const GLUED = ['cd', 'chdir', 'md', 'mkdir', 'rd', 'rmdir', 'del', 'type', 'pushd', 'popd'];
+
+/** Split `cd..` into `cd` and `..`, leaving anything else alone. */
+function ungluePrefix(token: string): string[] {
+  const lower = token.toLowerCase();
+  for (const name of GLUED) {
+    if (lower.length <= name.length || !lower.startsWith(name)) continue;
+    const rest = token.slice(name.length);
+    // Only when the argument starts the way a path does. `cdx` is not `cd x`.
+    if (/^[.\\/]/.test(rest)) return [token.slice(0, name.length), rest];
+  }
+  return [token];
+}
+
 export function tokenize(line: string): ParsedCommand {
-  const parts = splitRespectingQuotes(line.trim());
+  const raw = splitRespectingQuotes(line.trim());
+  // `..` on its own means "go up", as it does in most shells people come from.
+  const parts =
+    raw.length === 1 && /^\.{1,2}$/.test(raw[0] ?? '')
+      ? ['cd', raw[0]!]
+      : raw.flatMap((token, i) => (i === 0 ? ungluePrefix(token) : [token]));
   if (parts.length === 0) return { cmdlet: '', args: {}, positional: [] };
 
   const cmdlet = parts[0]!;
