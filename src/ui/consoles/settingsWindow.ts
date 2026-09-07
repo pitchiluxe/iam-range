@@ -21,6 +21,9 @@ import { updateManager, type UpdateStatus } from '@/util/updateManager';
 import { tutorAvailable } from '@/vm/tutor';
 import { openExternal, OLLAMA_DOWNLOAD_URL, OLLAMA_MODEL } from '@/util/externalLink';
 import { PRODUCT } from '@/config/product';
+import { login } from '@/vm/loginSession';
+import { COMPANY } from '@/config';
+import { isIdentityAdmin } from '@/config/desktopProfiles';
 
 const DENSITY_KEY = 'settings_density';
 const THEME_KEY = 'app_theme';
@@ -438,21 +441,116 @@ export function renderSettingsWindow(body: HTMLElement): void {
 
     if (active === 'accounts') {
       content.appendChild(sectionTitle('Accounts'));
+
+      const user = login.user;
+      const initial = (user?.displayName ?? 'A').charAt(0).toUpperCase();
+
       const card = document.createElement('div');
       card.style.cssText =
-        'display:flex;align-items:center;gap:14px;padding:16px;background:#1b1f24;border-radius:8px;margin-bottom:16px;';
-      card.innerHTML = `
-        <div style="width:52px;height:52px;border-radius:50%;background:#4ec9b0;display:flex;align-items:center;justify-content:center;font-size:22px;color:#0e1116;font-weight:700;">A</div>
-        <div>
-          <div style="font-size:14px;color:#e6e6e6;font-weight:600;">${VM_HOST.email}</div>
-          <div style="font-size:11px;color:#8b95a1;">IAM Administrator</div>
-        </div>
-      `;
+        'display:flex;align-items:center;gap:14px;padding:16px;background:#1b1f24;' +
+        'border-radius:8px;margin-bottom:16px;';
+      const avatar = document.createElement('div');
+      avatar.textContent = initial;
+      avatar.style.cssText =
+        'width:52px;height:52px;border-radius:50%;background:#4ec9b0;display:flex;' +
+        'align-items:center;justify-content:center;font-size:22px;color:#0e1116;font-weight:700;';
+      const who = document.createElement('div');
+      const line1 = document.createElement('div');
+      line1.textContent = user?.displayName ?? VM_HOST.displayName;
+      line1.style.cssText = 'font-size:14px;color:#e6e6e6;font-weight:600;';
+      const line2 = document.createElement('div');
+      // The real account, not a fixed string. Signing in as somebody else and
+      // finding the administrator's address here would be a lie the rest of
+      // the workstation does not tell.
+      line2.textContent = user ? `${user.username}@${COMPANY.domain}` : VM_HOST.email;
+      line2.style.cssText = 'font-size:11px;color:#8b95a1;';
+      who.append(line1, line2);
+      card.append(avatar, who);
       content.appendChild(card);
+
       const box = document.createElement('div');
       box.innerHTML =
-        infoRow('Account type', 'Administrator') + infoRow('Sign-in method', 'Password + TOTP');
+        infoRow('Account type', user && isIdentityAdmin(user.department) ? 'Administrator' : 'Standard user') +
+        infoRow('Department', user?.department ?? '—') +
+        infoRow('Title', user?.title ?? '—') +
+        infoRow('Sign-in method', user?.mfa === 'totp' ? 'Password + TOTP' : 'Password');
       content.appendChild(box);
+
+      // --- Change password ---------------------------------------------------
+      const pwTitle = document.createElement('div');
+      pwTitle.textContent = 'Password';
+      pwTitle.style.cssText =
+        'font-size:12px;color:#8b95a1;margin:22px 0 10px;text-transform:uppercase;' +
+        'letter-spacing:0.06em;';
+      content.appendChild(pwTitle);
+
+      const blurb = document.createElement('div');
+      blurb.style.cssText = 'font-size:12px;color:#8b95a1;margin-bottom:12px;line-height:1.6;';
+      blurb.textContent = user
+        ? 'Changing it here goes through the identity provider, which checks your current ' +
+          'password first — the same path a real self-service change takes, and it is ' +
+          'written to the audit log.'
+        : 'Sign in to change a password.';
+      content.appendChild(blurb);
+
+      if (user) {
+        const form = document.createElement('div');
+        form.style.cssText = 'max-width:340px;display:flex;flex-direction:column;gap:8px;';
+
+        const field = (placeholder: string): HTMLInputElement => {
+          const i = document.createElement('input');
+          i.type = 'password';
+          i.placeholder = placeholder;
+          i.style.cssText =
+            'padding:8px 10px;border-radius:4px;border:1px solid #2d343d;background:#0e1116;' +
+            'color:#e6e6e6;font-size:12.5px;outline:none;font-family:inherit;';
+          return i;
+        };
+        const currentPw = field('Current password');
+        const newPw = field('New password');
+        const confirmPw = field('Confirm new password');
+
+        const message = document.createElement('div');
+        message.style.cssText = 'font-size:11.5px;min-height:17px;line-height:1.5;';
+
+        const submit = document.createElement('button');
+        submit.textContent = 'Change password';
+        submit.style.cssText =
+          'padding:8px 14px;border-radius:4px;border:1px solid #2563eb;background:#2563eb;' +
+          'color:#fff;font-size:12px;cursor:pointer;font-family:inherit;align-self:flex-start;';
+
+        const fail = (text: string): void => {
+          message.textContent = text;
+          message.style.color = '#ff9a8a';
+        };
+
+        submit.addEventListener('click', () => {
+          const current = currentPw.value;
+          const next = newPw.value;
+
+          if (!current || !next) return fail('Enter your current password and a new one.');
+          if (next !== confirmPw.value) return fail('The new passwords do not match.');
+          if (next === current) return fail('The new password must differ from the current one.');
+          // Deliberately mild. A lab that enforces a corporate policy here
+          // would spend the learner's attention on inventing a password
+          // instead of on the directory.
+          if (next.length < 4) return fail('Use at least four characters.');
+
+          const changed = login.changePassword(user.username, current, next);
+          if (!changed) {
+            return fail('That is not your current password.');
+          }
+
+          currentPw.value = '';
+          newPw.value = '';
+          confirmPw.value = '';
+          message.textContent = 'Password changed. Use the new one at the next sign-in.';
+          message.style.color = '#4ec9b0';
+        });
+
+        form.append(currentPw, newPw, confirmPw, submit, message);
+        content.appendChild(form);
+      }
       return;
     }
 

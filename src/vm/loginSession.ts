@@ -14,6 +14,7 @@
  */
 import type { MfaMethod, User, UserId } from '@/domain';
 import type { VmServices } from './session';
+import { session } from './session';
 import { isIdentityAdmin } from '@/config/desktopProfiles';
 
 export type SignInOutcome =
@@ -140,3 +141,12 @@ export class LoginSession {
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 }
+
+/**
+ * The one live sign-in for this workstation.
+ *
+ * A singleton for the same reason VmSession is: windows resolve it when the
+ * user acts, and a second instance would let Settings change the password of
+ * an account nobody is signed in as.
+ */
+export const login = new LoginSession(session);

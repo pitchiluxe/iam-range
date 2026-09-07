@@ -12,14 +12,13 @@
 import { createDesktopOverlay } from '@/ui/desktopOverlay';
 import { createLoginScreen } from '@/ui/loginScreen';
 import { session } from '@/vm/session';
-import { LoginSession } from '@/vm/loginSession';
+import { login, LoginSession } from '@/vm/loginSession';
 import type { VmSession } from '@/vm/session';
 import { logoffChime } from '@/ui/sounds';
 
 const appEl = document.getElementById('app');
 if (!appEl) throw new Error('[vm] #app container is missing from index.html');
 
-const login = new LoginSession(session);
 const desktop = createDesktopOverlay();
 
 /** The desktop is typed against the lab's Conductor; the session provides the

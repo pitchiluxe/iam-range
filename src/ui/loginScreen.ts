@@ -68,17 +68,25 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     overlay.innerHTML = '';
 
     const wrap = document.createElement('div');
-    wrap.style.cssText =
-      'position:absolute;left:0;right:0;bottom:22%;text-align:center;user-select:none;';
+    // Centred, not pinned near the bottom. The overlay is a flex container
+    // that already centres its child, so the clock sits in the middle of the
+    // screen the way Windows puts it rather than a fifth of the way up.
+    wrap.style.cssText = 'text-align:center;user-select:none;';
 
     const time = document.createElement('div');
-    time.style.cssText = 'font-size:76px;font-weight:200;letter-spacing:-2px;line-height:1;';
+    time.style.cssText = 'font-size:68px;font-weight:200;letter-spacing:-1px;line-height:1;';
     const date = document.createElement('div');
     date.style.cssText = 'font-size:19px;font-weight:300;margin-top:6px;opacity:0.92;';
 
     const tick = (): void => {
       const now = new Date();
-      time.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      // Seconds included, so the clock is visibly live rather than a
+      // screenshot of a time.
+      time.textContent = now.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
       date.textContent = now.toLocaleDateString([], {
         weekday: 'long',
         day: 'numeric',
