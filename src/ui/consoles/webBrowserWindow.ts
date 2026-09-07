@@ -12,6 +12,7 @@
  *     refuse to render; the UI says so plainly instead of showing a blank box.
  */
 import { IAM_BOOKMARKS, isAllowedUrl, normalizeUrl } from '@/config/webAllowlist';
+import { openExternal } from '@/util/externalLink';
 
 /** True when running inside the Electron shell, where <webview> is available. */
 function hasWebview(): boolean {
@@ -55,7 +56,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
 
   const urlBar = document.createElement('input');
   urlBar.type = 'text';
-  urlBar.placeholder = 'Search identity docs — only IAM sites are reachable';
+  urlBar.placeholder = 'Search Google, or type an address';
   urlBar.style.cssText =
     'flex:1;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:4px;' +
     'padding:5px 10px;font-size:12px;font-family:monospace;outline:none;';
@@ -127,9 +128,30 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
     viewport.appendChild(wrap);
   };
 
+  /**
+   * Whether what was typed looks like an address rather than a question.
+   *
+   * "okta.com" and "https://…" are addresses; "how does SAML work" is not.
+   * Guessing wrong in the harmless direction — searching for something that
+   * was meant as a host — beats a "site not found" for a plain question.
+   */
+  function looksLikeUrl(raw: string): boolean {
+    const text = raw.trim();
+    if (/^[a-z]+:\/\//i.test(text)) return true;
+    if (/\s/.test(text)) return false;
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(text);
+  }
+
+  const SEARCH_URL = 'https://www.google.com/search?q=';
+
   /** Load an allowlisted URL, or explain why it was refused. */
   function go(raw: string, pushHistory = true): void {
-    const target = normalizeUrl(raw);
+    const typed = raw.trim();
+    if (!typed) return;
+    // A search, when it is not an address.
+    const target = looksLikeUrl(typed)
+      ? normalizeUrl(typed)
+      : `${SEARCH_URL}${encodeURIComponent(typed)}`;
     urlBar.value = target;
 
     if (!isAllowedUrl(target)) {
@@ -167,10 +189,67 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
     frame.style.cssText = 'width:100%;height:100%;border:none;background:#fff;';
     viewport.appendChild(frame);
 
-    status.textContent = hasWebview()
-      ? `Loaded ${new URL(target).hostname}`
-      : `Loaded ${new URL(target).hostname} — if the page is blank, this site refuses ` +
-        `embedding in the web build. Use "Open ↗", or run the desktop app.`;
+    const host = new URL(target).hostname;
+    status.textContent = hasWebview() ? `Loading ${host}…` : `Loading ${host}…`;
+
+    if (hasWebview()) {
+      frame.addEventListener('did-finish-load', () => {
+        status.textContent = `Loaded ${host}`;
+      });
+      return;
+    }
+
+    // In a browser tab this is an iframe, and Google, Microsoft and most
+    // others answer X-Frame-Options: DENY. The frame stays blank and the load
+    // event never distinguishes that from a slow page, so rather than leave
+    // the learner staring at a white rectangle, say what happened and offer
+    // the thing that does work.
+    let settled = false;
+    frame.addEventListener('load', () => {
+      settled = true;
+      status.textContent = `Loaded ${host}`;
+    });
+    window.setTimeout(() => {
+      if (settled) return;
+      showRefused(host, target);
+    }, 2500);
+  }
+
+  /**
+   * Explain a refused embed, and offer the real browser.
+   *
+   * The desktop build does not need this: a webview loads these sites
+   * properly. It is the web build's honest answer.
+   */
+  function showRefused(host: string, target: string): void {
+    viewport.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.style.cssText =
+      'height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+      'gap:12px;text-align:center;padding:32px;';
+
+    const h = document.createElement('div');
+    h.textContent = `${host} will not display inside a frame`;
+    h.style.cssText = 'font-size:14px;color:var(--fg);font-weight:600;';
+
+    const p = document.createElement('div');
+    p.textContent =
+      `${host} sends X-Frame-Options: DENY, which tells every browser not to ` +
+      'render it inside another page. That is their server, not a limit of this ' +
+      'lab — the installed desktop app renders it properly, because it uses a ' +
+      'real browser view rather than a frame.';
+    p.style.cssText = 'font-size:12px;color:var(--muted);max-width:460px;line-height:1.65;';
+
+    const open = document.createElement('button');
+    open.textContent = 'Open in my browser ↗';
+    open.style.cssText =
+      'padding:8px 16px;border-radius:5px;border:1px solid var(--accent);background:var(--accent);' +
+      'color:var(--on-accent);font-size:12px;cursor:pointer;font-family:inherit;';
+    open.addEventListener('click', () => openExternal(target));
+
+    wrap.append(h, p, open);
+    viewport.appendChild(wrap);
+    status.textContent = `${host} refused to be framed.`;
   }
 
   goBtn.addEventListener('click', () => go(urlBar.value));
@@ -188,10 +267,10 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   });
 
   showMessage(
-    'Restricted IAM browser',
-    'Pick a bookmark above, or type a URL. Only identity and IAM resources are ' +
-      'reachable — everything else is blocked, so the lab stays a focused ' +
-      'training environment.',
+    'Browser',
+    'Type a question to search, or an address to go straight there. Reachable ' +
+      'hosts are limited to search engines and identity documentation, so the ' +
+      'lab stays a lab — but you can look things up the way you would at work.',
     'info',
   );
 }

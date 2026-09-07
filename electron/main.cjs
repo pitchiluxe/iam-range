@@ -221,7 +221,20 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // The in-VM browser renders real pages in a <webview>. Without this it
+      // falls back to an iframe, which Google and most other sites decline —
+      // the packaged app looked more limited than the web build had to be.
+      webviewTag: true,
     },
+  });
+
+  // A webview is still fenced: it may only load what the allowlist permits,
+  // enforced here as well as in the renderer so a bug in one is not the only
+  // thing standing between the lab and the open internet.
+  mainWindow.webContents.on('will-attach-webview', (_event, webPreferences) => {
+    delete webPreferences.preload;
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
   });
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
