@@ -235,10 +235,15 @@ describe('mfa-issue review', () => {
   it('refuses when the registration was cleared and left cleared', () => {
     // Clearing the old factor is the fix; stopping there leaves the account
     // weaker than before the ticket was raised.
+    //
+    // The ticket is raised first on purpose. The rule only counts work done
+    // after it was raised -- a reset from last week does not resolve today's
+    // ticket -- so doing the work first tests nothing.
     const { s, user } = withUser();
+    const ticket = ticketFor(s, 'mfa-issue', user.id, 'MFA broken');
     s.idp.resetMfa(user.id, ACTOR);
 
-    const review = reviewTicketSync(ticketFor(s, 'mfa-issue', user.id, 'MFA broken'), deps(s), ACTOR);
+    const review = reviewTicketSync(ticket, deps(s), ACTOR);
     expect(review.passed).toBe(false);
     expect(review.checks.filter((c) => !c.passed).map((c) => c.label)).toContain(
       'A second factor is in place',
@@ -247,10 +252,11 @@ describe('mfa-issue review', () => {
 
   it('passes once it is cleared and re-enrolled', () => {
     const { s, user } = withUser();
+    const ticket = ticketFor(s, 'mfa-issue', user.id, 'MFA broken');
     s.idp.resetMfa(user.id, ACTOR);
     s.idp.enrollMfa(user.id, 'totp', ACTOR);
 
-    const review = reviewTicketSync(ticketFor(s, 'mfa-issue', user.id, 'MFA broken'), deps(s), ACTOR);
+    const review = reviewTicketSync(ticket, deps(s), ACTOR);
     expect(review.passed).toBe(true);
   });
 });

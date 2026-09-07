@@ -50,8 +50,10 @@ const IDENTITY_ADMIN_APPS = [
 ] as const;
 
 /** Ticket handling and investigation. */
-const SERVICE_DESK_APPS = ['ticket-console'] as const;
-const SECURITY_APPS = ['secops-dashboard'] as const;
+const SERVICE_DESK_APPS = ['ticket-console', 'log-search'] as const;
+// Reading the audit log is an investigation skill, so it sits with the
+// investigation tools rather than on a Finance desktop.
+const SECURITY_APPS = ['secops-dashboard', 'log-search'] as const;
 
 /**
  * Extra applications per department, on top of BASELINE_APPS.
