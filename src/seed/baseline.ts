@@ -51,11 +51,17 @@ export function applyBaseline(
 
   // --- Groups ---
   // Security groups exist only in the populated fixture.
-  if (withStructure)
-
-  for (const name of GROUP_NAMES) {
-    const g = dir.createGroup(name, `Security group ${name}`, 'system' as UserId);
-    groupIds[name] = g.id;
+  //
+  // Braced deliberately. This was a bare `if (withStructure)` followed by a
+  // blank line and then the loop, which works -- the loop is the consequent --
+  // and reads as though the guard applies to nothing. Anyone adding a line
+  // above the loop would silently move it out of the fixture and seed groups
+  // into the bare domain the first tickets ask the learner to build.
+  if (withStructure) {
+    for (const name of GROUP_NAMES) {
+      const g = dir.createGroup(name, `Security group ${name}`, 'system' as UserId);
+      groupIds[name] = g.id;
+    }
   }
 
   // --- Apps (register with directory for role lookup; full app records on AppServer) ---
