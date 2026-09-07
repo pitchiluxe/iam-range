@@ -33,6 +33,7 @@ const BASELINE_APPS = [
   'calculator',
   // Everyone gets the spreadsheet, the way every desk in an office has one.
   'sheets',
+  'slides',
   'sticky-notes',
   'browser',
   'app-portal',

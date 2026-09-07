@@ -30,6 +30,7 @@ import { renderAuditQueryWindow } from './consoles/auditQueryWindow';
 import { renderAccessReviewWindow } from './consoles/accessReviewWindow';
 import { renderBreakGlassWindow } from './consoles/breakGlassWindow';
 import { renderSheetWindow } from './consoles/sheetWindow';
+import { renderSlidesWindow } from './consoles/slidesWindow';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
@@ -211,6 +212,16 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    // Communication carries ten points in the rubric, and presenting findings
+    // is a real task with a real failure mode.
+    id: 'slides',
+    title: 'Slides',
+    icon: '📽️',
+    width: 1020,
+    height: 660,
+    render: (_c, b) => renderSlidesWindow(b),
   },
   {
     // Where a Log Search export or an access review lands. Identity reporting
