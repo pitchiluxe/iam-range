@@ -21,6 +21,17 @@ export type {
   PrivilegedRoleSettings,
   PimResult,
 } from './mockPim';
+export { MockCloudTenant, VENDORS } from './mockCloudTenant';
+export type {
+  CloudVendor,
+  CloudUser,
+  CloudApp,
+  CloudOrigin,
+  CloudResult,
+  SyncDelta,
+  SyncResult,
+  VendorProfile,
+} from './mockCloudTenant';
 export {
   CAPABILITIES,
   CAPABILITY_BY_ID,

@@ -8,7 +8,7 @@
  * `net user` are genuinely part of the identity-troubleshooting vocabulary.
  *
  * Output mirrors the real tools closely enough to be recognisable, against the
- * simulated Northwind host rather than the machine the app is running on —
+ * simulated corporate host rather than the machine the app is running on —
  * this is a lab, and leaking the real host's details would be both wrong and
  * a privacy problem.
  */

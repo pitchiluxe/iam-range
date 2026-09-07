@@ -66,7 +66,14 @@ describe('capability registry — drift guard', () => {
   });
 
   it('gives every mutating capability a validator so lab steps can gate on it', () => {
-    const missing = CAPABILITIES.filter((c) => !c.readOnly && !c.validator).map((c) => c.id);
+    // Opening a session against a tenant changes no directory state, so there
+    // is nothing for a lab step to assert afterwards. Named individually
+    // rather than loosening the rule: anything else that mutates must still
+    // be gateable, which is what this guard exists to force.
+    const SESSION_ONLY = new Set(['cloud.connect.okta', 'cloud.connect.entra']);
+    const missing = CAPABILITIES.filter(
+      (c) => !c.readOnly && !c.validator && !SESSION_ONLY.has(c.id),
+    ).map((c) => c.id);
     expect(missing).toEqual([]);
   });
 });

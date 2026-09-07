@@ -23,6 +23,7 @@ import type { MockDirectory } from './mockDirectory';
 import type { MockIdP } from './mockIdP';
 import type { MockTicketQueue } from './mockTicketQueue';
 import type { MockPim } from './mockPim';
+import type { MockCloudTenant, CloudVendor } from './mockCloudTenant';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,6 +34,10 @@ export interface CapabilityContext {
   /** Privileged Identity Management. Optional so hosts without PIM still
    *  satisfy the contract; the PIM capabilities refuse cleanly when absent. */
   pim?: MockPim;
+  /** Cloud tenants in front of the domain, keyed by vendor. Optional for the
+   *  same reason as PIM: a host without them refuses cleanly rather than
+   *  pretending the estate is hybrid. */
+  cloud?: Partial<Record<CloudVendor, MockCloudTenant>>;
   idp: MockIdP;
   tickets: MockTicketQueue;
   audit: MockAuditLog;
@@ -55,7 +60,14 @@ export interface CapabilityParam {
 export type CapabilityResult =
   { ok: true; message: string; rows?: Record<string, unknown>[] } | { ok: false; error: string };
 
-export type ConsoleSection = 'users' | 'groups' | 'credentials' | 'access' | 'audit';
+export type ConsoleSection =
+  | 'users'
+  | 'groups'
+  | 'credentials'
+  | 'access'
+  /** Okta and Entra, and the sync between them and the domain. */
+  | 'cloud'
+  | 'audit';
 
 export interface IamCapability {
   id: string;
@@ -113,8 +125,36 @@ function truthy(v: string | undefined): boolean {
   return s === 'true' || s === '1' || s === 'yes' || s === '$true' || s === '';
 }
 
+/**
+ * Resolve the tenant a cloud cmdlet was aimed at.
+ *
+ * `-Provider` is required rather than defaulted: in a hybrid estate the answer
+ * to "where did you make that change" is the whole diagnosis, and a cmdlet
+ * that silently picks one tenant would let the learner skip the question.
+ */
+function tenantFor(
+  ctx: CapabilityContext,
+  provider: string | undefined,
+): { tenant: MockCloudTenant } | { error: string } {
+  const key = (provider ?? '').trim().toLowerCase();
+  if (!key) return { error: 'Provider is required: okta or entra.' };
+  if (key !== 'okta' && key !== 'entra') {
+    return { error: `Unknown provider '${provider}'. Use okta or entra.` };
+  }
+  const tenant = ctx.cloud?.[key];
+  if (!tenant) return { error: `No ${key} tenant is configured on this host.` };
+  return { tenant };
+}
+
 const P = {
   identity: { name: 'Identity', label: 'User', kind: 'user', required: true },
+  provider: {
+    name: 'Provider',
+    label: 'Provider (okta | entra)',
+    kind: 'text',
+    required: true,
+  },
+  upn: { name: 'Upn', label: 'User principal name', kind: 'text', required: true },
   group: { name: 'Group', label: 'Group', kind: 'group', required: true },
   role: { name: 'Role', label: 'Role', kind: 'role', required: true },
 } satisfies Record<string, CapabilityParam>;
@@ -601,6 +641,238 @@ export const CAPABILITIES: readonly IamCapability[] = [
       if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
       const n = ctx.idp.revokeAllSessions(u.id, ctx.actor);
       return ok(`Revoked ${n} session(s) for ${u.username}.`);
+    },
+  },
+
+  // -- Cloud identity: Okta and Entra ID ------------------------------------
+  {
+    id: 'cloud.connect.okta',
+    label: 'Connect to Okta',
+    synopsis: 'Open a session against the Okta tenant. Other cloud cmdlets need it.',
+    consoleSection: 'cloud',
+    cmdlet: 'Connect-Okta',
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      const t = ctx.cloud?.okta;
+      if (!t) return err('No Okta tenant is configured on this host.');
+      const res = t.connect();
+      return res.ok ? ok(res.message) : err(res.error);
+    },
+  },
+  {
+    id: 'cloud.connect.entra',
+    label: 'Connect to Entra ID',
+    synopsis: 'Open a session against the Microsoft Entra ID tenant.',
+    consoleSection: 'cloud',
+    cmdlet: 'Connect-Entra',
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      const t = ctx.cloud?.entra;
+      if (!t) return err('No Entra tenant is configured on this host.');
+      const res = t.connect();
+      return res.ok ? ok(res.message) : err(res.error);
+    },
+  },
+  {
+    id: 'cloud.users',
+    label: 'Cloud Accounts',
+    synopsis: 'List accounts in a tenant, showing which are synced and which are cloud-only.',
+    consoleSection: 'cloud',
+    cmdlet: 'Get-CloudUser',
+    readOnly: true,
+    params: [P.provider, { ...P.upn, required: false }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const r = tenantFor(ctx, a.Provider);
+      if ('error' in r) return err(r.error);
+      const all = r.tenant.list();
+      const rows = (a.Upn ? all.filter((u) => u.upn.toLowerCase() === a.Upn!.toLowerCase()) : all)
+        .map((u) => ({
+          UPN: u.upn,
+          Name: u.displayName,
+          Origin: u.origin,
+          Status: u.status,
+          Sessions: u.sessions,
+          LastSynced: u.lastSyncedAt ? new Date(u.lastSyncedAt).toLocaleTimeString() : 'never',
+        }));
+      return ok(`${rows.length} account(s) in ${r.tenant.vendor.tenantName}.`, rows);
+    },
+  },
+  {
+    id: 'cloud.syncstatus',
+    label: 'Sync Status',
+    synopsis: 'When the last cycle ran, and which accounts the tenant has not caught up on.',
+    consoleSection: 'cloud',
+    cmdlet: 'Get-DirectorySyncStatus',
+    readOnly: true,
+    params: [P.provider],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const r = tenantFor(ctx, a.Provider);
+      if ('error' in r) return err(r.error);
+      const mins = r.tenant.minutesSinceSync();
+      const pending = r.tenant.pendingDelta();
+      const rows = pending.map((d) => ({ UPN: d.upn, Change: d.change, Detail: d.detail }));
+      const when = mins === null ? 'never run' : `${mins} minute(s) ago`;
+      return ok(
+        pending.length === 0
+          ? `Last cycle ${when}. The tenant matches the directory.`
+          : `Last cycle ${when}. ${pending.length} account(s) are out of date — ` +
+            'until a cycle runs, the cloud still enforces the old state.',
+        rows,
+      );
+    },
+  },
+  {
+    id: 'cloud.sync',
+    label: 'Run Sync Cycle',
+    synopsis: 'Push directory state to the tenant now, instead of waiting for the schedule.',
+    consoleSection: 'cloud',
+    cmdlet: 'Start-DirectorySync',
+    validator: 'cloud-synced',
+    params: [P.provider],
+    resolvesTicketKinds: ['termination', 'transfer'],
+    run(ctx, a) {
+      const r = tenantFor(ctx, a.Provider);
+      if ('error' in r) return err(r.error);
+      const res = r.tenant.sync(ctx.actor);
+      if ('error' in res) return err(res.error);
+      const conflictNote =
+        res.conflicts.length > 0
+          ? ` ${res.conflicts.length} soft-match conflict(s): ${res.conflicts.join(', ')} now has ` +
+            'more than one object. Resolve the duplicate before anyone signs in with it.'
+          : '';
+      return ok(
+        `Sync complete: ${res.created} created, ${res.updated} updated.${conflictNote}`,
+      );
+    },
+  },
+  {
+    id: 'cloud.newuser',
+    label: 'New Cloud-Only Account',
+    synopsis: 'Create an account directly in the tenant, owned by nothing on premises.',
+    consoleSection: 'cloud',
+    cmdlet: 'New-CloudOnlyUser',
+    validator: 'cloud-user-created',
+    params: [
+      P.provider,
+      P.upn,
+      { name: 'DisplayName', label: 'Display name', kind: 'text', required: true },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const r = tenantFor(ctx, a.Provider);
+      if ('error' in r) return err(r.error);
+      if (!a.Upn || !a.DisplayName) return err('Upn and DisplayName are required.');
+      const res = r.tenant.createCloudOnly(a.Upn, a.DisplayName, ctx.actor);
+      return res.ok ? ok(res.message) : err(res.error);
+    },
+  },
+  {
+    id: 'cloud.disable',
+    label: 'Disable Cloud Account',
+    synopsis: 'Disable an account in the tenant. Refused for accounts synced from the domain.',
+    consoleSection: 'cloud',
+    cmdlet: 'Disable-CloudUser',
+    validator: 'cloud-user-disabled',
+    params: [P.provider, P.upn],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const r = tenantFor(ctx, a.Provider);
+      if ('error' in r) return err(r.error);
+      if (!a.Upn) return err('Upn is required.');
+      const res = r.tenant.disable(a.Upn, ctx.actor);
+      return res.ok ? ok(res.message) : err(res.error);
+    },
+  },
+  {
+    id: 'cloud.revoke',
+    label: 'Revoke Cloud Sessions',
+    synopsis: 'End live sessions. Disabling an account does not close the ones already open.',
+    consoleSection: 'cloud',
+    cmdlet: 'Revoke-CloudSession',
+    validator: 'session-revoked',
+    params: [P.provider, P.upn],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const r = tenantFor(ctx, a.Provider);
+      if ('error' in r) return err(r.error);
+      if (!a.Upn) return err('Upn is required.');
+      const res = r.tenant.revokeSessions(a.Upn, ctx.actor);
+      return res.ok ? ok(res.message) : err(res.error);
+    },
+  },
+  {
+    id: 'cloud.scim',
+    label: 'SCIM Provisioning',
+    synopsis: 'Switch application provisioning on, so deprovisioning reaches inside the app.',
+    consoleSection: 'cloud',
+    cmdlet: 'Set-ScimProvisioning',
+    validator: 'scim-enabled',
+    params: [
+      P.provider,
+      { name: 'App', label: 'Application', kind: 'text', required: true },
+      { name: 'Enabled', label: 'Enabled', kind: 'bool', required: false },
+    ],
+    resolvesTicketKinds: ['termination'],
+    run(ctx, a) {
+      const r = tenantFor(ctx, a.Provider);
+      if ('error' in r) return err(r.error);
+      if (!a.App) return err('App is required.');
+      // Absent means on: the cmdlet exists to close a provisioning gap, and
+      // requiring -Enabled true to do the obvious thing is a trap.
+      const enabled = a.Enabled === undefined ? true : truthy(a.Enabled);
+      const res = r.tenant.setScim(a.App, enabled, ctx.actor);
+      return res.ok ? ok(res.message) : err(res.error);
+    },
+  },
+  {
+    id: 'cloud.orphans',
+    label: 'Orphaned App Accounts',
+    synopsis: 'Accounts still working inside applications for people disabled upstream.',
+    consoleSection: 'cloud',
+    cmdlet: 'Get-OrphanedAppAccount',
+    readOnly: true,
+    params: [P.provider],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const r = tenantFor(ctx, a.Provider);
+      if ('error' in r) return err(r.error);
+      const rows = r.tenant.orphanedAppAccounts().map((o) => ({ Application: o.app, UPN: o.upn }));
+      return ok(
+        rows.length === 0
+          ? 'No orphaned application accounts — deprovisioning reached every app.'
+          : `${rows.length} account(s) still active in applications after the person was disabled.`,
+        rows,
+      );
+    },
+  },
+  {
+    id: 'cloud.duplicates',
+    label: 'Duplicate Identities',
+    synopsis: 'Objects sharing a UPN — what a failed soft match leaves behind.',
+    consoleSection: 'cloud',
+    cmdlet: 'Get-CloudDuplicate',
+    readOnly: true,
+    params: [P.provider],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const r = tenantFor(ctx, a.Provider);
+      if ('error' in r) return err(r.error);
+      const rows = r.tenant.duplicates().map((u) => ({
+        UPN: u.upn,
+        Name: u.displayName,
+        Origin: u.origin,
+        Status: u.status,
+      }));
+      return ok(
+        rows.length === 0
+          ? 'No duplicate identities in this tenant.'
+          : `${rows.length} object(s) share a UPN. One person, more than one identity.`,
+        rows,
+      );
     },
   },
 

@@ -19,7 +19,9 @@ import {
   MockIncidents,
   MockTicketQueue,
   MockPim,
+  MockCloudTenant,
 } from '@/services';
+import type { CloudVendor } from '@/services';
 import { applyBaseline } from '@/seed/baseline';
 import { generateTicketsSync } from './ticketGenerator';
 import { auditStore, ticketStore } from '@/stores';
@@ -39,6 +41,9 @@ export interface VmServices {
   reviews: MockAccessReviews;
   incidents: MockIncidents;
   pim: MockPim;
+  /** The cloud tenants in front of the domain. Both exist from boot: a hybrid
+   *  estate is the normal shape, and the sync between them is the lesson. */
+  cloud: Record<CloudVendor, MockCloudTenant>;
   /** Discard all work and re-seed. The Ticket Queue's reset button calls this. */
   reset(): void;
 }
@@ -52,13 +57,14 @@ export class VmSession implements VmServices {
   reviews!: MockAccessReviews;
   incidents!: MockIncidents;
   pim!: MockPim;
+  cloud!: Record<CloudVendor, MockCloudTenant>;
 
   constructor() {
     this.boot();
   }
 
   /**
-   * Build a fresh environment and seed the Northwind directory.
+   * Build a fresh environment and seed the directory.
    *
    * Every service is replaced, not cleared: windows that captured a reference
    * would otherwise keep writing to the old instance. The windows in this app
@@ -73,6 +79,19 @@ export class VmSession implements VmServices {
     this.reviews = new MockAccessReviews();
     this.incidents = new MockIncidents();
     this.pim = new MockPim(this.audit);
+    this.cloud = {
+      okta: new MockCloudTenant('okta', this.dir, this.audit),
+      entra: new MockCloudTenant('entra', this.dir, this.audit),
+    };
+    // The SaaS estate behind each tenant, provisioned the way most real ones
+    // are: SCIM off. That is not a shortcut — an application the IdP cannot
+    // deprovision is the most common finding in a leaver audit, and it has to
+    // be the starting state for finding it to be a lesson.
+    for (const tenant of Object.values(this.cloud)) {
+      for (const app of ['HR Portal', 'Finance Portal', 'VPN Portal']) {
+        tenant.registerApp(app, false);
+      }
+    }
 
     applyBaseline(this.dir, this.idp, this.apps);
     // Raise the work this domain is ready for. On a fresh install that is
@@ -83,6 +102,7 @@ export class VmSession implements VmServices {
       tickets: this.tickets,
       audit: this.audit,
       pim: this.pim,
+      cloud: this.cloud,
     });
 
     // Mirror seeded state into the stores the windows subscribe to.

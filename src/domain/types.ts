@@ -302,6 +302,12 @@ export interface AuditEvent {
     | 'pim.removed'
     | 'ou.created'
     | 'ou.deleted'
+    | 'cloud.synced'
+    | 'cloud.user.created'
+    | 'cloud.user.disabled'
+    | 'cloud.session.revoked'
+    | 'scim.enabled'
+    | 'scim.disabled'
     | 'app.config.changed'
     | 'signin.success'
     | 'signin.failure'
@@ -397,6 +403,14 @@ export type ValidatorKind =
   | 'users-provisioned'
   /** An organisational unit was created — the first task on a bare domain. */
   | 'ou-created'
+  /** A directory sync cycle was run against a cloud tenant. */
+  | 'cloud-synced'
+  /** SCIM provisioning was switched on for an application. */
+  | 'scim-enabled'
+  /** An account was created directly in a cloud tenant. */
+  | 'cloud-user-created'
+  /** A cloud-only account was disabled in the tenant. */
+  | 'cloud-user-disabled'
   | 'pim-eligible'
   | 'pim-activated'
   | 'pim-approved'

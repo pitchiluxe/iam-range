@@ -14,6 +14,7 @@ import { VM_ACCOUNT, VM_HOST } from '@/config/vmHost';
 import { isMuted, setMuted, blip } from '@/ui/audio';
 import { WALLPAPERS, WALLPAPER_STORAGE_KEY, DEFAULT_WALLPAPER_ID } from '@/util/wallpapers';
 import { updateManager, type UpdateStatus } from '@/util/updateManager';
+import { COMPANY } from '@/config';
 
 const DENSITY_KEY = 'settings_density';
 const THEME_KEY = 'app_theme';
@@ -579,7 +580,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
       content.appendChild(box);
       const footer = document.createElement('div');
       footer.style.cssText = 'margin-top:16px;font-size:11px;color:#8b95a1;';
-      footer.textContent = 'Northwind Holdings — Apex Identity Workstation';
+      footer.textContent = `${COMPANY.name} — Identity Operations Workstation`;
       content.appendChild(footer);
       return;
     }

@@ -10,9 +10,10 @@ import type { VmServices } from '@/vm/session';
 import type { UserId } from '@/domain';
 import type { CapabilityContext } from '@/services';
 import { createShellState, dispatch } from '@/terminal/dispatcher';
+import { COMPANY } from '@/config';
 
 const BANNER = [
-  'Northwind Labs — Identity Operations Shell',
+  `${COMPANY.name} — Identity Operations Shell`,
   'Windows PowerShell 5.1 (simulated)',
   '',
   "Type 'Get-Help' to list commands, 'Get-Help <cmdlet>' for one, 'exit' to close.",
@@ -56,6 +57,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
       tickets: conductor.tickets,
       audit: conductor.audit,
       pim: conductor.pim,
+      cloud: conductor.cloud,
       actor: 'system' as UserId,
     };
   };

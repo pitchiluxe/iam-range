@@ -32,7 +32,14 @@ const BASELINE_APPS = [
 ] as const;
 
 /** Identity administration — the tools that change other people's access. */
-const IDENTITY_ADMIN_APPS = ['active-directory', 'terminal', 'script-editor'] as const;
+const IDENTITY_ADMIN_APPS = [
+  'active-directory',
+  'terminal',
+  'script-editor',
+  // The tenants in front of the domain. Whoever administers accounts on
+  // premises administers their cloud copies too.
+  'cloud-identity',
+] as const;
 
 /** Ticket handling and investigation. */
 const SERVICE_DESK_APPS = ['ticket-console'] as const;

@@ -138,3 +138,79 @@ describe('work offered per stage', () => {
     expect(subjects(session)).toHaveLength(first);
   });
 });
+
+describe('hybrid-identity scenarios', () => {
+  let session: VmSession;
+  beforeEach(() => {
+    session = new VmSession();
+    session.tickets.list().forEach((t) => session.tickets.resolve(t.id, 'system' as never));
+    buildTo(session, 'operating');
+  });
+
+  /** Deps including the tenants, as the running workstation passes them. */
+  function fullDeps(s: VmSession) {
+    return { ...deps(s), pim: s.pim, cloud: s.cloud };
+  }
+
+  it('offers no cloud work without a tenant', () => {
+    // Optional dependency, not a silent default: a host with no tenant should
+    // not be handed hybrid tickets it cannot support.
+    generateTicketsSync(deps(session), 10);
+    const subjects = session.tickets.list().map((t) => t.subject);
+    expect(subjects.some((s) => /Okta|Entra/.test(s))).toBe(false);
+  });
+
+  /**
+   * Build fresh sessions until the named scenario is raised.
+   *
+   * One hybrid scenario is offered per pass, chosen at random, so a single
+   * attempt can miss. Retrying beats `if (!found) return`, which turns a
+   * broken scenario into a silently skipped test.
+   */
+  function untilRaised(pattern: RegExp, attempts = 40): VmSession {
+    for (let i = 0; i < attempts; i += 1) {
+      const s = new VmSession();
+      s.tickets.list().forEach((t) => s.tickets.resolve(t.id, 'system' as never));
+      buildTo(s, 'operating');
+      generateTicketsSync({ ...deps(s), pim: s.pim, cloud: s.cloud }, 10);
+      if (s.tickets.list().some((t) => pattern.test(t.subject))) return s;
+    }
+    throw new Error(`No ticket matching ${pattern} after ${attempts} attempts`);
+  }
+
+  it('the leaver ticket is true before it is raised', () => {
+    const s = untilRaised(/can still reach/);
+    const ticket = s.tickets.list().find((t) => /can still reach/.test(t.subject))!;
+    const named = /^(\S+) left on Friday/.exec(ticket.subject)?.[1];
+    expect(named).toBeTruthy();
+
+    // The evidence the ticket describes is genuinely there to be found: the
+    // account is disabled on premises, the cloud copy has not caught up, and
+    // the application account is still live.
+    expect(s.dir.getUserByUsername(named!)?.status).toBe('disabled');
+
+    const tenant = s.cloud.okta;
+    expect(tenant.find(`${named}@iamlab.com`)?.status).toBe('active');
+    expect(tenant.pendingDelta().some((d) => d.change === 'disable')).toBe(true);
+  });
+
+  it('the duplicate ticket really produces two objects with one UPN', () => {
+    const s = untilRaised(/Two .* accounts exist/);
+    expect(s.cloud.okta.duplicates().length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('never stages a second hybrid fault while one is outstanding', () => {
+    // The scenarios act on one shared tenant and interfere: a second
+    // scenario's sync would repair the first one's stale cloud copy, leaving
+    // a ticket describing evidence that is no longer there.
+    const s = untilRaised(/can still reach|Two .* accounts exist/);
+    const before = s.tickets.list().length;
+    generateTicketsSync({ ...deps(s), pim: s.pim, cloud: s.cloud }, 10);
+
+    const hybrid = s.tickets
+      .list()
+      .filter((t) => /can still reach|Two .* accounts exist/.test(t.subject));
+    expect(hybrid).toHaveLength(1);
+    expect(s.tickets.list().length).toBeGreaterThanOrEqual(before);
+  });
+});

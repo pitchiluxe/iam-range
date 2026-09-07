@@ -54,6 +54,7 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
           tickets: conductor.tickets,
           audit: conductor.audit,
           pim: conductor.pim,
+      cloud: conductor.cloud,
           actor: 'system' as UserId,
         }
       : null;

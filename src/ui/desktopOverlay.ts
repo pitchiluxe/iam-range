@@ -22,6 +22,7 @@ import { renderSettingsWindow } from './consoles/settingsWindow';
 import { renderControlPanelWindow } from './consoles/controlPanelWindow';
 import { renderRecycleBinWindow } from './consoles/recycleBinWindow';
 import { renderTutorWindow } from './consoles/tutorWindow';
+import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
 import {
@@ -174,6 +175,14 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 680,
     height: 520,
     render: (_c, b) => renderControlPanelWindow(b),
+  },
+  {
+    id: 'cloud-identity',
+    title: 'Cloud Identity — Okta & Entra ID',
+    icon: '☁️',
+    width: 900,
+    height: 640,
+    render: (c, b) => renderCloudIdentityWindow(b, c),
   },
   {
     id: 'tutor',

@@ -5,6 +5,8 @@
  * fake system info, same "fake but realistic" approach as File Explorer's
  * folder contents and Settings' System page.
  */
+import { COMPANY } from '@/config';
+import { VM_HOST } from '@/config/vmHost';
 
 interface Applet {
   id: string;
@@ -31,7 +33,7 @@ const APPLETS: Applet[] = [
     label: 'Network and Sharing Center',
     render: () => `
       <h3 style="margin:0 0 12px 0;color:#e6e6e6;font-size:14px;">Network status</h3>
-      ${kv('Connection', 'Northwind-Corp (Ethernet)')}
+      ${kv('Connection', `${VM_HOST.netbiosDomain}-Corp (Ethernet)`)}
       ${kv('IPv4 address', '10.42.8.114')}
       ${kv('DNS server', '10.42.0.10')}
       ${kv('Status', '<span style="color:#4ec9b0;">Connected</span>')}
@@ -46,7 +48,7 @@ const APPLETS: Applet[] = [
       ${kv('Domain network', '<span style="color:#4ec9b0;">On</span>')}
       ${kv('Private network', '<span style="color:#4ec9b0;">On</span>')}
       ${kv('Public network', '<span style="color:#4ec9b0;">On</span>')}
-      <p style="color:#8b95a1;font-size:11px;margin-top:12px;">Managed centrally by Northwind IT — local changes are disabled.</p>
+      <p style="color:#8b95a1;font-size:11px;margin-top:12px;">Managed centrally by ${COMPANY.name} IT — local changes are disabled.</p>
     `,
   },
   {
@@ -66,7 +68,7 @@ const APPLETS: Applet[] = [
     render: () => `
       <h3 style="margin:0 0 12px 0;color:#e6e6e6;font-size:14px;">Devices</h3>
       ${row('APEX-OPS-01', 'This PC', '', '')}
-      ${row('Northwind-Print-02', 'Printer · Ready', '', '')}
+      ${row(`${VM_HOST.netbiosDomain}-PRINT-02`, 'Printer · Ready', '', '')}
       ${row('USB Input Device', 'Keyboard', '', '')}
     `,
   },

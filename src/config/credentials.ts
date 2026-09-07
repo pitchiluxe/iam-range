@@ -1,8 +1,11 @@
 /**
- * config/credentials.ts — the canonical set of fictional users shared across all labs.
- * Each user is fictional. Passwords are always '<username>123' for demo purposes.
+ * config/credentials.ts — the accounts a fresh install ships with.
  *
- * Labs 02-10 mutate post-Lab-01 state; these objects are the immutable seed source.
+ * Which is one: the built-in administrator. Every other account in the
+ * directory got there because someone provisioned it, and its password is
+ * whatever they set. The old '<username>123' convention described a seeded
+ * population that no longer exists, and the login screen used to repeat that
+ * promise to people it was no longer true for.
  */
 import { COMPANY } from './company';
 
@@ -14,7 +17,7 @@ export interface SeedUser {
   title: string;
   manager?: string; // username of manager
   mfa: 'none' | 'totp';
-  /** Password for mock IdP sign-in; always '<username>123' */
+  /** Password for mock IdP sign-in. */
   password: string;
   /** Overrides the derived address when it differs from the logon name. */
   email?: string;
@@ -54,7 +57,8 @@ export const SEED_ADMINS: SeedUser[] = [
 
 /** Resolve username → email using the company domain. */
 export function seedEmail(u: SeedUser): string {
-  // Real directories rarely derive the address from the logon name — the
-  // administrator signs in as erickomari and receives mail as eomari.
+  // Real directories rarely derive the address from the logon name, which is
+  // why the override exists: someone can sign in as one string and receive
+  // mail at another.
   return u.email ?? `${u.username}@${COMPANY.domain}`;
 }

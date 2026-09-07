@@ -24,6 +24,7 @@ import {mkTicketId} from '@/domain';
 import type { Ticket, TicketId, TicketKind, TicketPriority, UserId } from '@/domain';
 import { showToast } from '@/ui/toast';
 import { ticketBlip, ticketResolved, urgentAlert } from '@/ui/audio';
+import { generateTickets } from '@/vm/ticketGenerator';
 
 type SortMode = 'priority' | 'created' | 'kind' | 'status';
 type FilterKind = 'all' | TicketKind;
@@ -418,6 +419,53 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
         showQuickCreate();
       });
       row1.appendChild(createBtn);
+
+      /**
+       * Raise the next piece of work this domain is ready for.
+       *
+       * The generator only offers scenarios the environment can support, and
+       * makes any state a ticket claims true before raising it. Ollama writes
+       * the prose when it is running and the built-in wording is used
+       * otherwise — the toast says which, because a learner should know
+       * whether they are reading a model's sentences or ours.
+       *
+       * Until this button existed the asynchronous generator had no caller:
+       * only the synchronous boot-time path ever ran, so the Ollama half of
+       * the feature was unreachable from the running workstation.
+       */
+      const genBtn = btn('🤖 Generate Work', '#4ec9b0', () => {
+        const original = genBtn.textContent;
+        genBtn.setAttribute('disabled', 'true');
+        genBtn.style.opacity = '0.6';
+        genBtn.style.pointerEvents = 'none';
+        genBtn.textContent = '🤖 Generating…';
+        void generateTickets({
+          dir: conductor.dir,
+          tickets: conductor.tickets,
+          audit: conductor.audit,
+          pim: conductor.pim,
+          cloud: conductor.cloud,
+        })
+          .then((res) => {
+            ticketStore.getState().setTickets(conductor.tickets.list());
+            render();
+            showToast(
+              res.raised === 0
+                ? 'Nothing new to raise — work the open queue first.'
+                : `Raised ${res.raised} ticket(s)${res.usedOllama ? ', written by Ollama' : ''}.`,
+              { kind: res.raised === 0 ? 'info' : 'success' },
+            );
+            if (res.raised > 0) ticketBlip();
+          })
+          .catch(() => showToast('Could not generate work.', { kind: 'error' }))
+          .finally(() => {
+            genBtn.removeAttribute('disabled');
+            genBtn.style.opacity = '1';
+            genBtn.style.pointerEvents = 'auto';
+            genBtn.textContent = original;
+          });
+      });
+      row1.appendChild(genBtn);
 
       // Resets the whole environment, not a lab: the directory is re-seeded
       // and every ticket, session and audit entry is discarded.

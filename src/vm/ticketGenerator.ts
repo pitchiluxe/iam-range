@@ -18,8 +18,16 @@
  * the world before the ticket is raised. The model never decides whether a
  * person exists.
  */
-import type { MockAuditLog, MockDirectory, MockTicketQueue, MockPim } from '@/services';
+import type {
+  MockAuditLog,
+  MockDirectory,
+  MockTicketQueue,
+  MockPim,
+  MockCloudTenant,
+  CloudVendor,
+} from '@/services';
 import type { Ticket, TicketKind, UserId } from '@/domain';
+import { COMPANY } from '@/config';
 import { readEnvironment, type EnvironmentState, type Stage } from './environmentStage';
 import { describeForPrompt } from './environmentStage';
 
@@ -29,6 +37,8 @@ export interface GeneratorDeps {
   audit: MockAuditLog;
   /** Optional: PIM scenarios are simply not offered without it. */
   pim?: MockPim;
+  /** Optional: hybrid scenarios are not offered without a tenant. */
+  cloud?: Partial<Record<CloudVendor, MockCloudTenant>>;
 }
 
 /** A unit of work the environment can currently support. */
@@ -243,6 +253,104 @@ function pimScenarios(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
   return out;
 }
 
+
+/**
+ * Hybrid-identity work.
+ *
+ * Each of these creates the bad state for real before describing it, so the
+ * learner investigates an estate rather than reading a story about one. The
+ * evidence they will find — a stale cloud copy, a live app account, two
+ * objects with one UPN — is genuinely there to be found.
+ */
+function cloudScenarios(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
+  const tenant = deps.cloud?.okta ?? deps.cloud?.entra;
+  if (!tenant || env.staffLogons.length === 0) return [];
+
+  /**
+   * Refuse to stage a second hybrid fault while one is still outstanding.
+   *
+   * These scenarios all act on the same tenant, and they interfere: the
+   * duplicate scenario runs a sync cycle, which quietly repairs the leaver
+   * scenario's stale cloud copy, and the leaver's sync claims the UPN the
+   * duplicate scenario needs to be free. Either way a ticket ends up
+   * describing evidence that is no longer there, which is the one thing this
+   * generator exists to prevent.
+   *
+   * Only the faults these scenarios create count. An account that has never
+   * been synced is pending 'create', which is the ordinary state of a domain
+   * nobody has synced yet rather than a fault someone staged.
+   */
+  const faultOutstanding =
+    tenant.duplicates().length > 0 ||
+    tenant.orphanedAppAccounts().length > 0 ||
+    tenant.pendingDelta().some((d) => d.change === 'disable');
+  if (faultOutstanding) return [];
+
+  const vendor = tenant.vendor;
+  const target = env.staffLogons[Math.floor(Math.random() * env.staffLogons.length)]!;
+  const upn = `${target}@${COMPANY.domain}`;
+  const app = tenant.listApps()[0]?.name ?? 'HR Portal';
+  const out: Scenario[] = [];
+
+  // 1. The leaver who still has access. Two causes at once, which is realistic:
+  //    the cloud copy is stale AND the application has no SCIM.
+  out.push({
+    id: `cloud-leaver-${target}`,
+    kind: 'termination',
+    priority: 'urgent',
+    subject: `${target} left on Friday and can still reach ${app}`,
+    body:
+      `${target} was disabled in Active Directory on Friday. Security have just ` +
+      `watched them sign in to ${app} this morning. Work out how they still have ` +
+      `access: check what ${vendor.label} currently believes about ${upn}, when the ` +
+      'last sync cycle ran, and whether the application is provisioned through the ' +
+      'tenant at all. Close every route, not the first one you find.',
+    prepare: ({ dir, cloud }) => {
+      const u = dir.getUserByUsername(target);
+      const t = cloud?.okta ?? cloud?.entra;
+      if (!u || !t) return [];
+      // Build the estate as it was while they still worked here...
+      t.connect();
+      t.grantAppAccount(app, upn);
+      t.sync('system' as UserId);
+      t.openSession(upn);
+      // ...then offboard them on premises only, which is the actual mistake.
+      dir.disableUser(u.id, 'system' as UserId);
+      return [u.id];
+    },
+  });
+
+  // 2. Duplicate identity. Made by the same shortcut that makes it at work:
+  //    somebody created the account in the cloud instead of waiting for sync.
+  out.push({
+    id: `cloud-duplicate-${target}`,
+    kind: 'incident',
+    priority: 'high',
+    subject: `Two ${vendor.label} accounts exist for ${target}`,
+    body:
+      `${target} reports that their ${vendor.label} sign-in sometimes lands them in ` +
+      'an empty account with none of their groups. There are two objects with the ' +
+      `UPN ${upn}: one created directly in the tenant, one synced from Active ` +
+      'Directory. Find them, work out which one is authoritative, and say what should ' +
+      'happen to the other. Get-CloudDuplicate lists them.',
+    prepare: ({ dir, cloud }) => {
+      const u = dir.getUserByUsername(target);
+      const t = cloud?.okta ?? cloud?.entra;
+      if (!u || !t) return [];
+      t.connect();
+      // Cloud-only object first, then the sync that cannot soft-match it.
+      t.createCloudOnly(upn, `${u.displayName} (cloud)`, 'system' as UserId);
+      t.sync('system' as UserId);
+      return [u.id];
+    },
+  });
+
+  // One per pass. Both stage a fault in the same tenant; raising them together
+  // means whichever prepares second overwrites the first one's evidence.
+  const chosen = out[Math.floor(Math.random() * out.length)];
+  return chosen ? [chosen] : [];
+}
+
 function scenariosFor(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
   const byStage: Record<Stage, () => Scenario[]> = {
     bare: () => bareStageScenarios(),
@@ -250,7 +358,11 @@ function scenariosFor(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
     'ready-to-staff': () => staffingScenarios(env),
     // Privileged-access work joins the ordinary queue once the domain is
     // staffed: PIM is a day-to-day discipline, not a separate mode.
-    operating: () => [...operatingScenarios(env), ...pimScenarios(env, deps)],
+    operating: () => [
+      ...operatingScenarios(env),
+      ...pimScenarios(env, deps),
+      ...cloudScenarios(env, deps),
+    ],
   };
   return byStage[env.stage]();
 }

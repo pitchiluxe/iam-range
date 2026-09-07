@@ -1,5 +1,5 @@
 /**
- * ui/consoles/appPortalWindow.ts — the Northwind SSO application portal.
+ * ui/consoles/appPortalWindow.ts — the corporate SSO application portal.
  *
  * The "MyApps" page an end user lands on after signing in. Clicking a tile runs
  * a real SSO attempt through MockAppServer.ssoLogin(), and the page you get
@@ -17,6 +17,7 @@
  */
 import type { VmServices } from '@/vm/session';
 import type { AppId, Application, User } from '@/domain';
+import { COMPANY } from '@/config';
 
 /** Failure reasons from ssoLogin, rendered as the page a user would meet. */
 const FAILURE_PAGES: Record<
@@ -154,7 +155,7 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
     const brand = el(
       'div',
       'font-size:13px;font-weight:600;color:#4ec9b0;',
-      'Northwind App Portal',
+      `${COMPANY.name} App Portal`,
     );
     const spacer = el('div', 'flex:1;');
     const label = el('span', 'font-size:11px;color:#8b95a1;', 'Signed in as');
