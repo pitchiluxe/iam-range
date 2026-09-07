@@ -220,12 +220,23 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     // screen the way Windows puts it rather than a fifth of the way up.
     wrap.style.cssText =
       'text-align:center;user-select:none;position:relative;z-index:1;' +
-      'text-shadow:0 2px 24px rgba(0,0,0,0.45);';
+      'padding:34px 56px 30px;border-radius:16px;' +
+      // Same acrylic as the sign-in panel. Bare text over a gradient read as
+      // unfinished next to it, and the two screens are one screen a second
+      // apart.
+      'background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.16);' +
+      'backdrop-filter:blur(24px) saturate(140%);' +
+      '-webkit-backdrop-filter:blur(24px) saturate(140%);' +
+      'box-shadow:0 18px 50px rgba(0,0,0,0.32),inset 0 1px 0 rgba(255,255,255,0.2);' +
+      'text-shadow:0 2px 18px rgba(0,0,0,0.35);';
 
     const time = document.createElement('div');
-    time.style.cssText = 'font-size:68px;font-weight:200;letter-spacing:-1px;line-height:1;';
+    time.style.cssText =
+      'font-size:66px;font-weight:200;letter-spacing:0.5px;line-height:1;' +
+      'font-variant-numeric:tabular-nums;';
     const date = document.createElement('div');
-    date.style.cssText = 'font-size:19px;font-weight:300;margin-top:6px;opacity:0.92;';
+    date.style.cssText =
+      'font-size:16px;font-weight:400;margin-top:8px;opacity:0.85;letter-spacing:0.6px;';
 
     const tick = (): void => {
       const now = new Date();
@@ -253,7 +264,9 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
 
     const hint = document.createElement('div');
     hint.textContent = 'Press any key or click to sign in';
-    hint.style.cssText = 'margin-top:26px;font-size:13px;opacity:0.6;';
+    hint.style.cssText =
+      'margin-top:22px;padding-top:16px;font-size:12.5px;opacity:0.65;letter-spacing:0.2px;' +
+      'border-top:1px solid rgba(255,255,255,0.14);';
 
     wrap.append(time, date, hint);
 
@@ -264,13 +277,18 @@ export function createLoginScreen(login: LoginSession, onSignedIn: () => void): 
     const brand = document.createElement('div');
     brand.textContent = PRODUCT.name;
     brand.style.cssText =
-      'position:absolute;top:26px;left:30px;font-size:15px;font-weight:600;' +
-      'letter-spacing:0.3px;opacity:0.9;';
+      'position:absolute;top:24px;left:26px;font-size:13px;font-weight:600;' +
+      'letter-spacing:0.6px;padding:7px 14px;border-radius:999px;z-index:1;' +
+      'background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.16);' +
+      'backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);';
 
     const author = document.createElement('div');
     author.textContent = `Created by ${PRODUCT.publisher}`;
     author.style.cssText =
-      'position:absolute;bottom:22px;right:28px;font-size:11.5px;opacity:0.55;';
+      'position:absolute;bottom:22px;right:26px;font-size:11px;opacity:0.8;' +
+      'padding:6px 13px;border-radius:999px;z-index:1;letter-spacing:0.3px;' +
+      'background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);' +
+      'backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);';
 
     overlay.append(brand, author);
     overlay.appendChild(wrap);
