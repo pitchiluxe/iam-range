@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
-    "build:icons": "node build-icons.cjs",
+    "build:icons": "node build-icons.cjs && node build-installer-art.cjs",
     "electron:dev": "electron electron/main.cjs",
     "build:desktop": "npm run build && npm run build:icons && electron-builder --publish never",
     "release": "npm run build && npm run build:icons && electron-builder --publish always"
@@ -47,7 +47,8 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "package.json",
+      "LICENSE.txt"
     ],
     "publish": [
       {
@@ -72,10 +73,24 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "IAM Range"
+      "shortcutName": "IAM Range",
+      "menuCategory": "IAM Range",
+      "license": "LICENSE.txt",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "displayLanguageSelector": false,
+      "language": "1033",
+      "uninstallDisplayName": "IAM Range ${version}"
     },
     "linux": {
       "target": [

@@ -275,11 +275,15 @@ interface WinState {
   preMax: DOMRect | null;
 }
 
+/** Base of the window stacking band. The taskbar is at 5000 and must win. */
+const WINDOW_Z_BASE = 100;
+
 class WindowManager {
   readonly conductor: VmServices;
   readonly desktop: HTMLElement;
   readonly windows: Map<string, WinState> = new Map();
-  zIndex = 200;
+  /** Windows stack from here. The taskbar sits far above, and stays there. */
+  zIndex = WINDOW_Z_BASE;
 
   constructor(conductor: VmServices, desktop: HTMLElement) {
     this.conductor = conductor;
@@ -360,7 +364,18 @@ class WindowManager {
   focus(id: string): void {
     const w = this.windows.get(id);
     if (!w) return;
-    w.el.style.zIndex = String(++this.zIndex);
+
+    // Restack inside a bounded band rather than incrementing forever. The old
+    // counter started at 200 and only ever went up, so a long session would
+    // eventually raise a window above the taskbar — which the taskbar is
+    // supposed to win.
+    const rest = [...this.windows.values()]
+      .filter((other) => other !== w)
+      .sort((a, b) => (Number(a.el.style.zIndex) || 0) - (Number(b.el.style.zIndex) || 0));
+    [...rest, w].forEach((win, i) => {
+      win.el.style.zIndex = String(WINDOW_Z_BASE + i);
+    });
+
     this.updateTaskbar();
   }
 
@@ -385,7 +400,11 @@ class WindowManager {
 
   updateTaskbar(): void {
     const strip = document.getElementById('taskbar-apps');
-    if (strip) strip.innerHTML = this.buildTaskbarHTML();
+    if (!strip) return;
+    strip.innerHTML = this.buildTaskbarHTML();
+    // Labels go before buttons do, which is what Windows does when the strip
+    // fills up.
+    strip.classList.toggle('crowded', this.getOpenIds().length > 6);
   }
 
   buildTaskbarHTML(): string {
@@ -480,7 +499,10 @@ class WindowManager {
     el.appendChild(titleBar);
 
     const body = document.createElement('div');
-    body.style.cssText = 'flex: 1; overflow: auto; min-height: 0; background: var(--panel);';
+    // The class carries the layout, because windows replace style.cssText and
+    // would otherwise remove it. Only the colour is inline.
+    body.className = 'apex-window-body';
+    body.style.cssText = 'background: var(--panel);';
     el.appendChild(body);
 
     // Dragging
@@ -592,6 +614,67 @@ export function createDesktopOverlay(): DesktopOverlay {
   }
   let renderStartMenuApps: (() => void) | null = null;
 
+  /**
+   * Rules a window cannot break from its own render function.
+   *
+   * `!important` because these are set as inline styles by the window manager
+   * and then wiped by any window that assigns `style.cssText`. Losing
+   * `min-height: 0` is what stops a flex child shrinking below its content, so
+   * an inner scroll pane grows forever and its bottom becomes unreachable.
+   */
+  const WINDOW_RULES = `
+    .apex-window-body {
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      overflow: auto;
+    }
+    /* The taskbar owns its strip: windows pass behind it, as in Windows. */
+    #apex-taskbar { z-index: 5000 !important; }
+
+    /*
+     * Taskbar buttons. There was no rule for these at all, so they rendered as
+     * bare <button> elements — the browser default, on a bar that is trying to
+     * look like Windows.
+     *
+     * The shape is Windows 11's: a rounded tile, and an accent bar underneath
+     * that is full width for the window you are in and short for one that is
+     * only open. That underline is how Windows distinguishes focused from
+     * merely running, and it is the part that makes the strip readable when
+     * six things are open.
+     */
+    .taskbar-app {
+      display: flex; align-items: center; gap: 8px;
+      height: 38px; padding: 0 12px; border: none; border-radius: 6px;
+      background: transparent; color: var(--glass-text); cursor: pointer;
+      font-family: inherit; font-size: 12px;
+      /* Every button the same width, as Windows 10 groups them. Sizing each
+         to its own label made the strip a ragged row of different-sized
+         tiles. */
+      width: 176px; flex: 0 0 176px;
+      position: relative; transition: background 120ms ease;
+    }
+    .taskbar-app:hover { background: var(--glass-hover); }
+    .taskbar-app::after {
+      content: ''; position: absolute; left: 50%; transform: translateX(-50%);
+      bottom: 3px; height: 3px; width: 16px; border-radius: 2px;
+      background: var(--accent); opacity: 0.45;
+      transition: width 140ms ease, opacity 140ms ease;
+    }
+    .taskbar-app--active { background: var(--glass-hover); }
+    .taskbar-app--active::after { width: 60%; opacity: 1; }
+    .taskbar-app-label {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .taskbar-app > span:first-child { font-size: 15px; line-height: 1; flex-shrink: 0; }
+    /* Past a handful of windows Windows drops the labels rather than the
+       buttons, so the strip stays usable instead of overflowing. */
+    #taskbar-apps { display: flex; align-items: center; gap: 4px; overflow: hidden; }
+    #taskbar-apps.crowded .taskbar-app { width: 46px; flex: 0 0 46px; padding: 0; justify-content: center; }
+    #taskbar-apps.crowded .taskbar-app-label { display: none; }
+    #start-menu { z-index: 5001 !important; }
+    .apex-window { z-index: 100; }
+  `;
+
   function buildContainer(): HTMLElement {
     const c = document.createElement('div');
     c.id = 'desktop-overlay';
@@ -604,6 +687,10 @@ export function createDesktopOverlay(): DesktopOverlay {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', sans-serif;
       font-size: 14px; color: var(--fg);
     `;
+    const rules = document.createElement('style');
+    rules.textContent = WINDOW_RULES;
+    c.appendChild(rules);
+
     document.body.appendChild(c);
     return c;
   }
@@ -1352,11 +1439,25 @@ export function createDesktopOverlay(): DesktopOverlay {
    * Supervisor and other apps remain accessible from the Start menu
    * and taskbar but are NOT opened by default to keep the desktop calm.
    */
+  /** Height of the taskbar. Windows stop above it rather than sliding under. */
+  const TASKBAR_HEIGHT = 48;
+
+  /**
+   * The area a window may occupy — the screen above the taskbar.
+   *
+   * Windows calls this the work area, and it is why a maximised window stops
+   * short of the bottom of the screen and a dragged one cannot be lost behind
+   * the clock.
+   */
+  function workArea(): { width: number; height: number } {
+    return { width: window.innerWidth, height: window.innerHeight - TASKBAR_HEIGHT };
+  }
+
   /** Stack the open windows, each offset from the last. */
   function cascadeWindows(wm: WindowManager): void {
     const ids = wm.getOpenIds();
-    const width = Math.min(880, Math.round(window.innerWidth * 0.6));
-    const height = Math.min(620, window.innerHeight - 140);
+    const width = Math.min(880, Math.round(workArea().width * 0.6));
+    const height = Math.min(620, workArea().height - 92);
     ids.forEach((id, i) => {
       const state = wm.windows.get(id);
       if (!state) return;
@@ -1372,7 +1473,7 @@ export function createDesktopOverlay(): DesktopOverlay {
     const ids = wm.getOpenIds();
     if (ids.length === 0) return;
     const gap = 8;
-    const total = window.innerWidth - gap * (ids.length + 1);
+    const total = workArea().width - gap * (ids.length + 1);
     const width = Math.floor(total / ids.length);
     const height = window.innerHeight - 48 - gap * 2;
     ids.forEach((id, i) => {
