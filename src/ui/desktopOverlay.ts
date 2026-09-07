@@ -29,6 +29,7 @@ import { renderInterviewWindow } from './consoles/interviewWindow';
 import { renderAuditQueryWindow } from './consoles/auditQueryWindow';
 import { renderAccessReviewWindow } from './consoles/accessReviewWindow';
 import { renderBreakGlassWindow } from './consoles/breakGlassWindow';
+import { renderSheetWindow } from './consoles/sheetWindow';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
@@ -210,6 +211,17 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    // Where a Log Search export or an access review lands. Identity reporting
+    // is done in a spreadsheet, and the workstation could produce the CSVs
+    // with nowhere to open them.
+    id: 'sheets',
+    title: 'Sheets',
+    icon: '📈',
+    width: 1080,
+    height: 640,
+    render: (_c, b) => renderSheetWindow(b),
   },
   {
     id: 'break-glass',
