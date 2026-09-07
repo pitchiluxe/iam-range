@@ -21,6 +21,8 @@ export type {
   PrivilegedRoleSettings,
   PimResult,
 } from './mockPim';
+export { MockFileSystem } from './mockFileSystem';
+export type { FsNode, FsResult, NodeKind } from './mockFileSystem';
 export { MockCloudTenant, VENDORS } from './mockCloudTenant';
 export type {
   CloudVendor,

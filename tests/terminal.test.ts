@@ -10,6 +10,7 @@ import type { CapabilityContext } from '@/services';
 import { tokenize } from '@/terminal/tokenizer';
 import { createShellState, dispatch } from '@/terminal/dispatcher';
 import { formatTable } from '@/terminal/format';
+import { FS } from '@/terminal/shellIntrinsics';
 
 describe('tokenize', () => {
   it('splits a bare cmdlet', () => {
@@ -205,26 +206,46 @@ describe('Windows shell built-ins', () => {
       mfa: 'totp',
     });
     ctx = { dir, idp, tickets, audit, actor: admin.id };
+    // The disk is a module singleton shared with File Explorer, so without
+    // this each test inherits whatever the last one created.
+    FS.reset();
   });
 
-  it('dir lists the simulated filesystem', () => {
+  it('dir lists the real tree, not a fixed array', () => {
     const r = dispatch('dir', ctx);
     expect(r.ok).toBe(true);
     expect(r.output).toContain('Directory of');
-    expect(r.output).toContain('Evidence');
+    // The home folders a domain-joined workstation actually has.
+    expect(r.output).toContain('Documents');
+    expect(r.output).toContain('Scripts');
   });
 
   it('cd changes directory and pwd reflects it', () => {
     const shell = createShellState();
-    dispatch('cd Runbooks', ctx, shell);
-    expect(dispatch('pwd', ctx, shell).output).toContain('Runbooks');
+    dispatch('cd Scripts', ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).toContain('Scripts');
   });
 
   it('cd .. goes back up', () => {
     const shell = createShellState();
-    dispatch('cd Runbooks', ctx, shell);
+    dispatch('cd Scripts', ctx, shell);
     dispatch('cd ..', ctx, shell);
-    expect(dispatch('pwd', ctx, shell).output).not.toContain('Runbooks');
+    expect(dispatch('pwd', ctx, shell).output).not.toContain('Scripts');
+  });
+
+  it('cd takes a multi-segment relative path', () => {
+    // The old implementation matched a single name against a flat array, so
+    // anything containing a backslash simply failed.
+    const shell = createShellState();
+    dispatch('cd C:\\\\', ctx, shell);
+    dispatch(String.raw`cd Windows\System32`, ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).toBe(String.raw`C:\Windows\System32`);
+  });
+
+  it('cd takes an absolute path with a space in it', () => {
+    const shell = createShellState();
+    dispatch(String.raw`cd C:\Program Files`, ctx, shell);
+    expect(dispatch('pwd', ctx, shell).output).toBe(String.raw`C:\Program Files`);
   });
 
   it('cd into a missing directory reports it rather than moving', () => {
@@ -233,6 +254,69 @@ describe('Windows shell built-ins', () => {
     const r = dispatch('cd Nowhere', ctx, shell);
     expect(r.output).toMatch(/Cannot find path/);
     expect(dispatch('pwd', ctx, shell).output).toBe(before);
+  });
+
+  it('mkdir creates a directory that dir then lists', () => {
+    const shell = createShellState();
+    dispatch('mkdir reports', ctx, shell);
+    expect(dispatch('dir', ctx, shell).output).toContain('reports');
+    expect(dispatch('cd reports', ctx, shell).output).toBe('');
+  });
+
+  it('echo writes a file and type reads it back', () => {
+    const shell = createShellState();
+    dispatch('echo hello there > note.txt', ctx, shell);
+    expect(dispatch('type note.txt', ctx, shell).output).toBe('hello there');
+  });
+
+  it('a non-empty directory is not deleted without -Recurse', () => {
+    // The refusal is the safety: rm quietly taking a whole tree with it is how
+    // people lose work.
+    const shell = createShellState();
+    dispatch('mkdir keep', ctx, shell);
+    dispatch(String.raw`echo x > keep\a.txt`, ctx, shell);
+
+    const refused = dispatch('rm keep', ctx, shell);
+    expect(refused.output).toMatch(/not empty/i);
+    expect(dispatch('dir', ctx, shell).output).toContain('keep');
+
+    dispatch('rm keep -Recurse', ctx, shell);
+    expect(dispatch('dir', ctx, shell).output).not.toContain('keep');
+  });
+
+  it('system folders refuse deletion', () => {
+    const shell = createShellState();
+    const r = dispatch(String.raw`rm C:\Windows -Recurse`, ctx, shell);
+    expect(r.output).toMatch(/protected/i);
+  });
+
+  it('copy and rename do what they say', () => {
+    const shell = createShellState();
+    dispatch('echo one > a.txt', ctx, shell);
+    dispatch('copy a.txt b.txt', ctx, shell);
+    expect(dispatch('type b.txt', ctx, shell).output).toBe('one');
+
+    dispatch('ren b.txt c.txt', ctx, shell);
+    const listing = dispatch('dir', ctx, shell).output;
+    expect(listing).toContain('c.txt');
+    expect(listing).not.toContain('b.txt');
+  });
+
+  it('a copied directory is a copy, not the same folder twice', () => {
+    const shell = createShellState();
+    dispatch('mkdir src', ctx, shell);
+    dispatch(String.raw`echo original > src\f.txt`, ctx, shell);
+    dispatch('copy src dst', ctx, shell);
+
+    dispatch(String.raw`echo changed > src\f.txt`, ctx, shell);
+    expect(dispatch(String.raw`type dst\f.txt`, ctx, shell).output).toBe('original');
+  });
+
+  it('tree draws the hierarchy', () => {
+    const shell = createShellState();
+    const out = dispatch(String.raw`tree C:\Users`, ctx, shell).output;
+    expect(out).toContain('admin');
+    expect(out).toContain('Documents');
   });
 
   it('whoami reports the simulated operator, not the real machine user', () => {

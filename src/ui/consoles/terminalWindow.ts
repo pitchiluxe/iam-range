@@ -83,14 +83,16 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
     screen.appendChild(pre);
   };
 
-  /** The prompt line: `PS C:\>` plus a borderless input that looks like a caret. */
+  /** The prompt line: `PS <current directory>>` plus a borderless input that
+   *  looks like a caret. The path was hardcoded, so `cd` moved the shell and
+   *  the prompt carried on claiming the drive root. */
   let activeInput: HTMLInputElement | null = null;
   const newPrompt = (): void => {
     const line = document.createElement('div');
     line.style.cssText = 'display:flex;gap:6px;align-items:baseline;';
 
     const ps = document.createElement('span');
-    ps.textContent = 'PS C:\\>';
+    ps.textContent = `PS ${shell.cwd.path}>`;
     ps.style.cssText = 'color:#4ec9b0;flex-shrink:0;';
 
     const input = document.createElement('input');

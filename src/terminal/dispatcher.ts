@@ -10,7 +10,7 @@
 import { CAPABILITY_BY_CMDLET, CAPABILITIES, type CapabilityContext } from '@/services';
 import { tokenize } from './tokenizer';
 import { formatTable } from './format';
-import { INTRINSIC_HELP, runIntrinsic } from './shellIntrinsics';
+import { FS, INTRINSIC_HELP, runIntrinsic } from './shellIntrinsics';
 
 export interface DispatchResult {
   ok: boolean;
@@ -75,7 +75,10 @@ export interface ShellState {
 }
 
 export function createShellState(): ShellState {
-  return { cwd: { path: 'C:\\Users\\iam.admin' } };
+  // Read from the filesystem rather than repeated here: this said
+  // C:\Users\iam.admin long after that account stopped existing, so every new
+  // shell opened in a directory that was not on the disk.
+  return { cwd: { path: FS.getCwd() } };
 }
 
 export function dispatch(
@@ -91,7 +94,7 @@ export function dispatch(
   // Windows/PowerShell built-ins are tried first: they are shell commands, not
   // IAM capabilities, and a terminal that rejects `dir` or `whoami` reads as
   // broken even though every cmdlet works. cls/exit live there too.
-  const intrinsic = runIntrinsic(name, positional, ctx, shell.cwd);
+  const intrinsic = runIntrinsic(name, positional, ctx, shell.cwd, args);
   if (intrinsic) {
     return intrinsic.control
       ? ok(intrinsic.output, { control: intrinsic.control })

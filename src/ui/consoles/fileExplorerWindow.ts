@@ -4,7 +4,7 @@
  * Mimics Windows Explorer. Left sidebar has Quick Access + This PC.
  * Right pane shows folder contents as icons.
  */
-import { PRODUCT } from '@/config/product';
+import { FS } from '@/terminal/shellIntrinsics';
 
 export function renderFileExplorerWindow(body: HTMLElement): void {
   body.style.cssText =
@@ -162,240 +162,6 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     }
   }
 
-  // Define the "contents" of each simulated folder, with fake but plausible
-  // Explorer metadata (type/size/modified) so the Details view reads as real.
-  const folderContents: Record<string, FEItem[]> = {
-    'C:\\': [
-      {
-        icon: '📁',
-        name: 'Program Files',
-        type: 'folder',
-        path: 'C:\\Program Files',
-        kind: 'File folder',
-        size: '',
-        modified: '8/12/2026 9:14 AM',
-      },
-      {
-        icon: '📁',
-        name: 'Program Files (x86)',
-        type: 'folder',
-        path: 'C:\\Program Files (x86)',
-        kind: 'File folder',
-        size: '',
-        modified: '8/12/2026 9:14 AM',
-      },
-      {
-        icon: '📁',
-        name: 'Users',
-        type: 'folder',
-        path: 'C:\\Users',
-        kind: 'File folder',
-        size: '',
-        modified: '9/2/2026 5:47 PM',
-      },
-      {
-        icon: '📁',
-        name: 'Windows',
-        type: 'folder',
-        path: 'C:\\Windows',
-        kind: 'File folder',
-        size: '',
-        modified: '8/12/2026 9:10 AM',
-      },
-    ],
-    'C:\\Program Files': [
-      {
-        icon: '📁',
-        name: PRODUCT.installFolder,
-        type: 'folder',
-        path: `C:\\Program Files\\${PRODUCT.installFolder}`,
-        kind: 'File folder',
-        size: '',
-        modified: '8/12/2026 9:16 AM',
-      },
-    ],
-    'C:\\Program Files (x86)': [
-      {
-        icon: '📁',
-        name: PRODUCT.installFolder,
-        type: 'folder',
-        path: `C:\\Program Files (x86)\\${PRODUCT.installFolder}`,
-        kind: 'File folder',
-        size: '',
-        modified: '8/12/2026 9:16 AM',
-      },
-    ],
-    'C:\\Users': [
-      {
-        icon: '📁',
-        name: 'Public',
-        type: 'folder',
-        path: 'C:\\Users\\Public',
-        kind: 'File folder',
-        size: '',
-        modified: '9/2/2026 5:47 PM',
-      },
-    ],
-    'C:\\Users\\Public': [
-      {
-        icon: '📁',
-        name: 'Documents',
-        type: 'folder',
-        path: 'C:\\Users\\Public\\Documents',
-        kind: 'File folder',
-        size: '',
-        modified: '9/1/2026 11:02 AM',
-      },
-      {
-        icon: '📁',
-        name: 'Pictures',
-        type: 'folder',
-        path: 'C:\\Users\\Public\\Pictures',
-        kind: 'File folder',
-        size: '',
-        modified: '8/28/2026 4:30 PM',
-      },
-      {
-        icon: '📁',
-        name: 'Downloads',
-        type: 'folder',
-        path: 'C:\\Users\\Public\\Downloads',
-        kind: 'File folder',
-        size: '',
-        modified: '9/2/2026 5:47 PM',
-      },
-    ],
-    'C:\\Users\\Public\\Documents': [
-      {
-        icon: '📄',
-        name: 'policy.docx',
-        type: 'file',
-        kind: 'Microsoft Word Document',
-        size: '48 KB',
-        modified: '8/20/2026 3:11 PM',
-      },
-      {
-        icon: '📄',
-        name: 'onboarding_checklist.pdf',
-        type: 'file',
-        kind: 'Adobe Acrobat Document',
-        size: '212 KB',
-        modified: '8/22/2026 10:05 AM',
-      },
-      {
-        icon: '📄',
-        name: 'rbac_guide.docx',
-        type: 'file',
-        kind: 'Microsoft Word Document',
-        size: '96 KB',
-        modified: '9/1/2026 11:02 AM',
-      },
-    ],
-    'C:\\Users\\Public\\Pictures': [
-      {
-        icon: '🖼️',
-        name: 'banner.png',
-        type: 'file',
-        kind: 'PNG File',
-        size: '1.2 MB',
-        modified: '8/28/2026 4:30 PM',
-      },
-      {
-        icon: '📁',
-        name: 'screenshots',
-        type: 'folder',
-        path: 'C:\\Users\\Public\\Pictures\\Screenshots',
-        kind: 'File folder',
-        size: '',
-        modified: '8/28/2026 4:31 PM',
-      },
-    ],
-    'C:\\Users\\Public\\Pictures\\Screenshots': [
-      {
-        icon: '🖼️',
-        name: 'sso_error_2026-08-28.png',
-        type: 'file',
-        kind: 'PNG File',
-        size: '340 KB',
-        modified: '8/28/2026 4:31 PM',
-      },
-    ],
-    'C:\\Users\\Public\\Downloads': [
-      {
-        icon: '📦',
-        name: 'agent_install.zip',
-        type: 'file',
-        kind: 'Compressed (zipped) Folder',
-        size: '18.4 MB',
-        modified: '9/2/2026 5:47 PM',
-      },
-      {
-        icon: '📄',
-        name: 'readme.txt',
-        type: 'file',
-        kind: 'Text Document',
-        size: '2 KB',
-        modified: '9/2/2026 5:47 PM',
-      },
-    ],
-    [`C:\\Program Files\\${PRODUCT.installFolder}`]: [
-      {
-        icon: '🔐',
-        name: 'IAM Console.exe',
-        type: 'app',
-        launch: 'iam-console',
-        kind: 'Application',
-        size: '54.1 MB',
-        modified: '8/12/2026 9:16 AM',
-      },
-      {
-        icon: '🎫',
-        name: 'Ticket Queue.exe',
-        type: 'app',
-        launch: 'ticket-console',
-        kind: 'Application',
-        size: '38.7 MB',
-        modified: '8/12/2026 9:16 AM',
-      },
-      {
-        icon: '🛡️',
-        name: 'SecOps Dashboard.exe',
-        type: 'app',
-        launch: 'secops-dashboard',
-        kind: 'Application',
-        size: '61.3 MB',
-        modified: '8/12/2026 9:16 AM',
-      },
-    ],
-    'C:\\Windows': [
-      {
-        icon: '📁',
-        name: 'System32',
-        type: 'folder',
-        kind: 'File folder',
-        size: '',
-        modified: '8/12/2026 9:10 AM',
-      },
-      {
-        icon: '📄',
-        name: 'explorer.exe',
-        type: 'file',
-        kind: 'Application',
-        size: '5.1 MB',
-        modified: '8/12/2026 9:10 AM',
-      },
-    ],
-    [`C:\\Program Files (x86)\\${PRODUCT.installFolder}`]: [
-      {
-        icon: '📄',
-        name: 'updater.exe',
-        type: 'file',
-        kind: 'Application',
-        size: '2.8 MB',
-        modified: '8/12/2026 9:16 AM',
-      },
-    ],
-  };
 
   function openItem(item: FEItem): void {
     if (item.type === 'folder' && item.path) {
@@ -486,11 +252,48 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     }
   }
 
+  /** Icons by extension, so the list reads like Explorer rather than a table. */
+  const FILE_ICONS: Record<string, string> = {
+    txt: '\u{1F4C4}',
+    md: '\u{1F4C4}',
+    csv: '\u{1F4CA}',
+    ps1: '\u{1F4DC}',
+    log: '\u{1F4CB}',
+    json: '\u{1F5C3}\uFE0F',
+  };
+
+  /**
+   * The folder's contents, read from the workstation's disk.
+   *
+   * Explorer used to hold its own map of what each folder contained, so a
+   * directory created with mkdir never showed up here and one deleted here was
+   * still in the terminal. There is one disk now, and both windows read it.
+   */
+  function itemsFor(path: string): FEItem[] {
+    const entries = FS.list(path);
+    if (!entries) return [];
+    return entries.map((entry) => {
+      const extension = entry.name.includes('.')
+        ? entry.name.split('.').pop()!.toLowerCase()
+        : '';
+      const bytes = (entry.content ?? '').length;
+      return {
+        icon: entry.kind === 'dir' ? '\u{1F4C1}' : (FILE_ICONS[extension] ?? '\u{1F4C4}'),
+        name: entry.name,
+        type: entry.kind === 'dir' ? 'folder' : 'file',
+        path: `${path.replace(/\\$/, '')}\\${entry.name}`,
+        kind: entry.kind === 'dir' ? 'File folder' : `${extension.toUpperCase() || 'File'} file`,
+        size: entry.kind === 'dir' ? '' : `${Math.max(1, Math.ceil(bytes / 1024))} KB`,
+        modified: new Date(entry.modified).toLocaleString(),
+      };
+    });
+  }
+
   function renderFolderContents(path: string): void {
     renderBreadcrumb(path);
     viewToggle.textContent = viewMode === 'details' ? '⊞ Large icons' : '☰ Details';
 
-    const items = folderContents[path] ?? [];
+    const items = itemsFor(path);
     if (items.length === 0) {
       grid.style.display = 'none';
       table.style.display = 'flex';
