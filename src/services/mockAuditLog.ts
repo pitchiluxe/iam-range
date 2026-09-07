@@ -45,6 +45,10 @@ export class MockAuditLog {
         ...(input.ip ? { ip: input.ip } : {}),
         ...(input.mfaUsed ? { mfaUsed: input.mfaUsed } : {}),
         ...(input.diff ? { diff: input.diff } : {}),
+        // `note` was declared on the input and never copied onto the event, so
+        // every note any caller passed was accepted and silently dropped. The
+        // ticket reviewer writes its findings here, and they have to survive.
+        ...(input.note ? { note: input.note } : {}),
       };
     } catch (e) {
       report(

@@ -25,6 +25,7 @@ import type { Ticket, TicketId, TicketKind, TicketPriority, UserId } from '@/dom
 import { showToast } from '@/ui/toast';
 import { ticketBlip, ticketResolved, urgentAlert } from '@/ui/audio';
 import { generateTickets } from '@/vm/ticketGenerator';
+import { reviewTicketSync, explainReview, type TicketReview } from '@/vm/ticketReview';
 
 type SortMode = 'priority' | 'created' | 'kind' | 'status';
 type FilterKind = 'all' | TicketKind;
@@ -237,6 +238,14 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
   let filterKind: FilterKind = 'all';
   let searchQuery = '';
   const selectedIds = new Set<TicketId>();
+  /**
+   * The verdict on each resolved ticket.
+   *
+   * Held here rather than on the ticket: the review is about the state of the
+   * directory at the moment of resolution, and re-running it later against a
+   * changed directory would answer a different question.
+   */
+  const reviews = new Map<string, TicketReview | 'pending'>();
   const expandedCommentIds = new Set<TicketId>(); // tracks which ticket comment sections are open
   /** Half-typed comments, kept across re-renders. render() rebuilds the card
    *  DOM, so without this a store update or SLA change wiped what you typed. */
@@ -657,12 +666,96 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
             ticketResolved();
             selectedIds.delete(t.id);
             showToast(`✓ Resolved: ${t.subject}`, { kind: 'success' });
+
+            // Marking it resolved is a claim; this checks it against the
+            // directory. The checks are instant and decide the verdict, so it
+            // is shown straight away — a model, if one is running, only
+            // rewrites the explanation afterwards.
+            const review = reviewTicketSync(
+              t,
+              {
+                dir: conductor.dir,
+                audit: conductor.audit,
+                pim: conductor.pim,
+                cloud: conductor.cloud,
+              },
+              'system' as UserId,
+            );
+            reviews.set(t.id, review);
+            if (!review.passed) {
+              showToast('The review found work still outstanding on that ticket.', {
+                kind: 'warn',
+              });
+            }
+            render();
+
+            void explainReview(t, review).then((written) => {
+              if (!written) return;
+              reviews.set(t.id, { ...review, summary: written, source: 'ollama' });
+              render();
+            });
+            return;
           } catch (e) {
             showToast(String(e), { kind: 'error' });
           }
           render();
         }),
       );
+      // The verdict, under the ticket it belongs to.
+      const review = reviews.get(t.id);
+      if (review) {
+        const panel = document.createElement('div');
+        const pending = review === 'pending';
+        const ok = !pending && review.passed;
+        panel.style.cssText =
+          'margin-top:10px;padding:10px 12px;border-radius:6px;font-size:11.5px;' +
+          'line-height:1.6;border:1px solid ' +
+          (pending ? 'var(--border)' : ok ? 'rgba(78,201,176,0.4)' : 'rgba(255,154,138,0.4)') +
+          ';background:var(--panel-alt);';
+
+        const head = document.createElement('div');
+        head.style.cssText = 'font-weight:600;margin-bottom:6px;color:' +
+          (pending ? 'var(--muted)' : ok ? 'var(--accent)' : 'var(--err)') + ';';
+        head.textContent = pending
+          ? 'Reviewing the work…'
+          : ok
+            ? '✓ Review passed'
+            : '✗ Review found outstanding work';
+        panel.appendChild(head);
+
+        if (!pending) {
+          const summary = document.createElement('div');
+          summary.textContent = review.summary;
+          summary.style.cssText = 'color:var(--fg);white-space:pre-wrap;margin-bottom:8px;';
+          panel.appendChild(summary);
+
+          // Every check, passed or not. A verdict without the evidence behind
+          // it is asking to be taken on trust.
+          for (const check of review.checks) {
+            const row = document.createElement('div');
+            row.style.cssText =
+              'display:flex;gap:7px;align-items:flex-start;color:var(--muted);margin-top:3px;';
+            const mark = document.createElement('span');
+            mark.textContent = check.passed ? '✓' : '✗';
+            mark.style.cssText = `flex-shrink:0;color:${check.passed ? 'var(--accent)' : 'var(--err)'};`;
+            const text = document.createElement('span');
+            text.textContent = `${check.label} — ${check.detail}`;
+            row.append(mark, text);
+            panel.appendChild(row);
+          }
+
+          const source = document.createElement('div');
+          source.textContent =
+            review.source === 'ollama'
+              ? 'Checks run against the directory; feedback written by Ollama.'
+              : 'Checks run against the directory. Written feedback needs Ollama.';
+          source.style.cssText = 'color:var(--muted);opacity:0.7;margin-top:8px;font-size:10.5px;';
+          panel.appendChild(source);
+        }
+
+        card.appendChild(panel);
+      }
+
       const escalateBtn = btn('⚠️ Escalate', '#f97316', () => {
         queue.escalate(t.id, 'system' as UserId);
         showToast(`Escalated to urgent.`, { kind: 'warn' });
@@ -718,8 +811,48 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       for (const t of resolved.slice(-5).reverse()) {
         const r = document.createElement('div');
         r.style.cssText =
-          'font-size:12px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border);';
-        r.textContent = `✓ ${t.subject}`;
+          'font-size:12px;color:var(--muted);padding:6px 0;border-bottom:1px solid var(--border);';
+
+        const line = document.createElement('div');
+        line.textContent = `✓ ${t.subject}`;
+        r.appendChild(line);
+
+        // The verdict belongs next to the ticket you just said you finished.
+        const review = reviews.get(t.id);
+        if (review) {
+          const pending = review === 'pending';
+          const ok = !pending && review.passed;
+
+          const badge = document.createElement('div');
+          badge.style.cssText =
+            'margin-top:5px;font-size:11px;color:' +
+            (pending ? 'var(--muted)' : ok ? 'var(--accent)' : 'var(--err)') + ';';
+          badge.textContent = pending
+            ? 'Reviewing…'
+            : ok
+              ? 'Review passed — the work is visible in the directory.'
+              : 'Review found outstanding work.';
+          r.appendChild(badge);
+
+          if (!pending && !ok) {
+            // Only the failures, and only their detail. Listing the passes
+            // here would bury the thing the learner needs to go and fix.
+            for (const check of review.checks.filter((c) => !c.passed)) {
+              const row = document.createElement('div');
+              row.style.cssText =
+                'font-size:11px;color:var(--fg);opacity:0.85;margin-top:3px;padding-left:12px;' +
+                'line-height:1.5;';
+              row.textContent = `· ${check.detail}`;
+              r.appendChild(row);
+            }
+            const summary = document.createElement('div');
+            summary.textContent = review.summary;
+            summary.style.cssText =
+              'font-size:11px;color:var(--muted);margin-top:6px;white-space:pre-wrap;line-height:1.55;';
+            r.appendChild(summary);
+          }
+        }
+
         wrap.appendChild(r);
       }
     }

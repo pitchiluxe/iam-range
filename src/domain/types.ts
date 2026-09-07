@@ -318,6 +318,9 @@ export interface AuditEvent {
     | 'session.revoked'
     | 'ticket.created'
     | 'ticket.resolved'
+    /** A resolved ticket was checked against the directory, and what was found. */
+    | 'ticket.review.passed'
+    | 'ticket.review.failed'
     | 'ticket.escalated';
   /** Polysemous target: UserId | GroupId | RoleId | AppId | TicketId | SessionId */
   targetId?: string;
@@ -330,6 +333,14 @@ export interface AuditEvent {
   /** For signin events. */
   ip?: string;
   mfaUsed?: MfaMethod;
+  /**
+   * Free text about what happened — the ticket reviewer's findings, for one.
+   *
+   * MockAuditLog accepted this on its input and never copied it onto the
+   * event, so every note ever passed was silently dropped. Having it on the
+   * event is what makes that a compile error rather than a discovery.
+   */
+  note?: string;
 }
 
 // ---------------------------------------------------------------------------
