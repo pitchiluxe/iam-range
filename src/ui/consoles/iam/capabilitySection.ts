@@ -23,7 +23,7 @@ const LABEL_CSS =
   'display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;' +
   'color:var(--muted);margin-bottom:3px;';
 const FIELD_CSS =
-  'background:#0e1116;color:var(--fg);border:1px solid var(--border);' +
+  'background:var(--panel);color:var(--fg);border:1px solid var(--border);' +
   'border-radius:3px;padding:5px 7px;font-size:12px;min-width:150px;';
 
 function h3(text: string, synopsis: string): HTMLElement {
@@ -171,7 +171,7 @@ function buildTable(rows: Record<string, unknown>[]): HTMLElement {
     for (const c of cols) {
       const td = document.createElement('td');
       td.textContent = String(r[c] ?? '—');
-      td.style.cssText = 'padding:3px 6px;border-bottom:1px solid #1b1f24;';
+      td.style.cssText = 'padding:3px 6px;border-bottom:1px solid var(--panel-alt);';
       tr.appendChild(td);
     }
     table.appendChild(tr);

@@ -28,14 +28,14 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   root.style.cssText =
     'display:flex;flex-direction:column;height:100%;background:#1a1d22;' +
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;" +
-    'font-size:12px;color:#c8cdd3;';
+    'font-size:12px;color:var(--fg);';
   body.appendChild(root);
 
   // ── Chrome: nav buttons, URL bar, Go ──────────────────────────────────────
   const chrome = document.createElement('div');
   chrome.style.cssText =
-    'display:flex;align-items:center;gap:6px;padding:6px 8px;background:#232830;' +
-    'border-bottom:1px solid #2d343d;flex-shrink:0;';
+    'display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--border);' +
+    'border-bottom:1px solid var(--border);flex-shrink:0;';
 
   const history: string[] = [];
   let historyPos = -1;
@@ -46,7 +46,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
     b.title = title;
     b.style.cssText =
       'width:28px;height:28px;border-radius:4px;border:none;background:transparent;' +
-      'color:#8b95a1;font-size:14px;cursor:pointer;';
+      'color:var(--muted);font-size:14px;cursor:pointer;';
     return b;
   };
   const backBtn = mkNav('←', 'Back');
@@ -57,13 +57,13 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   urlBar.type = 'text';
   urlBar.placeholder = 'Search identity docs — only IAM sites are reachable';
   urlBar.style.cssText =
-    'flex:1;background:#0e1116;color:#e6e6e6;border:1px solid #2d343d;border-radius:4px;' +
+    'flex:1;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:4px;' +
     'padding:5px 10px;font-size:12px;font-family:monospace;outline:none;';
 
   const goBtn = document.createElement('button');
   goBtn.textContent = 'Go';
   goBtn.style.cssText =
-    'background:#4ec9b0;color:#06231d;border:none;border-radius:4px;padding:5px 12px;' +
+    'background:var(--accent);color:#06231d;border:none;border-radius:4px;padding:5px 12px;' +
     'font-size:12px;font-weight:600;cursor:pointer;';
 
   // A site that refuses framing renders as a blank box with no explanation.
@@ -72,7 +72,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   openExt.textContent = 'Open ↗';
   openExt.title = 'Open this page in your system browser';
   openExt.style.cssText =
-    'background:transparent;color:#8b95a1;border:1px solid #2d343d;border-radius:4px;' +
+    'background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:4px;' +
     'padding:5px 10px;font-size:11px;cursor:pointer;';
   openExt.addEventListener('click', () => {
     const target = normalizeUrl(urlBar.value);
@@ -86,13 +86,13 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   // ── Bookmarks ─────────────────────────────────────────────────────────────
   const marks = document.createElement('div');
   marks.style.cssText =
-    'display:flex;gap:4px;padding:5px 8px;background:#1f242b;border-bottom:1px solid #2d343d;' +
+    'display:flex;gap:4px;padding:5px 8px;background:#1f242b;border-bottom:1px solid var(--border);' +
     'flex-shrink:0;overflow-x:auto;white-space:nowrap;';
   for (const bm of IAM_BOOKMARKS) {
     const b = document.createElement('button');
     b.textContent = bm.label;
     b.style.cssText =
-      'background:transparent;border:1px solid #2d343d;border-radius:3px;color:#8b95a1;' +
+      'background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--muted);' +
       'padding:3px 8px;font-size:11px;cursor:pointer;flex-shrink:0;';
     b.addEventListener('click', () => go(bm.url));
     marks.appendChild(b);
@@ -101,12 +101,12 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
 
   // ── Viewport ──────────────────────────────────────────────────────────────
   const viewport = document.createElement('div');
-  viewport.style.cssText = 'flex:1;position:relative;background:#0e1116;overflow:auto;';
+  viewport.style.cssText = 'flex:1;position:relative;background:var(--panel);overflow:auto;';
   root.appendChild(viewport);
 
   const status = document.createElement('div');
   status.style.cssText =
-    'padding:4px 10px;background:#1f242b;border-top:1px solid #2d343d;font-size:10.5px;' +
+    'padding:4px 10px;background:#1f242b;border-top:1px solid var(--border);font-size:10.5px;' +
     'color:#6b7280;flex-shrink:0;';
   status.textContent = 'Restricted browser — IAM and identity resources only.';
   root.appendChild(status);
@@ -119,10 +119,10 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
       'height:100%;padding:40px;text-align:center;gap:10px;';
     const h = document.createElement('div');
     h.textContent = title;
-    h.style.cssText = `font-size:14px;font-weight:600;color:${tone === 'block' ? '#f48771' : '#4ec9b0'};`;
+    h.style.cssText = `font-size:14px;font-weight:600;color:${tone === 'block' ? 'var(--err)' : 'var(--accent)'};`;
     const p = document.createElement('div');
     p.textContent = detail;
-    p.style.cssText = 'font-size:12px;color:#8b95a1;max-width:460px;line-height:1.6;';
+    p.style.cssText = 'font-size:12px;color:var(--muted);max-width:460px;line-height:1.6;';
     wrap.append(h, p);
     viewport.appendChild(wrap);
   };

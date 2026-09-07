@@ -61,13 +61,13 @@ export function renderStickyNotesWindow(body: HTMLElement): void {
   const toolbar = document.createElement('div');
   toolbar.style.cssText = `
     position:absolute;bottom:0;left:0;right:0;height:36px;
-    background:rgba(27,31,36,0.9);border-top:1px solid #2d343d;
+    background:rgba(27,31,36,0.9);border-top:1px solid var(--border);
     display:flex;align-items:center;padding:0 10px;gap:8px;z-index:10;
   `;
   const addBtn = document.createElement('button');
   addBtn.textContent = '+ New Note';
   addBtn.style.cssText = `
-    background:#4ec9b0;color:#0e1116;border:none;border-radius:4px;
+    background:var(--accent);color:var(--panel);border:none;border-radius:4px;
     padding:4px 12px;font-size:11px;cursor:pointer;font-weight:600;
   `;
   toolbar.appendChild(addBtn);

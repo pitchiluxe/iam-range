@@ -59,23 +59,23 @@ export function openDocumentation(articleId: string): void {
 
 export function renderDocumentationWindow(body: HTMLElement): void {
   body.style.cssText =
-    'display:flex;height:100%;background:#0e1116;font-family:"Segoe UI",system-ui,sans-serif;' +
-    'color:#e6e6e6;';
+    'display:flex;height:100%;background:var(--panel);font-family:"Segoe UI",system-ui,sans-serif;' +
+    'color:var(--fg);';
 
   // --- Sidebar: search + contents ------------------------------------------
   const side = document.createElement('div');
   side.style.cssText =
-    'flex-shrink:0;width:260px;background:#161b22;border-right:1px solid #2d343d;' +
+    'flex-shrink:0;width:260px;background:var(--panel-alt);border-right:1px solid var(--border);' +
     'display:flex;flex-direction:column;';
 
   const searchWrap = document.createElement('div');
-  searchWrap.style.cssText = 'padding:10px;border-bottom:1px solid #2d343d;';
+  searchWrap.style.cssText = 'padding:10px;border-bottom:1px solid var(--border);';
   const search = document.createElement('input');
   search.type = 'search';
   search.placeholder = 'Search the reference…';
   search.style.cssText =
-    'width:100%;box-sizing:border-box;padding:7px 9px;border-radius:4px;border:1px solid #2d343d;' +
-    'background:#0e1116;color:#e6e6e6;font-size:12px;outline:none;';
+    'width:100%;box-sizing:border-box;padding:7px 9px;border-radius:4px;border:1px solid var(--border);' +
+    'background:var(--panel);color:var(--fg);font-size:12px;outline:none;';
   searchWrap.appendChild(search);
   side.appendChild(searchWrap);
 
@@ -97,7 +97,7 @@ export function renderDocumentationWindow(body: HTMLElement): void {
     btn.dataset.articleId = a.id;
     btn.style.cssText =
       'display:block;width:100%;text-align:left;padding:6px 12px;border:none;cursor:pointer;' +
-      'font-size:11.5px;line-height:1.4;background:transparent;color:#c9d1d9;';
+      'font-size:11.5px;line-height:1.4;background:transparent;color:var(--fg);';
     btn.onclick = () => select(a.id);
     return btn;
   }
@@ -110,7 +110,7 @@ export function renderDocumentationWindow(body: HTMLElement): void {
       const hits = searchArticles(query, 20);
       if (hits.length === 0) {
         const empty = document.createElement('div');
-        empty.style.cssText = 'padding:12px;font-size:11.5px;color:#8b95a1;';
+        empty.style.cssText = 'padding:12px;font-size:11.5px;color:var(--muted);';
         empty.textContent = 'No article matches that.';
         contents.appendChild(empty);
         return;
@@ -127,7 +127,7 @@ export function renderDocumentationWindow(body: HTMLElement): void {
       head.textContent = TOPIC_LABEL[topic];
       head.style.cssText =
         'padding:10px 12px 4px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;' +
-        'color:#6b7482;';
+        'color:var(--muted);';
       contents.appendChild(head);
       for (const a of inTopic) contents.appendChild(entry(a));
     }
@@ -138,7 +138,7 @@ export function renderDocumentationWindow(body: HTMLElement): void {
     for (const el of Array.from(contents.querySelectorAll<HTMLElement>('[data-article-id]'))) {
       const on = el.dataset.articleId === currentId;
       el.style.background = on ? '#2563eb' : 'transparent';
-      el.style.color = on ? '#fff' : '#c9d1d9';
+      el.style.color = on ? '#fff' : 'var(--fg)';
     }
   }
 
@@ -161,7 +161,7 @@ export function renderDocumentationWindow(body: HTMLElement): void {
     const topic = document.createElement('div');
     topic.textContent = TOPIC_LABEL[a.topic];
     topic.style.cssText =
-      'font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#4ec9b0;margin-bottom:6px;';
+      'font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;';
 
     const h = document.createElement('h1');
     h.textContent = a.title;
@@ -169,7 +169,7 @@ export function renderDocumentationWindow(body: HTMLElement): void {
 
     const sub = document.createElement('div');
     sub.textContent = a.summary;
-    sub.style.cssText = 'font-size:12.5px;color:#8b95a1;margin-bottom:18px;';
+    sub.style.cssText = 'font-size:12.5px;color:var(--muted);margin-bottom:18px;';
 
     pane.append(topic, h, sub);
 
@@ -177,10 +177,10 @@ export function renderDocumentationWindow(body: HTMLElement): void {
       const el = document.createElement(block.startsWith('    ') ? 'pre' : 'p');
       el.style.cssText =
         block.startsWith('    ')
-          ? 'background:#161b22;border:1px solid #2d343d;border-radius:4px;padding:12px 14px;' +
+          ? 'background:var(--panel-alt);border:1px solid var(--border);border-radius:4px;padding:12px 14px;' +
             'font-family:Consolas,Monaco,monospace;font-size:11.5px;line-height:1.5;' +
-            'overflow-x:auto;color:#c9d1d9;'
-          : 'font-size:13px;line-height:1.75;margin:0 0 14px;max-width:70ch;color:#d7dde4;';
+            'overflow-x:auto;color:var(--fg);'
+          : 'font-size:13px;line-height:1.75;margin:0 0 14px;max-width:70ch;color:var(--fg);';
 
       if (block.startsWith('    ')) {
         el.textContent = block.replace(/^ {4}/gm, '');

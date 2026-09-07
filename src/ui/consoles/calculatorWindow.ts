@@ -37,13 +37,13 @@ export function renderCalculatorWindow(body: HTMLElement): void {
   const root = document.createElement('div');
   root.style.cssText =
     'display:flex;flex-direction:column;height:100%;' +
-    "font-family:'Segoe UI',-apple-system,sans-serif;color:#e6e6e6;";
+    "font-family:'Segoe UI',-apple-system,sans-serif;color:var(--fg);";
   body.appendChild(root);
 
   // ── Display ───────────────────────────────────────────────────────────────
   const display = document.createElement('div');
   display.style.cssText =
-    'padding:14px 16px 10px;text-align:right;background:#0e1116;flex-shrink:0;';
+    'padding:14px 16px 10px;text-align:right;background:var(--panel);flex-shrink:0;';
 
   const exprEl = document.createElement('div');
   exprEl.style.cssText =
@@ -133,7 +133,7 @@ export function renderCalculatorWindow(body: HTMLElement): void {
   // ── Keypad ────────────────────────────────────────────────────────────────
   const pad = document.createElement('div');
   pad.style.cssText =
-    'flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#2d343d;' +
+    'flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);' +
     'min-height:0;';
   for (const row of KEYS) {
     for (const key of row) {
@@ -141,14 +141,14 @@ export function renderCalculatorWindow(body: HTMLElement): void {
       b.textContent = key;
       const isOp = key in OP_FOR || key === '=';
       b.style.cssText =
-        `border:none;cursor:pointer;font-size:16px;color:${key === '=' ? '#06231d' : '#e6e6e6'};` +
-        `background:${key === '=' ? '#4ec9b0' : isOp ? '#242a32' : '#1f242b'};` +
+        `border:none;cursor:pointer;font-size:16px;color:${key === '=' ? '#06231d' : 'var(--fg)'};` +
+        `background:${key === '=' ? 'var(--accent)' : isOp ? '#242a32' : '#1f242b'};` +
         'transition:background .1s;';
       b.addEventListener('mouseenter', () => {
-        if (key !== '=') b.style.background = '#2d343d';
+        if (key !== '=') b.style.background = 'var(--border)';
       });
       b.addEventListener('mouseleave', () => {
-        b.style.background = key === '=' ? '#4ec9b0' : isOp ? '#242a32' : '#1f242b';
+        b.style.background = key === '=' ? 'var(--accent)' : isOp ? '#242a32' : '#1f242b';
       });
       b.addEventListener('click', () => press(key));
       pad.appendChild(b);

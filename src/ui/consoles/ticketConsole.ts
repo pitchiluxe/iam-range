@@ -35,7 +35,7 @@ const priorityColors: Record<
 > = {
   urgent: { bg: '#2a1414', border: '#ef4444', badge: '#ef4444', emoji: '🔴', rank: 0 },
   high: { bg: '#2a1f14', border: '#f97316', badge: '#f97316', emoji: '🟠', rank: 1 },
-  normal: { bg: '#1b1f24', border: '#3b82f6', badge: '#3b82f6', emoji: '🔵', rank: 2 },
+  normal: { bg: 'var(--panel-alt)', border: '#3b82f6', badge: '#3b82f6', emoji: '🔵', rank: 2 },
   low: { bg: '#18191b', border: '#6b7280', badge: '#6b7280', emoji: '⚪', rank: 3 },
 };
 
@@ -100,7 +100,7 @@ function formatSLA(
   const sec = Math.floor((remaining % 60000) / 1000);
   // Color shift: > 50% remaining = green, > 25% = yellow, else red
   const pct = remaining / sla;
-  const color = pct > 0.5 ? '#4ec9b0' : pct > 0.25 ? '#d7ba7d' : '#f48771';
+  const color = pct > 0.5 ? 'var(--accent)' : pct > 0.25 ? '#d7ba7d' : 'var(--err)';
   return { text: `⏱️ ${totalMin}m ${String(sec).padStart(2, '0')}s`, color };
 }
 
@@ -196,8 +196,8 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     style.id = 'ticket-console-scroll-css';
     style.textContent =
       '#ticket-console-wrap::-webkit-scrollbar{width:6px}' +
-      '#ticket-console-wrap::-webkit-scrollbar-track{background:#0e1116}' +
-      '#ticket-console-wrap::-webkit-scrollbar-thumb{background:#2d343d;border-radius:3px}' +
+      '#ticket-console-wrap::-webkit-scrollbar-track{background:var(--panel)}' +
+      '#ticket-console-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}' +
       '#ticket-console-wrap::-webkit-scrollbar-thumb:hover{background:#3d4a56}';
     document.head.appendChild(style);
   }
@@ -209,7 +209,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
   wrap.id = 'ticket-console-wrap';
   wrap.style.cssText =
     'height:100%;overflow-y:auto;padding:16px;box-sizing:border-box;' +
-    'scrollbar-width:thin;scrollbar-color:#2d343d #0e1116;';
+    'scrollbar-width:thin;scrollbar-color:var(--border) var(--panel);';
   body.innerHTML = '';
   body.style.cssText = 'overflow:hidden;';
   body.appendChild(wrap);
@@ -348,7 +348,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     /* Summary — always show, even with 1-2 tickets */
     const sum = document.createElement('div');
     sum.style.cssText =
-      'display:flex;align-items:center;gap:10px;padding:8px 12px;background:#1b1f24;border:1px solid var(--border);border-radius:6px;margin-bottom:12px;';
+      'display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;margin-bottom:12px;';
     sum.innerHTML = `
       <span style="font-size:20px;">🎫</span>
       <div style="flex:1;">
@@ -379,7 +379,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       search.placeholder = '🔍 Search subject / body…';
       search.value = searchQuery;
       search.style.cssText =
-        'flex:1;min-width:160px;background:#0e1116;color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:5px 8px;font-size:12px;';
+        'flex:1;min-width:160px;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:5px 8px;font-size:12px;';
       search.addEventListener('input', () => {
         searchQuery = search.value;
         render();
@@ -395,7 +395,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       const select = document.createElement('select');
       select.id = 'ticket-sort-select';
       select.style.cssText =
-        'background:#0e1116;color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;cursor:pointer;';
+        'background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;cursor:pointer;';
       const options: { value: SortMode; label: string }[] = [
         { value: 'priority', label: 'Priority (Urgent → Low)' },
         { value: 'created', label: 'Created (Newest First)' },
@@ -433,7 +433,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
        * only the synchronous boot-time path ever ran, so the Ollama half of
        * the feature was unreachable from the running workstation.
        */
-      const genBtn = btn('🤖 Generate Work', '#4ec9b0', () => {
+      const genBtn = btn('🤖 Generate Work', 'var(--accent)', () => {
         const original = genBtn.textContent;
         genBtn.setAttribute('disabled', 'true');
         genBtn.style.opacity = '0.6';
@@ -469,7 +469,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
 
       // Resets the whole environment, not a lab: the directory is re-seeded
       // and every ticket, session and audit entry is discarded.
-      const resetBtn = btn('🔄 Reset Environment', '#f48771', () => {
+      const resetBtn = btn('🔄 Reset Environment', 'var(--err)', () => {
         if (window.confirm('Reset the environment? Every change you have made will be lost.')) {
           conductor.reset();
           selectedIds.clear();
@@ -506,8 +506,8 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
         const isActive = fk === filterKind;
         const count = fk === 'all' ? allOpen.length : allOpen.filter((t) => t.kind === fk).length;
         chip.style.cssText = `
-          background:${isActive ? 'var(--accent)' : '#0e1116'};
-          color:${isActive ? '#0e1116' : 'var(--muted)'};
+          background:${isActive ? 'var(--accent)' : 'var(--panel)'};
+          color:${isActive ? 'var(--panel)' : 'var(--muted)'};
           border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};
           border-radius:12px;padding:2px 10px;font-size:11px;cursor:pointer;
           font-weight:${isActive ? '600' : '400'};
@@ -621,7 +621,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       const elapsed = formatElapsed(Date.now() - t.createdAt);
       const indexLabel =
         allOpen.length > 1
-          ? `<span style="color:var(--muted);font-size:10px;background:#0e1116;padding:1px 5px;border-radius:3px;font-family:monospace;">${idx + 1}</span>`
+          ? `<span style="color:var(--muted);font-size:10px;background:var(--panel);padding:1px 5px;border-radius:3px;font-family:monospace;">${idx + 1}</span>`
           : '';
       card.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px;">
@@ -758,7 +758,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     if (allOpen.length > 0) {
       const hint = document.createElement('div');
       hint.style.cssText =
-        'margin-top:10px;padding:6px 10px;background:#0e1116;border:1px dashed var(--border);border-radius:3px;color:var(--muted);font-size:10px;';
+        'margin-top:10px;padding:6px 10px;background:var(--panel);border:1px dashed var(--border);border-radius:3px;color:var(--muted);font-size:10px;';
       hint.innerHTML =
         '⌨️ <strong>Shortcuts:</strong> <kbd>1-9</kbd> focus card · <kbd>R</kbd> resolve top · <kbd>A</kbd> assign top · <kbd>F</kbd> or <kbd>/</kbd> search · <kbd>Esc</kbd> clear selection';
       wrap.appendChild(hint);
@@ -777,7 +777,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     const block = document.createElement('div');
     block.className = 'ticket-comments';
     block.style.cssText =
-      'margin-top:8px;padding:8px 10px;background:#0e1116;border:1px solid var(--border);border-radius:3px;';
+      'margin-top:8px;padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:3px;';
 
     if (ticket.comments.length === 0) {
       const empty = document.createElement('div');
@@ -788,7 +788,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       for (const c of ticket.comments) {
         const row = document.createElement('div');
         row.style.cssText =
-          'padding:4px 0;border-bottom:1px solid #1b1f24;font-size:11px;color:var(--fg);';
+          'padding:4px 0;border-bottom:1px solid var(--panel-alt);font-size:11px;color:var(--fg);';
         row.innerHTML = `<div><strong style="color:var(--accent);">${c.authorId}</strong> <span style="color:var(--muted);font-size:10px;">${new Date(c.at).toLocaleTimeString()}</span></div><div style="color:var(--muted);margin-top:2px;">${c.body}</div>`;
         block.appendChild(row);
       }
@@ -800,7 +800,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     input.type = 'text';
     input.placeholder = 'Add a comment…';
     input.style.cssText =
-      'flex:1;background:#1b1f24;color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-size:11px;';
+      'flex:1;background:var(--panel-alt);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-size:11px;';
     // Re-renders rebuild this element, so the draft lives outside the DOM.
     input.value = commentDrafts.get(ticket.id) ?? '';
     input.addEventListener('input', () => commentDrafts.set(ticket.id, input.value));
@@ -845,25 +845,25 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     `;
     const modal = document.createElement('div');
     modal.style.cssText =
-      'background:#1b1f24;border:1px solid #2d343d;border-radius:8px;padding:20px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto;';
+      'background:var(--panel-alt);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto;';
 
     modal.innerHTML = `
       <h3 style="color:var(--accent);margin:0 0 12px;font-size:16px;">Quick Create — Choose Template</h3>
       <div id="template-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;"></div>
       <div id="template-form" style="display:none;flex-direction:column;gap:8px;">
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;">Subject</label>
-        <input id="tc-subject" type="text" style="background:#0e1116;color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:13px;" />
+        <input id="tc-subject" type="text" style="background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:13px;" />
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;">Body</label>
-        <textarea id="tc-body" rows="3" style="background:#0e1116;color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:13px;resize:vertical;"></textarea>
+        <textarea id="tc-body" rows="3" style="background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:13px;resize:vertical;"></textarea>
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;">Priority</label>
-        <select id="tc-priority" style="background:#0e1116;color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:13px;">
+        <select id="tc-priority" style="background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-size:13px;">
           <option value="urgent">🔴 Urgent</option>
           <option value="high">🟠 High</option>
           <option value="normal">🔵 Normal</option>
           <option value="low">⚪ Low</option>
         </select>
         <div style="display:flex;gap:8px;margin-top:8px;">
-          <button id="tc-create" style="background:var(--accent);color:#0e1116;border:none;border-radius:4px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;flex:1;">Create Ticket</button>
+          <button id="tc-create" style="background:var(--accent);color:var(--panel);border:none;border-radius:4px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;flex:1;">Create Ticket</button>
           <button id="tc-cancel" style="background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:8px 14px;font-size:13px;cursor:pointer;">Cancel</button>
         </div>
       </div>
@@ -878,7 +878,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     for (const t of TICKET_TEMPLATES) {
       const card = document.createElement('div');
       card.style.cssText =
-        'background:#0e1116;border:1px solid var(--border);border-radius:4px;padding:10px;cursor:pointer;text-align:left;';
+        'background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:10px;cursor:pointer;text-align:left;';
       card.innerHTML = `<div style="font-size:18px;margin-bottom:4px;">${t.emoji}</div><div style="color:var(--fg);font-size:12px;font-weight:600;">${t.label}</div><div style="color:var(--muted);font-size:10px;margin-top:2px;">${t.defaultPriority} priority</div>`;
       card.addEventListener('click', () => {
         chosen = t;

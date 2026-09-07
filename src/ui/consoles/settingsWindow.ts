@@ -31,30 +31,9 @@ import {
   clearProfilePicture,
   readImageAsAvatar,
 } from '@/util/profilePictures';
+import { THEMES, currentThemeId, setTheme } from '@/ui/themes';
 
 const DENSITY_KEY = 'settings_density';
-const THEME_KEY = 'app_theme';
-
-function getTheme(): 'dark' | 'light' {
-  try {
-    return (localStorage.getItem(THEME_KEY) as 'dark' | 'light') ?? 'dark';
-  } catch {
-    return 'dark';
-  }
-}
-
-function setTheme(theme: 'dark' | 'light'): void {
-  try {
-    localStorage.setItem(THEME_KEY, theme);
-  } catch {
-    /* ignore */
-  }
-  if (theme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
-}
 
 type CategoryId =
   | 'system'
@@ -88,17 +67,17 @@ function deviceCard(): HTMLElement {
   const card = document.createElement('div');
   card.style.cssText =
     'display:flex;align-items:center;gap:14px;padding:16px;margin-bottom:18px;' +
-    'background:#232830;border:1px solid #2d343d;border-radius:8px;';
+    'background:var(--border);border:1px solid var(--border);border-radius:8px;';
   const icon = document.createElement('div');
   icon.textContent = '🖥️';
   icon.style.cssText = 'font-size:38px;line-height:1;';
   const text = document.createElement('div');
   const name = document.createElement('div');
   name.textContent = VM_HOST.name;
-  name.style.cssText = 'font-size:15px;font-weight:600;color:#e6e6e6;';
+  name.style.cssText = 'font-size:15px;font-weight:600;color:var(--fg);';
   const sub = document.createElement('div');
   sub.textContent = `${VM_HOST.edition} · joined to ${VM_HOST.domain}`;
-  sub.style.cssText = 'font-size:11.5px;color:#8b95a1;margin-top:3px;';
+  sub.style.cssText = 'font-size:11.5px;color:var(--muted);margin-top:3px;';
   text.append(name, sub);
   card.append(icon, text);
   return card;
@@ -113,10 +92,10 @@ function toggleRow(
   const row = document.createElement('div');
   row.style.cssText = `
     display:flex;align-items:center;justify-content:space-between;gap:12px;
-    padding:14px 0;border-bottom:1px solid #2d343d;
+    padding:14px 0;border-bottom:1px solid var(--border);
   `;
   const text = document.createElement('div');
-  text.innerHTML = `<div style="font-size:13px;color:#e6e6e6;">${label}</div><div style="font-size:11px;color:#8b95a1;margin-top:2px;">${description}</div>`;
+  text.innerHTML = `<div style="font-size:13px;color:var(--fg);">${label}</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">${description}</div>`;
   row.appendChild(text);
 
   const toggle = document.createElement('button');
@@ -126,7 +105,7 @@ function toggleRow(
   const paint = () => {
     toggle.style.cssText = `
       width:40px;height:22px;border-radius:11px;border:none;cursor:pointer;flex-shrink:0;
-      background:${state ? '#4ec9b0' : '#2d343d'};position:relative;transition:background 0.15s;
+      background:${state ? 'var(--accent)' : 'var(--border)'};position:relative;transition:background 0.15s;
     `;
     toggle.innerHTML = `<span style="position:absolute;top:2px;left:${state ? '20px' : '2px'};width:18px;height:18px;border-radius:50%;background:#fff;transition:left 0.15s;"></span>`;
   };
@@ -143,25 +122,25 @@ function toggleRow(
 function sectionTitle(text: string): HTMLElement {
   const h = document.createElement('h2');
   h.textContent = text;
-  h.style.cssText = 'font-size:18px;color:#e6e6e6;margin:0 0 16px 0;font-weight:600;';
+  h.style.cssText = 'font-size:18px;color:var(--fg);margin:0 0 16px 0;font-weight:600;';
   return h;
 }
 
 function infoRow(label: string, value: string): string {
   return `
-    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #232830;font-size:12px;">
-      <span style="color:#8b95a1;">${label}</span><span style="color:#e6e6e6;">${value}</span>
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;">
+      <span style="color:var(--muted);">${label}</span><span style="color:var(--fg);">${value}</span>
     </div>
   `;
 }
 
 export function renderSettingsWindow(body: HTMLElement): void {
   body.style.cssText =
-    'display:flex;height:100%;background:#161a20;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI Variable","Segoe UI",sans-serif;color:#c8cdd3;';
+    'display:flex;height:100%;background:#161a20;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI Variable","Segoe UI",sans-serif;color:var(--fg);';
 
   const sidebar = document.createElement('div');
   sidebar.style.cssText =
-    'width:200px;flex-shrink:0;background:#12151a;border-right:1px solid #2d343d;padding:12px 0;overflow-y:auto;';
+    'width:200px;flex-shrink:0;background:#12151a;border-right:1px solid var(--border);padding:12px 0;overflow-y:auto;';
   body.appendChild(sidebar);
 
   const content = document.createElement('div');
@@ -182,18 +161,18 @@ export function renderSettingsWindow(body: HTMLElement): void {
     const avatar = document.createElement('div');
     avatar.textContent = VM_HOST.user.slice(0, 1).toUpperCase();
     avatar.style.cssText =
-      'width:32px;height:32px;border-radius:50%;background:#4ec9b0;color:#06231d;' +
+      'width:32px;height:32px;border-radius:50%;background:var(--accent);color:#06231d;' +
       'display:flex;align-items:center;justify-content:center;font-size:14px;' +
       'font-weight:700;flex-shrink:0;';
     const who = document.createElement('div');
     who.style.cssText = 'min-width:0;';
     const whoName = document.createElement('div');
     whoName.textContent = VM_HOST.displayName;
-    whoName.style.cssText = 'font-size:12px;color:#e6e6e6;font-weight:600;';
+    whoName.style.cssText = 'font-size:12px;color:var(--fg);font-weight:600;';
     const whoMail = document.createElement('div');
     whoMail.textContent = VM_ACCOUNT;
     whoMail.style.cssText =
-      'font-size:10.5px;color:#8b95a1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      'font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
     who.append(whoName, whoMail);
     account.append(avatar, who);
     sidebar.appendChild(account);
@@ -206,8 +185,8 @@ export function renderSettingsWindow(body: HTMLElement): void {
     search.placeholder = 'Find a setting';
     search.value = filter;
     search.style.cssText =
-      'width:100%;box-sizing:border-box;background:#0e1116;color:#e6e6e6;' +
-      'border:1px solid #2d343d;border-radius:4px;padding:5px 8px;font-size:11.5px;outline:none;';
+      'width:100%;box-sizing:border-box;background:var(--panel);color:var(--fg);' +
+      'border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:11.5px;outline:none;';
     search.addEventListener('input', () => {
       filter = search.value;
       renderSidebar();
@@ -236,8 +215,8 @@ export function renderSettingsWindow(body: HTMLElement): void {
         display:flex;align-items:center;gap:10px;width:calc(100% - 16px);
         margin:1px 8px;text-align:left;border-radius:4px;
         padding:8px 10px;border:none;cursor:pointer;font-size:12.5px;
-        background:${isActive ? '#232830' : 'transparent'};
-        color:${isActive ? '#e6e6e6' : '#c8cdd3'};
+        background:${isActive ? 'var(--border)' : 'transparent'};
+        color:${isActive ? 'var(--fg)' : 'var(--fg)'};
         position:relative;
       `;
       if (isActive) {
@@ -246,7 +225,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
         const marker = document.createElement('span');
         marker.style.cssText =
           'position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;' +
-          'height:16px;border-radius:2px;background:#4ec9b0;';
+          'height:16px;border-radius:2px;background:var(--accent);';
         btn.appendChild(marker);
       }
       const ico = document.createElement('span');
@@ -303,23 +282,72 @@ export function renderSettingsWindow(body: HTMLElement): void {
     if (active === 'personalization') {
       content.appendChild(sectionTitle('Personalization'));
 
-      // Theme toggle
-      const currentTheme = getTheme();
-      content.appendChild(
-        toggleRow(
-          'Dark / Light theme',
-          `Current: ${currentTheme === 'light' ? 'Light' : 'Dark'} theme`,
-          currentTheme === 'light',
-          (v) => {
-            setTheme(v ? 'light' : 'dark');
-          },
-        ),
-      );
+      // Themes. This was a light/dark switch that set an attribute no
+      // stylesheet responded to — the control looked like a feature and did
+      // nothing. Choosing one here repaints the whole interface.
+      const themeLabel = document.createElement('div');
+      themeLabel.textContent = 'Theme';
+      themeLabel.style.cssText =
+        'font-size:12px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;' +
+        'letter-spacing:0.06em;';
+      content.appendChild(themeLabel);
+
+      const themeGrid = document.createElement('div');
+      themeGrid.style.cssText =
+        'display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;' +
+        'margin-bottom:24px;';
+      const activeTheme = currentThemeId();
+
+      for (const theme of THEMES) {
+        const card = document.createElement('button');
+        const isSel = theme.id === activeTheme;
+        card.style.cssText =
+          'display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:7px;' +
+          'cursor:pointer;text-align:left;font-family:inherit;' +
+          `background:${theme.tokens.panelAlt};` +
+          `border:2px solid ${isSel ? theme.tokens.accent : 'transparent'};` +
+          `color:${theme.tokens.fg};`;
+
+        // A swatch built from the theme's own colours, so the card previews
+        // the scheme rather than describing it.
+        const swatch = document.createElement('span');
+        swatch.style.cssText =
+          'width:30px;height:30px;border-radius:5px;flex-shrink:0;display:grid;' +
+          'grid-template-columns:1fr 1fr;overflow:hidden;' +
+          `border:1px solid ${theme.tokens.border};`;
+        for (const colour of [
+          theme.tokens.panel,
+          theme.tokens.accent,
+          theme.tokens.panelAlt,
+          theme.tokens.muted,
+        ]) {
+          const cell = document.createElement('span');
+          cell.style.cssText = `background:${colour};`;
+          swatch.appendChild(cell);
+        }
+
+        const text = document.createElement('span');
+        const name = document.createElement('div');
+        name.textContent = theme.label;
+        name.style.cssText = 'font-size:12.5px;font-weight:600;';
+        const note = document.createElement('div');
+        note.textContent = theme.note;
+        note.style.cssText = `font-size:10.5px;color:${theme.tokens.muted};line-height:1.4;`;
+        text.append(name, note);
+
+        card.append(swatch, text);
+        card.addEventListener('click', () => {
+          setTheme(theme.id);
+          renderContent();
+        });
+        themeGrid.appendChild(card);
+      }
+      content.appendChild(themeGrid);
 
       const label = document.createElement('div');
       label.textContent = 'Background';
       label.style.cssText =
-        'font-size:12px;color:#8b95a1;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.06em;';
+        'font-size:12px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.06em;';
       content.appendChild(label);
 
       const grid = document.createElement('div');
@@ -330,10 +358,10 @@ export function renderSettingsWindow(body: HTMLElement): void {
         const isSel = wp.id === current;
         card.style.cssText = `
           width:120px;height:72px;border-radius:8px;cursor:pointer;
-          background:${wp.gradient};border:2px solid ${isSel ? '#4ec9b0' : 'transparent'};
+          background:${wp.gradient};border:2px solid ${isSel ? 'var(--accent)' : 'transparent'};
           display:flex;align-items:flex-end;padding:6px;position:relative;
         `;
-        card.innerHTML = `<span style="font-size:11px;color:#e6e6e6;text-shadow:0 1px 3px rgba(0,0,0,0.8);">${wp.label}</span>${isSel ? '<span style="position:absolute;top:6px;right:6px;color:#4ec9b0;font-size:14px;">✓</span>' : ''}`;
+        card.innerHTML = `<span style="font-size:11px;color:var(--fg);text-shadow:0 1px 3px rgba(0,0,0,0.8);">${wp.label}</span>${isSel ? '<span style="position:absolute;top:6px;right:6px;color:var(--accent);font-size:14px;">✓</span>' : ''}`;
         card.addEventListener('click', () => {
           try {
             localStorage.setItem(WALLPAPER_STORAGE_KEY, wp.id);
@@ -353,7 +381,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
       const lockLabel = document.createElement('div');
       lockLabel.textContent = 'Lock screen';
       lockLabel.style.cssText =
-        'font-size:12px;color:#8b95a1;margin:22px 0 10px;text-transform:uppercase;' +
+        'font-size:12px;color:var(--muted);margin:22px 0 10px;text-transform:uppercase;' +
         'letter-spacing:0.06em;';
       content.appendChild(lockLabel);
 
@@ -370,18 +398,18 @@ export function renderSettingsWindow(body: HTMLElement): void {
         const isSel = ls.id === currentLock;
         card.style.cssText = `
           width:120px;height:72px;border-radius:8px;cursor:pointer;
-          background:${ls.gradient};border:2px solid ${isSel ? '#4ec9b0' : 'transparent'};
+          background:${ls.gradient};border:2px solid ${isSel ? 'var(--accent)' : 'transparent'};
           display:flex;align-items:flex-end;padding:6px;position:relative;
         `;
         const name = document.createElement('span');
         name.textContent = ls.label;
         name.style.cssText =
-          'font-size:11px;color:#e6e6e6;text-shadow:0 1px 3px rgba(0,0,0,0.8);';
+          'font-size:11px;color:var(--fg);text-shadow:0 1px 3px rgba(0,0,0,0.8);';
         card.appendChild(name);
         if (isSel) {
           const tick = document.createElement('span');
           tick.textContent = '✓';
-          tick.style.cssText = 'position:absolute;top:6px;right:6px;color:#4ec9b0;font-size:14px;';
+          tick.style.cssText = 'position:absolute;top:6px;right:6px;color:var(--accent);font-size:14px;';
           card.appendChild(tick);
         }
         card.addEventListener('click', () => {
@@ -399,7 +427,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
 
       const lockNote = document.createElement('div');
       lockNote.textContent = 'Shown the next time you sign out or lock the workstation.';
-      lockNote.style.cssText = 'font-size:11px;color:#6b7482;margin-top:8px;';
+      lockNote.style.cssText = 'font-size:11px;color:var(--muted);margin-top:8px;';
       content.appendChild(lockNote);
 
       content.appendChild(
@@ -430,11 +458,11 @@ export function renderSettingsWindow(body: HTMLElement): void {
       const rows = list
         .map(
           (a) => `
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #232830;">
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
           <span style="font-size:22px;">${a.icon}</span>
           <div style="flex:1;">
-            <div style="font-size:13px;color:#e6e6e6;">${a.name}</div>
-            <div style="font-size:11px;color:#8b95a1;">${a.size} · v${a.version}</div>
+            <div style="font-size:13px;color:var(--fg);">${a.name}</div>
+            <div style="font-size:11px;color:var(--muted);">${a.size} · v${a.version}</div>
           </div>
         </div>
       `,
@@ -454,25 +482,25 @@ export function renderSettingsWindow(body: HTMLElement): void {
 
       const card = document.createElement('div');
       card.style.cssText =
-        'display:flex;align-items:center;gap:14px;padding:16px;background:#1b1f24;' +
+        'display:flex;align-items:center;gap:14px;padding:16px;background:var(--panel-alt);' +
         'border-radius:8px;margin-bottom:16px;';
       const avatar = document.createElement('div');
       avatar.style.cssText =
-        'width:52px;height:52px;border-radius:50%;background:#4ec9b0;display:flex;' +
-        'align-items:center;justify-content:center;font-size:22px;color:#0e1116;' +
+        'width:52px;height:52px;border-radius:50%;background:var(--accent);display:flex;' +
+        'align-items:center;justify-content:center;font-size:22px;color:var(--panel);' +
         'font-weight:700;overflow:hidden;flex-shrink:0;';
       if (user) paintAvatar(avatar, user.username, user.displayName);
       else avatar.textContent = initial;
       const who = document.createElement('div');
       const line1 = document.createElement('div');
       line1.textContent = user?.displayName ?? VM_HOST.displayName;
-      line1.style.cssText = 'font-size:14px;color:#e6e6e6;font-weight:600;';
+      line1.style.cssText = 'font-size:14px;color:var(--fg);font-weight:600;';
       const line2 = document.createElement('div');
       // The real account, not a fixed string. Signing in as somebody else and
       // finding the administrator's address here would be a lie the rest of
       // the workstation does not tell.
       line2.textContent = user ? `${user.username}@${COMPANY.domain}` : VM_HOST.email;
-      line2.style.cssText = 'font-size:11px;color:#8b95a1;';
+      line2.style.cssText = 'font-size:11px;color:var(--muted);';
       who.append(line1, line2);
       card.append(avatar, who);
       content.appendChild(card);
@@ -493,12 +521,12 @@ export function renderSettingsWindow(body: HTMLElement): void {
           ? 'Change picture'
           : 'Choose a picture';
         choose.style.cssText =
-          'padding:6px 12px;border-radius:4px;border:1px solid #2d343d;background:#161b22;' +
-          'color:#c9d1d9;font-size:11.5px;cursor:pointer;font-family:inherit;';
+          'padding:6px 12px;border-radius:4px;border:1px solid var(--border);background:var(--panel-alt);' +
+          'color:var(--fg);font-size:11.5px;cursor:pointer;font-family:inherit;';
         choose.addEventListener('click', () => file.click());
 
         const picMessage = document.createElement('span');
-        picMessage.style.cssText = 'font-size:11px;color:#8b95a1;';
+        picMessage.style.cssText = 'font-size:11px;color:var(--muted);';
         picMessage.textContent = 'Shown on the sign-in screen.';
 
         file.addEventListener('change', () => {
@@ -525,8 +553,8 @@ export function renderSettingsWindow(body: HTMLElement): void {
           const remove = document.createElement('button');
           remove.textContent = 'Remove';
           remove.style.cssText =
-            'padding:6px 12px;border-radius:4px;border:1px solid #2d343d;background:#161b22;' +
-            'color:#c9d1d9;font-size:11.5px;cursor:pointer;font-family:inherit;';
+            'padding:6px 12px;border-radius:4px;border:1px solid var(--border);background:var(--panel-alt);' +
+            'color:var(--fg);font-size:11.5px;cursor:pointer;font-family:inherit;';
           remove.addEventListener('click', () => {
             clearProfilePicture(user.username);
             renderContent();
@@ -549,12 +577,12 @@ export function renderSettingsWindow(body: HTMLElement): void {
       const pwTitle = document.createElement('div');
       pwTitle.textContent = 'Password';
       pwTitle.style.cssText =
-        'font-size:12px;color:#8b95a1;margin:22px 0 10px;text-transform:uppercase;' +
+        'font-size:12px;color:var(--muted);margin:22px 0 10px;text-transform:uppercase;' +
         'letter-spacing:0.06em;';
       content.appendChild(pwTitle);
 
       const blurb = document.createElement('div');
-      blurb.style.cssText = 'font-size:12px;color:#8b95a1;margin-bottom:12px;line-height:1.6;';
+      blurb.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6;';
       blurb.textContent = user
         ? 'Changing it here goes through the identity provider, which checks your current ' +
           'password first — the same path a real self-service change takes, and it is ' +
@@ -571,8 +599,8 @@ export function renderSettingsWindow(body: HTMLElement): void {
           i.type = 'password';
           i.placeholder = placeholder;
           i.style.cssText =
-            'padding:8px 10px;border-radius:4px;border:1px solid #2d343d;background:#0e1116;' +
-            'color:#e6e6e6;font-size:12.5px;outline:none;font-family:inherit;';
+            'padding:8px 10px;border-radius:4px;border:1px solid var(--border);background:var(--panel);' +
+            'color:var(--fg);font-size:12.5px;outline:none;font-family:inherit;';
           return i;
         };
         const currentPw = field('Current password');
@@ -614,7 +642,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
           newPw.value = '';
           confirmPw.value = '';
           message.textContent = 'Password changed. Use the new one at the next sign-in.';
-          message.style.color = '#4ec9b0';
+          message.style.color = 'var(--accent)';
         });
 
         form.append(currentPw, newPw, confirmPw, submit, message);
@@ -643,7 +671,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
       content.appendChild(sectionTitle('AI Assistant'));
 
       const intro = document.createElement('div');
-      intro.style.cssText = 'font-size:12.5px;color:#c9d1d9;line-height:1.65;margin-bottom:16px;';
+      intro.style.cssText = 'font-size:12.5px;color:var(--fg);line-height:1.65;margin-bottom:16px;';
       intro.textContent =
         'The IAM Tutor and the ticket generator both run against Ollama, a local model ' +
         'runtime. Nothing is sent anywhere: the model runs on this machine. Both features ' +
@@ -653,13 +681,13 @@ export function renderSettingsWindow(body: HTMLElement): void {
 
       const statusCard = document.createElement('div');
       statusCard.style.cssText =
-        'border:1px solid #2d343d;border-radius:6px;padding:14px 16px;background:#161b22;' +
+        'border:1px solid var(--border);border-radius:6px;padding:14px 16px;background:var(--panel-alt);' +
         'margin-bottom:16px;';
       const statusLine = document.createElement('div');
       statusLine.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:4px;';
       statusLine.textContent = 'Checking for Ollama\u2026';
       const statusDetail = document.createElement('div');
-      statusDetail.style.cssText = 'font-size:11.5px;color:#8b95a1;line-height:1.6;';
+      statusDetail.style.cssText = 'font-size:11.5px;color:var(--muted);line-height:1.6;';
       statusCard.append(statusLine, statusDetail);
       content.appendChild(statusCard);
 
@@ -668,7 +696,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
       // after they have installed it in another window.
       void tutorAvailable().then((up) => {
         statusLine.textContent = up ? '\u25CF Ollama is running' : '\u25CB Ollama is not running';
-        statusLine.style.color = up ? '#4ec9b0' : '#e2a03f';
+        statusLine.style.color = up ? 'var(--accent)' : '#e2a03f';
         statusDetail.textContent = up
           ? `The tutor will compose answers from the documentation, and generated tickets ` +
             `will be written by the model. Model requested: ${OLLAMA_MODEL}.`
@@ -677,12 +705,12 @@ export function renderSettingsWindow(body: HTMLElement): void {
       });
 
       const steps = document.createElement('div');
-      steps.style.cssText = 'font-size:12px;color:#c9d1d9;line-height:1.8;margin-bottom:14px;';
+      steps.style.cssText = 'font-size:12px;color:var(--fg);line-height:1.8;margin-bottom:14px;';
       steps.innerHTML =
         '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;' +
-        'color:#8b95a1;margin-bottom:8px;">To enable it</div>' +
+        'color:var(--muted);margin-bottom:8px;">To enable it</div>' +
         '<div>1. Install Ollama for your platform.</div>' +
-        `<div>2. Pull the model: <code style="background:#0e1116;border:1px solid #2d343d;` +
+        `<div>2. Pull the model: <code style="background:var(--panel);border:1px solid var(--border);` +
         `border-radius:3px;padding:1px 6px;">ollama pull ${OLLAMA_MODEL}</code></div>` +
         '<div>3. Leave it running and reopen the IAM Tutor.</div>';
       content.appendChild(steps);
@@ -698,7 +726,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
       content.appendChild(dl);
 
       const note = document.createElement('div');
-      note.style.cssText = 'font-size:11px;color:#6b7482;margin-top:14px;line-height:1.6;';
+      note.style.cssText = 'font-size:11px;color:var(--muted);margin-top:14px;line-height:1.6;';
       note.textContent =
         'A small local model gets details wrong sometimes. That is why the tutor cites the ' +
         'article it used: open it from the reply and check.';
@@ -715,18 +743,18 @@ export function renderSettingsWindow(body: HTMLElement): void {
             <span id="update-spinner" style="font-size:20px;display:none;">⏳</span>
             <span id="update-icon" style="font-size:20px;"></span>
             <div>
-              <div id="update-title" style="font-size:13px;color:#e6e6e6;font-weight:600;">Checking for updates…</div>
-              <div id="update-subtitle" style="font-size:11px;color:#8b95a1;margin-top:2px;"></div>
+              <div id="update-title" style="font-size:13px;color:var(--fg);font-weight:600;">Checking for updates…</div>
+              <div id="update-subtitle" style="font-size:11px;color:var(--muted);margin-top:2px;"></div>
             </div>
           </div>
           <div id="update-progress-bar" style="display:none;margin-bottom:14px;">
-            <div style="height:4px;background:#2d343d;border-radius:2px;overflow:hidden;">
-              <div id="update-progress-fill" style="height:100%;background:#4ec9b0;transition:width 0.3s;border-radius:2px;width:0%;"></div>
+            <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
+              <div id="update-progress-fill" style="height:100%;background:var(--accent);transition:width 0.3s;border-radius:2px;width:0%;"></div>
             </div>
-            <div id="update-progress-label" style="font-size:11px;color:#8b95a1;margin-top:4px;text-align:right;"></div>
+            <div id="update-progress-label" style="font-size:11px;color:var(--muted);margin-top:4px;text-align:right;"></div>
           </div>
           <div id="update-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button id="update-check-btn" style="background:#4ec9b0;color:#0e1116;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;">
+            <button id="update-check-btn" style="background:var(--accent);color:var(--panel);border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;">
               Check for updates
             </button>
           </div>
@@ -879,7 +907,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
         infoRow('Product ID', '00330-80000-00000-AA457');
       content.appendChild(box);
       const footer = document.createElement('div');
-      footer.style.cssText = 'margin-top:16px;font-size:11px;color:#8b95a1;';
+      footer.style.cssText = 'margin-top:16px;font-size:11px;color:var(--muted);';
       footer.textContent = `${PRODUCT.name} — ${PRODUCT.publisher}`;
       content.appendChild(footer);
       return;

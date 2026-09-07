@@ -167,7 +167,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
   body.innerHTML = '';
   Object.assign(body.style, {
     overflow: 'hidden',
-    background: '#1e1e1e',
+    background: 'var(--panel)',
     flex: '1',
     minHeight: '0',
   });
@@ -199,19 +199,19 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
   const root = document.createElement('div');
   root.style.cssText =
     'display:flex;flex-direction:column;height:100%;min-height:0;' +
-    "font-family:'Segoe UI',-apple-system,sans-serif;font-size:12px;color:#e6e6e6;";
+    "font-family:'Segoe UI',-apple-system,sans-serif;font-size:12px;color:var(--fg);";
   body.appendChild(root);
 
   // ── Menu bar ─────────────────────────────────────────────────────────────
   const menubar = document.createElement('div');
   menubar.style.cssText =
-    'display:flex;gap:2px;padding:3px 6px;background:#2b2b2b;border-bottom:1px solid #3c3c3c;' +
+    'display:flex;gap:2px;padding:3px 6px;background:var(--panel-alt);border-bottom:1px solid var(--border);' +
     'flex-shrink:0;font-size:11.5px;';
   for (const label of ['File', 'Action', 'View', 'Help']) {
     const m = document.createElement('span');
     m.textContent = label;
-    m.style.cssText = 'padding:2px 8px;border-radius:3px;cursor:default;color:#ccc;';
-    m.addEventListener('mouseenter', () => (m.style.background = '#3c3c3c'));
+    m.style.cssText = 'padding:2px 8px;border-radius:3px;cursor:default;color:var(--fg);';
+    m.addEventListener('mouseenter', () => (m.style.background = 'var(--border)'));
     m.addEventListener('mouseleave', () => (m.style.background = 'transparent'));
     menubar.appendChild(m);
   }
@@ -220,18 +220,18 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
   // ── Toolbar ──────────────────────────────────────────────────────────────
   const toolbar = document.createElement('div');
   toolbar.style.cssText =
-    'display:flex;align-items:center;gap:4px;padding:4px 6px;background:#252526;' +
-    'border-bottom:1px solid #3c3c3c;flex-shrink:0;';
+    'display:flex;align-items:center;gap:4px;padding:4px 6px;background:var(--panel-alt);' +
+    'border-bottom:1px solid var(--border);flex-shrink:0;';
   const toolBtn = (label: string, title: string, onClick: () => void): HTMLElement => {
     const b = document.createElement('button');
     b.textContent = label;
     b.title = title;
     b.style.cssText =
-      'background:transparent;border:1px solid transparent;border-radius:3px;color:#ccc;' +
+      'background:transparent;border:1px solid transparent;border-radius:3px;color:var(--fg);' +
       'padding:3px 8px;font-size:12px;cursor:pointer;';
     b.addEventListener('mouseenter', () => {
-      b.style.background = '#3c3c3c';
-      b.style.borderColor = '#4c4c4c';
+      b.style.background = 'var(--border)';
+      b.style.borderColor = 'var(--border)';
     });
     b.addEventListener('mouseleave', () => {
       b.style.background = 'transparent';
@@ -259,19 +259,19 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
 
   const treePane = document.createElement('div');
   treePane.style.cssText =
-    'width:240px;flex-shrink:0;background:#252526;border-right:1px solid #3c3c3c;' +
+    'width:240px;flex-shrink:0;background:var(--panel-alt);border-right:1px solid var(--border);' +
     'overflow:auto;padding:6px 0;';
   panes.appendChild(treePane);
 
   const listPane = document.createElement('div');
-  listPane.style.cssText = 'flex:1;min-width:0;overflow:auto;background:#1e1e1e;';
+  listPane.style.cssText = 'flex:1;min-width:0;overflow:auto;background:var(--panel);';
   panes.appendChild(listPane);
 
   // ── Status bar ───────────────────────────────────────────────────────────
   const status = document.createElement('div');
   status.style.cssText =
-    'padding:4px 10px;background:#252526;border-top:1px solid #3c3c3c;font-size:11px;' +
-    'color:#9d9d9d;flex-shrink:0;';
+    'padding:4px 10px;background:var(--panel-alt);border-top:1px solid var(--border);font-size:11px;' +
+    'color:var(--muted);flex-shrink:0;';
   root.appendChild(status);
 
   // ── Tree rendering ───────────────────────────────────────────────────────
@@ -284,12 +284,12 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
       row.style.cssText =
         `display:flex;align-items:center;gap:4px;padding:3px 6px 3px ${6 + depth * 14}px;` +
         `cursor:pointer;font-size:12px;white-space:nowrap;` +
-        (isSelected ? 'background:#094771;color:#fff;' : 'color:#ccc;');
+        (isSelected ? 'background:var(--accent);color:var(--on-accent);' : 'color:var(--fg);');
 
       const hasKids = !!node.children?.length;
       const twisty = document.createElement('span');
       twisty.textContent = hasKids ? (expanded.has(node.id) ? '▾' : '▸') : ' ';
-      twisty.style.cssText = 'width:10px;flex-shrink:0;color:#9d9d9d;font-size:9px;';
+      twisty.style.cssText = 'width:10px;flex-shrink:0;color:var(--muted);font-size:9px;';
       if (hasKids) {
         twisty.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -344,7 +344,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
 
     const header = document.createElement('div');
     header.style.cssText =
-      'display:table-row;position:sticky;top:0;background:#2b2b2b;font-weight:600;';
+      'display:table-row;position:sticky;top:0;background:var(--panel-alt);font-weight:600;';
     for (const [col, width] of [
       ['Name', '34%'],
       ['Type', '20%'],
@@ -353,8 +353,8 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
       const th = document.createElement('div');
       th.textContent = col;
       th.style.cssText =
-        `display:table-cell;padding:5px 10px;border-bottom:1px solid #3c3c3c;` +
-        `border-right:1px solid #3c3c3c;width:${width};font-size:11.5px;color:#ccc;`;
+        `display:table-cell;padding:5px 10px;border-bottom:1px solid var(--border);` +
+        `border-right:1px solid var(--border);width:${width};font-size:11.5px;color:var(--fg);`;
       header.appendChild(th);
     }
     table.appendChild(header);
@@ -363,7 +363,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
       const row = document.createElement('div');
       const isSel = selectedObject?.name === obj.name;
       row.style.cssText =
-        'display:table-row;cursor:default;' + (isSel ? 'background:#094771;' : '');
+        'display:table-row;cursor:default;' + (isSel ? 'background:var(--accent);' : '');
 
       const icon = obj.user ? (obj.user.status === 'active' ? '👤' : '🚫') : obj.group ? '👥' : '💻';
       for (const [text, isName] of [
@@ -375,7 +375,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         td.textContent = text;
         td.style.cssText =
           'display:table-cell;padding:4px 10px;border-bottom:1px solid #2a2a2a;font-size:12px;' +
-          (isName ? 'color:#e6e6e6;' : 'color:#b0b0b0;');
+          (isName ? 'color:var(--fg);' : 'color:#b0b0b0;');
         row.appendChild(td);
       }
 
@@ -401,7 +401,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     if (objects.length === 0) {
       const empty = document.createElement('div');
       empty.textContent = 'There are no items to show in this view.';
-      empty.style.cssText = 'padding:20px;color:#9d9d9d;font-size:12px;';
+      empty.style.cssText = 'padding:20px;color:var(--muted);font-size:12px;';
       listPane.appendChild(empty);
     }
 
@@ -418,20 +418,20 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     menu.className = 'aduc-menu';
     menu.style.cssText =
       `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:99999;` +
-      'background:#2b2b2b;border:1px solid #4c4c4c;border-radius:3px;padding:3px 0;' +
+      'background:var(--panel-alt);border:1px solid var(--border);border-radius:3px;padding:3px 0;' +
       'min-width:190px;box-shadow:0 4px 14px rgba(0,0,0,0.5);font-size:12px;';
 
     for (const item of items) {
       if ('separator' in item) {
         const hr = document.createElement('div');
-        hr.style.cssText = 'height:1px;background:#3c3c3c;margin:3px 0;';
+        hr.style.cssText = 'height:1px;background:var(--border);margin:3px 0;';
         menu.appendChild(hr);
         continue;
       }
       const row = document.createElement('div');
       row.textContent = item.label;
-      row.style.cssText = 'padding:5px 14px;cursor:pointer;color:#e6e6e6;';
-      row.addEventListener('mouseenter', () => (row.style.background = '#094771'));
+      row.style.cssText = 'padding:5px 14px;cursor:pointer;color:var(--fg);';
+      row.addEventListener('mouseenter', () => (row.style.background = 'var(--accent)'));
       row.addEventListener('mouseleave', () => (row.style.background = 'transparent'));
       row.addEventListener('click', () => {
         menu.remove();
@@ -490,7 +490,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
           modal(`Members of ${g.name}`, (b) => {
             const pre = document.createElement('pre');
             pre.textContent = members || '(no members)';
-            pre.style.cssText = 'margin:0;font-size:12px;color:#e6e6e6;';
+            pre.style.cssText = 'margin:0;font-size:12px;color:var(--fg);';
             b.appendChild(pre);
           });
         },
@@ -518,14 +518,14 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
 
     const dialog = document.createElement('div');
     dialog.style.cssText =
-      'background:#252526;border:1px solid #4c4c4c;border-radius:4px;min-width:400px;' +
+      'background:var(--panel-alt);border:1px solid var(--border);border-radius:4px;min-width:400px;' +
       "max-width:560px;box-shadow:0 10px 40px rgba(0,0,0,0.6);font-family:'Segoe UI',sans-serif;";
 
     const bar = document.createElement('div');
     bar.textContent = title;
     bar.style.cssText =
-      'padding:8px 12px;background:#2b2b2b;border-bottom:1px solid #3c3c3c;font-size:12.5px;' +
-      'font-weight:600;color:#e6e6e6;';
+      'padding:8px 12px;background:var(--panel-alt);border-bottom:1px solid var(--border);font-size:12.5px;' +
+      'font-weight:600;color:var(--fg);';
 
     const content = document.createElement('div');
     content.style.cssText = 'padding:14px;max-height:60vh;overflow:auto;';
@@ -534,7 +534,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     const footer = document.createElement('div');
     footer.style.cssText =
       'display:flex;justify-content:flex-end;gap:8px;padding:10px 12px;' +
-      'border-top:1px solid #3c3c3c;';
+      'border-top:1px solid var(--border);';
 
     const close = (): void => overlay.remove();
     const mkBtn = (label: string, primary: boolean, onClick: () => void): HTMLElement => {
@@ -543,8 +543,8 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
       b.style.cssText =
         'padding:5px 18px;border-radius:3px;font-size:12px;cursor:pointer;' +
         (primary
-          ? 'background:#0e639c;border:1px solid #1177bb;color:#fff;'
-          : 'background:#3c3c3c;border:1px solid #4c4c4c;color:#e6e6e6;');
+          ? 'background:var(--accent);border:1px solid var(--accent);color:var(--on-accent);'
+          : 'background:var(--border);border:1px solid var(--border);color:var(--fg);');
       b.addEventListener('click', onClick);
       return b;
     };
@@ -575,7 +575,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:9px;';
     const lab = document.createElement('label');
     lab.textContent = label;
-    lab.style.cssText = 'width:132px;flex-shrink:0;font-size:12px;color:#ccc;text-align:right;';
+    lab.style.cssText = 'width:132px;flex-shrink:0;font-size:12px;color:var(--fg);text-align:right;';
 
     let read: () => string;
     if (opts.options) {
@@ -598,7 +598,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
   }
 
   const fieldCss =
-    'flex:1;background:#1e1e1e;color:#e6e6e6;border:1px solid #3c3c3c;border-radius:2px;' +
+    'flex:1;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:2px;' +
     'padding:4px 7px;font-size:12px;outline:none;';
 
   function newUserDialog(): void {
@@ -632,7 +632,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         cb.addEventListener('change', () => (mustChange = cb.checked));
         const lab = document.createElement('label');
         lab.textContent = 'User must change password at next logon';
-        lab.style.cssText = 'font-size:12px;color:#ccc;';
+        lab.style.cssText = 'font-size:12px;color:var(--fg);';
         row.append(cb, lab);
         b.appendChild(row);
 
@@ -640,7 +640,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         hint.textContent =
           'The department decides which applications appear on their desktop. Leave the ' +
           'password blank to use the house default of username123.';
-        hint.style.cssText = 'font-size:11px;color:#9d9d9d;margin-top:10px;line-height:1.5;';
+        hint.style.cssText = 'font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5;';
         b.appendChild(hint);
       },
       () => {
@@ -727,7 +727,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         cb.addEventListener('change', () => (mustChange = cb.checked));
         const lab = document.createElement('label');
         lab.textContent = 'User must change password at next logon';
-        lab.style.cssText = 'font-size:12px;color:#ccc;';
+        lab.style.cssText = 'font-size:12px;color:var(--fg);';
         row.append(cb, lab);
         b.appendChild(row);
       },
@@ -774,7 +774,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
       let active = 'General';
 
       const tabBar = document.createElement('div');
-      tabBar.style.cssText = 'display:flex;gap:2px;border-bottom:1px solid #3c3c3c;margin-bottom:12px;';
+      tabBar.style.cssText = 'display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:12px;';
       const panel = document.createElement('div');
 
       const paint = (): void => {
@@ -786,8 +786,8 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
             'padding:5px 14px;font-size:12px;cursor:pointer;border:1px solid transparent;' +
             'border-bottom:none;border-radius:3px 3px 0 0;' +
             (t === active
-              ? 'background:#252526;border-color:#3c3c3c;color:#fff;margin-bottom:-1px;'
-              : 'color:#9d9d9d;');
+              ? 'background:var(--panel-alt);border-color:var(--border);color:#fff;margin-bottom:-1px;'
+              : 'color:var(--muted);');
           tab.addEventListener('click', () => {
             active = t;
             paint();
@@ -801,10 +801,10 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
           row.style.cssText = 'display:flex;gap:10px;margin-bottom:7px;font-size:12px;';
           const key = document.createElement('span');
           key.textContent = k;
-          key.style.cssText = 'width:132px;flex-shrink:0;color:#9d9d9d;text-align:right;';
+          key.style.cssText = 'width:132px;flex-shrink:0;color:var(--muted);text-align:right;';
           const val = document.createElement('span');
           val.textContent = v;
-          val.style.cssText = 'color:#e6e6e6;';
+          val.style.cssText = 'color:var(--fg);';
           row.append(key, val);
           panel.appendChild(row);
         };

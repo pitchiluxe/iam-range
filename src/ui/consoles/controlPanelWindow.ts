@@ -2,7 +2,7 @@
  * ui/consoles/controlPanelWindow.ts — the classic Windows Control Panel.
  *
  * Rebuilt because the old one wore a light shell over dark content: white
- * panes with #e6e6e6 text on them, which is the workstation's desktop palette
+ * panes with var(--fg) text on them, which is the workstation's desktop palette
  * applied to the one window that is supposed to look like the operating
  * system's own. It read as "a dark app pretending", which is the opposite of
  * what this window is for.

@@ -5,10 +5,13 @@
  * Right pane shows folder contents as icons.
  */
 import { FS } from '@/terminal/shellIntrinsics';
+import { openContextMenu, type MenuItem } from '@/ui/contextMenu';
+import { requestApp } from '@/util/appLauncher';
+import { showToast } from '@/ui/toast';
 
 export function renderFileExplorerWindow(body: HTMLElement): void {
   body.style.cssText =
-    'display:flex;flex-direction:column;height:100%;background:#0e1116;font-family:"Segoe UI Variable","Segoe UI",sans-serif;font-size:12px;color:#c8cdd3;';
+    'display:flex;flex-direction:column;height:100%;background:var(--panel);font-family:"Segoe UI Variable","Segoe UI",sans-serif;font-size:12px;color:var(--fg);';
 
   // Current path state
   let currentPath = 'C:\\';
@@ -40,7 +43,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
   // Sidebar
   const sidebar = document.createElement('div');
   sidebar.style.cssText = `
-    width:180px;flex-shrink:0;background:#1b1f24;border-right:1px solid #2d343d;
+    width:180px;flex-shrink:0;background:var(--panel-alt);border-right:1px solid var(--border);
     overflow-y:auto;padding:8px 0;
   `;
   main.appendChild(sidebar);
@@ -50,7 +53,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     groupEl.style.cssText = 'margin-bottom:4px;';
     const label = document.createElement('div');
     label.style.cssText =
-      'font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#8b95a1;padding:6px 14px 4px;cursor:pointer;';
+      'font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);padding:6px 14px 4px;cursor:pointer;';
     label.textContent = group.label;
     groupEl.appendChild(label);
     for (const item of group.children) {
@@ -58,11 +61,11 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
       itemBtn.style.cssText = `
         display:block;width:100%;text-align:left;padding:6px 14px;
         background:transparent;border:none;cursor:pointer;font-size:12px;
-        color:#c8cdd3;transition:background 0.1s;
+        color:var(--fg);transition:background 0.1s;
       `;
       itemBtn.textContent = item.label;
       itemBtn.addEventListener('mouseenter', () => {
-        itemBtn.style.background = '#232830';
+        itemBtn.style.background = 'var(--border)';
       });
       itemBtn.addEventListener('mouseleave', () => {
         itemBtn.style.background = 'transparent';
@@ -83,7 +86,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
   breadcrumb.id = 'fe-breadcrumb';
   breadcrumb.style.cssText = `
     height:34px;display:flex;align-items:center;justify-content:space-between;gap:4px;
-    padding:0 8px 0 12px;border-bottom:1px solid #2d343d;background:#1b1f24;
+    padding:0 8px 0 12px;border-bottom:1px solid var(--border);background:var(--panel-alt);
     font-size:12px;flex-shrink:0;
   `;
   content.appendChild(breadcrumb);
@@ -95,8 +98,8 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
   let viewMode: 'details' | 'icons' = 'details';
   const viewToggle = document.createElement('button');
   viewToggle.style.cssText = `
-    flex-shrink:0;background:transparent;border:1px solid #2d343d;border-radius:4px;
-    color:#8b95a1;font-size:11px;padding:4px 10px;cursor:pointer;
+    flex-shrink:0;background:transparent;border:1px solid var(--border);border-radius:4px;
+    color:var(--muted);font-size:11px;padding:4px 10px;cursor:pointer;
   `;
   viewToggle.addEventListener('click', () => {
     viewMode = viewMode === 'details' ? 'icons' : 'details';
@@ -146,7 +149,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i]!;
       const seg = document.createElement('span');
-      seg.style.cssText = 'cursor:pointer;color:#4ec9b0;white-space:nowrap;';
+      seg.style.cssText = 'cursor:pointer;color:var(--accent);white-space:nowrap;';
       seg.textContent = part;
       seg.addEventListener('click', () => {
         const newPath = parts.slice(0, i + 1).join('\\') + '\\';
@@ -155,13 +158,121 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
       crumbTrail.appendChild(seg);
       if (i < parts.length - 1) {
         const arrow = document.createElement('span');
-        arrow.style.cssText = 'color:#4a5568;pointer-events:none;';
+        arrow.style.cssText = 'color:var(--muted);pointer-events:none;';
         arrow.textContent = ' › ';
         crumbTrail.appendChild(arrow);
       }
     }
   }
 
+
+  /**
+   * A unique name in the current folder.
+   *
+   * Windows counts up — "New folder", "New folder (2)" — rather than refusing,
+   * because being told no when you asked for a folder is not useful.
+   */
+  function freeName(base: string, extension = ''): string {
+    let candidate = `${base}${extension}`;
+    let n = 2;
+    while (FS.exists(`${currentPath.replace(/\\$/, '')}\\${candidate}`)) {
+      candidate = `${base} (${n})${extension}`;
+      n += 1;
+    }
+    return candidate;
+  }
+
+  function reportFsResult(result: { ok: boolean; error?: string; message?: string }): void {
+    if (!result.ok) showToast(result.error ?? 'That did not work.', { kind: 'error' });
+    renderFolderContents(currentPath);
+  }
+
+  /** The menu on empty space in the contents pane. */
+  function folderMenu(e: MouseEvent): void {
+    openContextMenu(e, [
+      {
+        label: 'New',
+        submenu: [
+          {
+            label: 'Folder',
+            onClick: () => {
+              const name = freeName('New folder');
+              reportFsResult(FS.makeDir(`${currentPath.replace(/\\$/, '')}\\${name}`));
+            },
+          },
+          {
+            label: 'Text document',
+            onClick: () => {
+              const name = freeName('New text document', '.txt');
+              reportFsResult(FS.writeFile(`${currentPath.replace(/\\$/, '')}\\${name}`, ''));
+            },
+          },
+        ],
+      },
+      { separator: true },
+      { label: 'Refresh', onClick: () => renderFolderContents(currentPath) },
+      {
+        label: 'Open in Terminal',
+        onClick: () => {
+          FS.setCwd(currentPath);
+          requestApp('terminal');
+        },
+      },
+    ]);
+  }
+
+  /** The menu on a file or folder. */
+  function itemMenu(e: MouseEvent, item: FEItem): void {
+    const path = item.path;
+    // Sidebar shortcuts have no path. Nothing on this menu applies to them.
+    if (!path) return;
+    const node = FS.node(path);
+    const items: MenuItem[] = [
+      { label: 'Open', onClick: () => openItem(item) },
+      { separator: true },
+      {
+        label: 'Rename',
+        // Protected system folders refuse, the same as they do in the shell —
+        // a menu entry that fails silently is worse than one that is greyed.
+        disabled: Boolean(node?.readonly),
+        onClick: () => {
+          const next = window.prompt('New name', item.name);
+          if (!next || next === item.name) return;
+          reportFsResult(
+            FS.move(path, `${currentPath.replace(/\\$/, '')}\\${next.trim()}`),
+          );
+        },
+      },
+      {
+        label: 'Delete',
+        disabled: Boolean(node?.readonly),
+        onClick: () => {
+          const isFolder = item.type === 'folder';
+          if (!window.confirm(`Delete ${isFolder ? 'folder' : 'file'} "${item.name}"?`)) return;
+          reportFsResult(FS.remove(path, isFolder));
+        },
+      },
+      { separator: true },
+      {
+        label: 'Copy path',
+        onClick: () => {
+          void navigator.clipboard
+            ?.writeText(path)
+            .then(() => showToast('Path copied.', { kind: 'success' }))
+            .catch(() => showToast('Could not reach the clipboard.', { kind: 'error' }));
+        },
+      },
+      {
+        label: 'Properties',
+        onClick: () =>
+          showToast(
+            `${item.name} — ${item.kind}${item.size ? `, ${item.size}` : ''}, modified ${item.modified}`,
+            { kind: 'info' },
+          ),
+      },
+    ];
+    openContextMenu(e, items);
+  }
 
   function openItem(item: FEItem): void {
     if (item.type === 'folder' && item.path) {
@@ -191,7 +302,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
         display:flex;flex-direction:column;align-items:center;gap:4px;
         padding:8px 4px;border-radius:6px;border:none;cursor:pointer;
         background:transparent;transition:background 0.1s;
-        font-size:11px;color:#c8cdd3;width:80px;
+        font-size:11px;color:var(--fg);width:80px;
       `;
       cell.innerHTML = `
         <span style="font-size:28px;">${item.icon}</span>
@@ -199,7 +310,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
       `;
       cell.addEventListener('dblclick', () => openItem(item));
       cell.addEventListener('mouseenter', () => {
-        cell.style.background = '#232830';
+        cell.style.background = 'var(--border)';
       });
       cell.addEventListener('mouseleave', () => {
         cell.style.background = 'transparent';
@@ -216,8 +327,8 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     const header = document.createElement('div');
     header.style.cssText = `
       display:grid;grid-template-columns:${FE_COLS};gap:8px;min-width:${FE_ROW_MIN_WIDTH};
-      padding:6px 12px;border-bottom:1px solid #2d343d;background:#181c21;
-      font-size:11px;color:#8b95a1;font-weight:600;flex-shrink:0;
+      padding:6px 12px;border-bottom:1px solid var(--border);background:#181c21;
+      font-size:11px;color:var(--muted);font-weight:600;flex-shrink:0;
     `;
     header.innerHTML = `<span>Name</span><span>Date modified</span><span>Type</span><span style="text-align:right;">Size</span>`;
     table.appendChild(header);
@@ -231,19 +342,20 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
       row.style.cssText = `
         display:grid;grid-template-columns:${FE_COLS};gap:8px;min-width:${FE_ROW_MIN_WIDTH};
         width:100%;padding:5px 12px;border:none;background:transparent;cursor:pointer;
-        font-size:12px;color:#c8cdd3;text-align:left;align-items:center;
+        font-size:12px;color:var(--fg);text-align:left;align-items:center;
       `;
+      row.addEventListener('contextmenu', (e) => itemMenu(e, item));
       row.innerHTML = `
         <span style="display:flex;align-items:center;gap:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
           <span>${item.icon}</span><span style="overflow:hidden;text-overflow:ellipsis;">${item.name}</span>
         </span>
-        <span style="color:#8b95a1;">${item.modified}</span>
-        <span style="color:#8b95a1;">${item.kind}</span>
-        <span style="color:#8b95a1;text-align:right;">${item.size}</span>
+        <span style="color:var(--muted);">${item.modified}</span>
+        <span style="color:var(--muted);">${item.kind}</span>
+        <span style="color:var(--muted);text-align:right;">${item.size}</span>
       `;
       row.addEventListener('dblclick', () => openItem(item));
       row.addEventListener('mouseenter', () => {
-        row.style.background = '#232830';
+        row.style.background = 'var(--border)';
       });
       row.addEventListener('mouseleave', () => {
         row.style.background = 'transparent';
@@ -289,6 +401,17 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     });
   }
 
+  // Empty space in either view gets the folder menu. Attached once rather
+  // than on every render, so re-rendering does not stack listeners.
+  table.addEventListener('contextmenu', (e) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    folderMenu(e);
+  });
+  grid.addEventListener('contextmenu', (e) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    folderMenu(e);
+  });
+
   function renderFolderContents(path: string): void {
     renderBreadcrumb(path);
     viewToggle.textContent = viewMode === 'details' ? '⊞ Large icons' : '☰ Details';
@@ -297,7 +420,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     if (items.length === 0) {
       grid.style.display = 'none';
       table.style.display = 'flex';
-      table.innerHTML = `<div style="padding:20px;color:#8b95a1;text-align:center;">This folder is empty.</div>`;
+      table.innerHTML = `<div style="padding:20px;color:var(--muted);text-align:center;">This folder is empty.</div>`;
       return;
     }
 

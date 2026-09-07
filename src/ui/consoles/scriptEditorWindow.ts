@@ -39,7 +39,7 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
   if (!conductor.dir || !conductor.idp || !conductor.audit || !conductor.tickets) {
     body.style.padding = '24px';
     const msg = document.createElement('div');
-    msg.style.cssText = 'color:#8b95a1;font-size:13px;font-family:Consolas,monospace;';
+    msg.style.cssText = 'color:var(--muted);font-size:13px;font-family:Consolas,monospace;';
     msg.textContent = 'The identity services are not available. Reset the environment to re-seed.';
     body.appendChild(msg);
     return;
@@ -60,13 +60,13 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
       : null;
 
   const root = document.createElement('div');
-  root.style.cssText = 'display:flex;height:100%;font-size:12px;color:#c8cdd3;min-height:0;';
+  root.style.cssText = 'display:flex;height:100%;font-size:12px;color:var(--fg);min-height:0;';
   body.appendChild(root);
 
   // ── Template gallery ──────────────────────────────────────────────────────
   const gallery = document.createElement('div');
   gallery.style.cssText =
-    'width:220px;flex-shrink:0;background:#12151a;border-right:1px solid #2d343d;' +
+    'width:220px;flex-shrink:0;background:#12151a;border-right:1px solid var(--border);' +
     'overflow-y:auto;padding:10px 0;';
   root.appendChild(gallery);
 
@@ -77,15 +77,15 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
 
   const toolbar = document.createElement('div');
   toolbar.style.cssText =
-    'display:flex;align-items:center;gap:8px;padding:8px 10px;background:#232830;' +
-    'border-bottom:1px solid #2d343d;flex-shrink:0;';
+    'display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--border);' +
+    'border-bottom:1px solid var(--border);flex-shrink:0;';
   right.appendChild(toolbar);
 
   const scriptName = document.createElement('input');
   scriptName.type = 'text';
   scriptName.value = 'Untitled.ps1';
   scriptName.style.cssText =
-    'flex:1;min-width:0;background:#0e1116;color:#e6e6e6;border:1px solid #2d343d;' +
+    'flex:1;min-width:0;background:var(--panel);color:var(--fg);border:1px solid var(--border);' +
     'border-radius:4px;padding:4px 8px;font-size:11.5px;font-family:Consolas,monospace;outline:none;';
 
   const mkBtn = (label: string, primary = false): HTMLButtonElement => {
@@ -94,7 +94,7 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
     b.style.cssText =
       `border:none;border-radius:4px;padding:5px 12px;font-size:11.5px;cursor:pointer;` +
       `font-weight:600;flex-shrink:0;` +
-      (primary ? 'background:#4ec9b0;color:#06231d;' : 'background:#2d343d;color:#c8cdd3;');
+      (primary ? 'background:var(--accent);color:#06231d;' : 'background:var(--border);color:var(--fg);');
     return b;
   };
   const runBtn = mkBtn('▶ Run', true);
@@ -105,7 +105,7 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
   const editor = document.createElement('textarea');
   editor.spellcheck = false;
   editor.style.cssText =
-    'flex:1;min-height:0;background:#0c0c0c;color:#ccc;border:none;outline:none;resize:none;' +
+    'flex:1;min-height:0;background:#0c0c0c;color:var(--fg);border:none;outline:none;resize:none;' +
     "padding:12px;font-family:Consolas,'Cascadia Mono',monospace;font-size:12.5px;line-height:1.5;" +
     'tab-size:2;';
   editor.value = SCRIPT_TEMPLATES[0]!.body;
@@ -113,11 +113,11 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
 
   const output = document.createElement('div');
   output.style.cssText =
-    'height:38%;flex-shrink:0;overflow-y:auto;background:#0e1116;border-top:1px solid #2d343d;' +
+    'height:38%;flex-shrink:0;overflow-y:auto;background:var(--panel);border-top:1px solid var(--border);' +
     'padding:8px 12px;font-family:Consolas,monospace;font-size:11.5px;line-height:1.5;';
   right.appendChild(output);
 
-  const write = (text: string, color = '#ccc'): void => {
+  const write = (text: string, color = 'var(--fg)'): void => {
     const pre = document.createElement('pre');
     pre.textContent = text;
     pre.style.cssText = `margin:0;white-space:pre-wrap;word-break:break-word;color:${color};font:inherit;`;
@@ -151,10 +151,10 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
       const b = document.createElement('button');
       b.style.cssText =
         'flex:1;text-align:left;background:transparent;border:none;cursor:pointer;' +
-        'padding:7px 8px;color:#c8cdd3;border-radius:4px;min-width:0;';
+        'padding:7px 8px;color:var(--fg);border-radius:4px;min-width:0;';
       const t = document.createElement('div');
       t.textContent = name;
-      t.style.cssText = 'font-size:11.5px;color:#e6e6e6;';
+      t.style.cssText = 'font-size:11.5px;color:var(--fg);';
       const p = document.createElement('div');
       p.textContent = purpose;
       p.style.cssText = 'font-size:10px;color:#6b7280;margin-top:2px;line-height:1.35;';
@@ -218,7 +218,7 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
     const ctx = currentCtx();
     output.innerHTML = '';
     if (!ctx) {
-      write('The identity services are not available. Reset the environment to re-seed.', '#f48771');
+      write('The identity services are not available. Reset the environment to re-seed.', 'var(--err)');
       return;
     }
 
@@ -227,21 +227,21 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
     if (res.parseError) {
       // Nothing ran — say so explicitly rather than leaving the learner to
       // guess whether half the batch went through.
-      write(`Script error: ${res.parseError}`, '#f48771');
-      write('No commands were run.', '#f48771');
+      write(`Script error: ${res.parseError}`, 'var(--err)');
+      write('No commands were run.', 'var(--err)');
       return;
     }
 
     for (const { command, result } of res.results) {
-      write(`PS C:\\> ${command}`, '#4ec9b0');
-      if (result.output) write(result.output, result.ok ? '#ccc' : '#f48771');
+      write(`PS C:\\> ${command}`, 'var(--accent)');
+      if (result.output) write(result.output, result.ok ? 'var(--fg)' : 'var(--err)');
     }
 
     write('');
     const summary = `${res.succeeded} succeeded, ${res.failed} failed.`;
     write(summary, res.ok ? '#6a9955' : '#d7ba7d');
     if (res.failed > 0) {
-      write('Fix the failing lines above and re-run — the rest already applied.', '#8b95a1');
+      write('Fix the failing lines above and re-run — the rest already applied.', 'var(--muted)');
     }
   });
 

@@ -39,7 +39,7 @@ function saveDone(done: Set<string>): void {
 export function renderManualWindow(body: HTMLElement): void {
   body.innerHTML = '';
   body.style.cssText =
-    'display:flex;height:100%;background:#0e1116;color:#e6e6e6;' +
+    'display:flex;height:100%;background:var(--panel);color:var(--fg);' +
     'font-family:"Segoe UI",system-ui,sans-serif;';
 
   const done = loadDone();
@@ -49,16 +49,16 @@ export function renderManualWindow(body: HTMLElement): void {
   // --- Contents -------------------------------------------------------------
   const side = document.createElement('div');
   side.style.cssText =
-    'flex-shrink:0;width:280px;background:#161b22;border-right:1px solid #2d343d;' +
+    'flex-shrink:0;width:280px;background:var(--panel-alt);border-right:1px solid var(--border);' +
     'display:flex;flex-direction:column;';
 
   const sideHead = document.createElement('div');
-  sideHead.style.cssText = 'padding:14px 16px 10px;border-bottom:1px solid #2d343d;';
+  sideHead.style.cssText = 'padding:14px 16px 10px;border-bottom:1px solid var(--border);';
   const title = document.createElement('div');
   title.textContent = 'IAM Range manual';
   title.style.cssText = 'font-size:13px;font-weight:600;';
   const progress = document.createElement('div');
-  progress.style.cssText = 'font-size:11px;color:#8b95a1;margin-top:3px;';
+  progress.style.cssText = 'font-size:11px;color:var(--muted);margin-top:3px;';
   sideHead.append(title, progress);
   side.appendChild(sideHead);
 
@@ -76,7 +76,7 @@ export function renderManualWindow(body: HTMLElement): void {
     const el = document.createElement('div');
     el.textContent = text;
     el.style.cssText =
-      'font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#6b7482;' +
+      'font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);' +
       'margin:22px 0 8px;';
     return el;
   }
@@ -84,25 +84,25 @@ export function renderManualWindow(body: HTMLElement): void {
   function paragraph(text: string): HTMLElement {
     const el = document.createElement('p');
     el.textContent = text;
-    el.style.cssText = 'font-size:13px;line-height:1.75;margin:0 0 12px;max-width:70ch;color:#d7dde4;';
+    el.style.cssText = 'font-size:13px;line-height:1.75;margin:0 0 12px;max-width:70ch;color:var(--fg);';
     return el;
   }
 
   function codeLine(text: string): HTMLElement {
     const wrap = document.createElement('div');
     wrap.style.cssText =
-      'display:flex;align-items:center;gap:8px;background:#0a0d12;border:1px solid #21262d;' +
+      'display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);' +
       'border-radius:4px;padding:7px 10px;margin-top:6px;';
     const code = document.createElement('code');
     code.textContent = text;
     code.style.cssText =
-      'flex:1;font-family:Consolas,Monaco,monospace;font-size:11.5px;color:#4ec9b0;' +
+      'flex:1;font-family:Consolas,Monaco,monospace;font-size:11.5px;color:var(--accent);' +
       'overflow-x:auto;white-space:pre;';
     const copy = document.createElement('button');
     copy.textContent = 'Copy';
     copy.style.cssText =
-      'flex-shrink:0;padding:3px 9px;border-radius:3px;border:1px solid #2d343d;' +
-      'background:#161b22;color:#8b95a1;font-size:10.5px;cursor:pointer;font-family:inherit;';
+      'flex-shrink:0;padding:3px 9px;border-radius:3px;border:1px solid var(--border);' +
+      'background:var(--panel-alt);color:var(--muted);font-size:10.5px;cursor:pointer;font-family:inherit;';
     copy.addEventListener('click', () => {
       void navigator.clipboard
         ?.writeText(text)
@@ -121,7 +121,7 @@ export function renderManualWindow(body: HTMLElement): void {
       'font-family:inherit;' +
       (primary
         ? 'background:#2563eb;color:#fff;border:1px solid #2563eb;'
-        : 'background:#161b22;color:#c9d1d9;border:1px solid #2d343d;');
+        : 'background:var(--panel-alt);color:var(--fg);border:1px solid var(--border);');
     b.addEventListener('click', onClick);
     return b;
   }
@@ -136,7 +136,7 @@ export function renderManualWindow(body: HTMLElement): void {
       head.textContent = chapter.title;
       head.style.cssText =
         'padding:12px 16px 5px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;' +
-        'color:#6b7482;';
+        'color:var(--muted);';
       contents.appendChild(head);
 
       for (const lesson of chapter.lessons) {
@@ -146,11 +146,11 @@ export function renderManualWindow(body: HTMLElement): void {
         row.style.cssText =
           'display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 16px;' +
           'border:none;cursor:pointer;font-size:12px;line-height:1.4;font-family:inherit;' +
-          (isOpen ? 'background:#2563eb;color:#fff;' : 'background:transparent;color:#c9d1d9;');
+          (isOpen ? 'background:#2563eb;color:#fff;' : 'background:transparent;color:var(--fg);');
 
         const tick = document.createElement('span');
         tick.textContent = isDone ? '✓' : '○';
-        tick.style.cssText = `flex-shrink:0;color:${isDone ? '#4ec9b0' : '#4a5568'};font-size:11px;`;
+        tick.style.cssText = `flex-shrink:0;color:${isDone ? 'var(--accent)' : 'var(--muted)'};font-size:11px;`;
 
         const name = document.createElement('span');
         name.textContent = lesson.title;
@@ -172,7 +172,7 @@ export function renderManualWindow(body: HTMLElement): void {
     const crumb = document.createElement('div');
     crumb.textContent = chapter.title;
     crumb.style.cssText =
-      'font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#4ec9b0;margin-bottom:6px;';
+      'font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;';
 
     const h = document.createElement('h1');
     h.textContent = current.title;
@@ -180,7 +180,7 @@ export function renderManualWindow(body: HTMLElement): void {
 
     const objective = document.createElement('div');
     objective.textContent = current.objective;
-    objective.style.cssText = 'font-size:13.5px;color:#8b95a1;margin-bottom:4px;max-width:70ch;';
+    objective.style.cssText = 'font-size:13.5px;color:var(--muted);margin-bottom:4px;max-width:70ch;';
 
     pane.append(crumb, h, objective);
 
@@ -192,7 +192,7 @@ export function renderManualWindow(body: HTMLElement): void {
     list.style.cssText = 'margin:0;padding-left:20px;max-width:70ch;';
     for (const step of current.steps) {
       const li = document.createElement('li');
-      li.style.cssText = 'font-size:13px;line-height:1.7;margin-bottom:10px;color:#d7dde4;';
+      li.style.cssText = 'font-size:13px;line-height:1.7;margin-bottom:10px;color:var(--fg);';
       li.appendChild(document.createTextNode(step.do));
       if (step.example) li.appendChild(codeLine(step.example));
       else if (step.cmdlet) li.appendChild(codeLine(step.cmdlet));

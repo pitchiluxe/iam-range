@@ -33,7 +33,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
   });
 
   if (!conductor.dir || !conductor.idp || !conductor.audit || !conductor.tickets) {
-    body.style.cssText = 'padding:24px;color:#8b95a1;font-size:13px;background:#0c0c0c;';
+    body.style.cssText = 'padding:24px;color:var(--muted);font-size:13px;background:#0c0c0c;';
     body.innerHTML =
       '<div style="font-family:Consolas,monospace;">' +
       'Identity services unavailable.<br/><br/>Reset the environment from the ' +
@@ -66,7 +66,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
   screen.style.cssText =
     'height:100%;overflow-y:auto;padding:10px 12px;box-sizing:border-box;' +
     "font-family:Consolas,'Cascadia Mono',Menlo,monospace;font-size:12.5px;" +
-    'line-height:1.45;color:#ccc;background:#0c0c0c;' +
+    'line-height:1.45;color:var(--fg);background:#0c0c0c;' +
     'scrollbar-width:thin;scrollbar-color:#333 #0c0c0c;';
   body.appendChild(screen);
 
@@ -75,7 +75,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
   // Owned per window so `cd` persists across commands in this session.
   const shell = createShellState();
 
-  const write = (text: string, color = '#ccc'): void => {
+  const write = (text: string, color = 'var(--fg)'): void => {
     if (text === '') return;
     const pre = document.createElement('pre');
     pre.textContent = text;
@@ -93,7 +93,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
 
     const ps = document.createElement('span');
     ps.textContent = `PS ${shell.cwd.path}>`;
-    ps.style.cssText = 'color:#4ec9b0;flex-shrink:0;';
+    ps.style.cssText = 'color:var(--accent);flex-shrink:0;';
 
     const input = document.createElement('input');
     input.type = 'text';
@@ -101,7 +101,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
     input.autocapitalize = 'off';
     input.setAttribute('autocomplete', 'off');
     input.style.cssText =
-      'flex:1;background:transparent;border:none;outline:none;color:#ccc;font:inherit;padding:0;';
+      'flex:1;background:transparent;border:none;outline:none;color:var(--fg);font:inherit;padding:0;';
 
     line.append(ps, input);
     screen.appendChild(line);
@@ -135,7 +135,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
       const line = input.value;
       // Freeze the submitted line as text so it can't be edited afterwards.
       input.disabled = true;
-      input.style.color = '#ccc';
+      input.style.color = 'var(--fg)';
       if (line.trim()) {
         history.push(line);
         historyIdx = -1;
@@ -148,7 +148,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
   const run = (line: string): void => {
     const ctx = currentCtx();
     if (!ctx) {
-      write('The identity services are not available. Reset the environment to re-seed.', '#f48771');
+      write('The identity services are not available. Reset the environment to re-seed.', 'var(--err)');
       write('');
       newPrompt();
       return;
@@ -168,7 +168,7 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
       return;
     }
 
-    write(res.output, res.ok ? '#ccc' : '#f48771');
+    write(res.output, res.ok ? 'var(--fg)' : 'var(--err)');
     write('');
     newPrompt();
   };

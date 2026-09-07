@@ -27,6 +27,8 @@ import { renderManualWindow } from './consoles/manualWindow';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { onAppRequest } from '@/util/appLauncher';
+import { openContextMenu, type MenuItem } from '@/ui/contextMenu';
+import { THEMES, currentThemeId, setTheme } from '@/ui/themes';
 import {
   getIconOrder,
   saveIconOrder,
@@ -414,7 +416,8 @@ class WindowManager {
       left: ${80 + Math.random() * 200}px;
       top: ${60 + Math.random() * 120}px;
       background: var(--panel);
-      border: 1px solid rgba(255,255,255,0.13);
+      color: var(--fg);
+      border: 1px solid var(--glass-border);
       border-radius: 9px;
       box-shadow: 0 18px 48px rgba(0,0,0,0.62), 0 0 0 1px rgba(0,0,0,0.55);
       overflow: hidden;
@@ -430,17 +433,18 @@ class WindowManager {
     titleBar.style.cssText = `
       display: flex; align-items: center; justify-content: space-between;
       padding: 8px 12px;
-      background: linear-gradient(180deg, rgba(58,72,88,0.72), rgba(30,38,48,0.62));
+      background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
       backdrop-filter: blur(20px) saturate(150%);
       -webkit-backdrop-filter: blur(20px) saturate(150%);
-      border-bottom: 1px solid rgba(255,255,255,0.10);
+      color: var(--glass-text);
+      border-bottom: 1px solid var(--glass-border);
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
       cursor: move; user-select: none; flex-shrink: 0;
     `;
 
     const titleEl = document.createElement('div');
     titleEl.style.cssText =
-      'display:flex;align-items:center;gap:8px;font-size:13px;color:#e6e6e6;font-weight:500;';
+      'display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg);font-weight:500;';
     titleEl.innerHTML = `<span>${def.icon}</span><span>${def.title}</span>`;
     titleBar.appendChild(titleEl);
 
@@ -448,8 +452,8 @@ class WindowManager {
     lights.style.cssText = 'display:flex;gap:6px;align-items:center;';
     const lightData = [
       { color: '#d7ba7d', action: 'minimize' as const },
-      { color: '#4ec9b0', action: 'maximize' as const },
-      { color: '#f48771', action: 'close' as const },
+      { color: 'var(--accent)', action: 'maximize' as const },
+      { color: 'var(--err)', action: 'close' as const },
     ];
     for (const ld of lightData) {
       const btn = document.createElement('button');
@@ -476,7 +480,7 @@ class WindowManager {
     el.appendChild(titleBar);
 
     const body = document.createElement('div');
-    body.style.cssText = 'flex: 1; overflow: auto; min-height: 0; background: #0e1116;';
+    body.style.cssText = 'flex: 1; overflow: auto; min-height: 0; background: var(--panel);';
     el.appendChild(body);
 
     // Dragging
@@ -543,6 +547,49 @@ export function createDesktopOverlay(): DesktopOverlay {
   // than whatever was live when the overlay was first built.
   let currentServices: VmServices | null = null;
   let iconColEl: HTMLElement | null = null;
+
+  /**
+   * How the desktop icons are shown.
+   *
+   * Windows keeps these on the desktop's own right-click menu rather than in
+   * Settings, and so does this: it is where people look for them.
+   */
+  const ICON_PREFS_KEY = 'desktop_icon_prefs';
+  type IconSize = 'small' | 'medium' | 'large';
+  interface IconPrefs {
+    size: IconSize;
+    visible: boolean;
+    sort: 'custom' | 'name';
+  }
+  const ICON_SIZES: Record<IconSize, { box: number; glyph: number; label: number }> = {
+    small: { box: 64, glyph: 22, label: 10.5 },
+    medium: { box: 84, glyph: 30, label: 11.5 },
+    large: { box: 104, glyph: 40, label: 12.5 },
+  };
+
+  function readIconPrefs(): IconPrefs {
+    try {
+      const raw = localStorage.getItem(ICON_PREFS_KEY);
+      const parsed = raw ? (JSON.parse(raw) as Partial<IconPrefs>) : {};
+      return {
+        size: parsed.size ?? 'medium',
+        visible: parsed.visible ?? true,
+        sort: parsed.sort ?? 'custom',
+      };
+    } catch {
+      return { size: 'medium', visible: true, sort: 'custom' };
+    }
+  }
+
+  function writeIconPrefs(patch: Partial<IconPrefs>): void {
+    const next = { ...readIconPrefs(), ...patch };
+    try {
+      localStorage.setItem(ICON_PREFS_KEY, JSON.stringify(next));
+    } catch {
+      /* private mode — the preference simply does not persist */
+    }
+    if (iconColEl) renderDesktopIcons(iconColEl);
+  }
   let renderStartMenuApps: (() => void) | null = null;
 
   function buildContainer(): HTMLElement {
@@ -555,7 +602,7 @@ export function createDesktopOverlay(): DesktopOverlay {
       -webkit-backdrop-filter: blur(10px);
       display: none; flex-direction: column;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', sans-serif;
-      font-size: 14px; color: #e6e6e6;
+      font-size: 14px; color: var(--fg);
     `;
     document.body.appendChild(c);
     return c;
@@ -596,6 +643,76 @@ export function createDesktopOverlay(): DesktopOverlay {
       gap: 8px; justify-items: center;
     `;
     bg.appendChild(iconCol);
+
+    // The desktop's menu. Windows puts View, Sort and Personalise here, and
+    // people reach for it before they look in Settings.
+    bg.addEventListener('contextmenu', (e) => {
+      // Only the empty desktop — an icon's own menu handles itself.
+      if (e.target !== bg && e.target !== iconCol) return;
+      const prefs = readIconPrefs();
+      openContextMenu(e, [
+        {
+          label: 'View',
+          submenu: [
+            {
+              label: 'Large icons',
+              checked: prefs.size === 'large',
+              onClick: () => writeIconPrefs({ size: 'large' }),
+            },
+            {
+              label: 'Medium icons',
+              checked: prefs.size === 'medium',
+              onClick: () => writeIconPrefs({ size: 'medium' }),
+            },
+            {
+              label: 'Small icons',
+              checked: prefs.size === 'small',
+              onClick: () => writeIconPrefs({ size: 'small' }),
+            },
+            { separator: true },
+            {
+              label: 'Show desktop icons',
+              checked: prefs.visible,
+              onClick: () => writeIconPrefs({ visible: !prefs.visible }),
+            },
+          ],
+        },
+        {
+          label: 'Sort by',
+          submenu: [
+            {
+              label: 'Name',
+              checked: prefs.sort === 'name',
+              onClick: () => writeIconPrefs({ sort: 'name' }),
+            },
+            {
+              label: 'The order I put them in',
+              checked: prefs.sort === 'custom',
+              onClick: () => writeIconPrefs({ sort: 'custom' }),
+            },
+          ],
+        },
+        { label: 'Refresh', onClick: () => iconColEl && renderDesktopIcons(iconColEl) },
+        { separator: true },
+        {
+          label: 'Theme',
+          submenu: THEMES.map((theme) => ({
+            label: theme.label,
+            checked: theme.id === currentThemeId(),
+            onClick: () => setTheme(theme.id),
+          })),
+        },
+        {
+          label: 'Personalise',
+          onClick: () => currentServices && api.openWindow('settings', currentServices),
+        },
+        { separator: true },
+        {
+          label: 'Open Terminal here',
+          onClick: () => currentServices && api.openWindow('terminal', currentServices),
+        },
+      ]);
+    });
     iconColEl = iconCol;
     renderDesktopIcons(iconCol);
     onDesktopIconsChanged(() => renderDesktopIcons(iconCol));
@@ -632,21 +749,37 @@ export function createDesktopOverlay(): DesktopOverlay {
 
   function renderDesktopIcons(iconCol: HTMLElement): void {
     iconCol.innerHTML = '';
+    const prefs = readIconPrefs();
+
+    // "Show desktop icons" off leaves the desktop bare, as it does in Windows.
+    // The icons are still there — the Start menu still lists every app — so
+    // this hides them rather than removing anything.
+    iconCol.style.display = prefs.visible ? 'grid' : 'none';
+    if (!prefs.visible) return;
+
+    const size = ICON_SIZES[prefs.size];
+    iconCol.style.gridTemplateRows = `repeat(${prefs.size === 'large' ? 5 : 6}, auto)`;
+
     const icons = resolveIconOrder();
+    if (prefs.sort === 'name') {
+      icons.sort((a, b) => a.title.localeCompare(b.title));
+    }
     let draggedId: string | null = null;
 
     for (const entry of icons) {
       const iconBtn = document.createElement('button');
-      iconBtn.draggable = true;
+      // Dragging reorders, which only means something in the order the user
+      // chose — sorting by name and then dragging would silently undo itself.
+      iconBtn.draggable = prefs.sort === 'custom';
       iconBtn.dataset['iconId'] = entry.id;
       iconBtn.style.cssText = `
         background: transparent; border: none; cursor: pointer;
         display: flex; flex-direction: column; align-items: center; gap: 4px;
-        padding: 8px; border-radius: 6px; width: 80px;
+        padding: 8px; border-radius: 6px; width: ${size.box}px;
       `;
       iconBtn.innerHTML = `
-        <span style="font-size:32px;line-height:1;">${entry.icon}</span>
-        <span style="font-size:11px;color:#c8cdd3;text-align:center;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${entry.title}</span>
+        <span style="font-size:${size.glyph}px;line-height:1;">${entry.icon}</span>
+        <span style="font-size:${size.label}px;color:var(--glass-text,var(--fg));text-align:center;max-width:${size.box - 8}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,0.6);">${entry.title}</span>
       `;
       const activate = () => {
         const def = APP_BY_ID[entry.id];
@@ -655,6 +788,34 @@ export function createDesktopOverlay(): DesktopOverlay {
       iconBtn.title = `Open ${entry.title} (double-click) · drag to reorder or drop on Recycle Bin to remove`;
       iconBtn.addEventListener('dblclick', activate);
       iconBtn.addEventListener('click', activate);
+
+      // Each icon's own menu, as Windows gives them.
+      iconBtn.addEventListener('contextmenu', (e) => {
+        const items: MenuItem[] = [
+          { label: 'Open', onClick: activate },
+          { separator: true },
+          {
+            label: 'Remove from desktop',
+            // The Recycle Bin cannot delete itself, and would have nowhere to
+            // put the thing that restores it.
+            disabled: entry.id === 'recycle-bin',
+            onClick: () => {
+              deleteIcon(entry);
+              if (iconColEl) renderDesktopIcons(iconColEl);
+            },
+          },
+          { separator: true },
+          {
+            label: 'View',
+            submenu: (['large', 'medium', 'small'] as const).map((value) => ({
+              label: `${value[0]!.toUpperCase()}${value.slice(1)} icons`,
+              checked: prefs.size === value,
+              onClick: () => writeIconPrefs({ size: value }),
+            })),
+          },
+        ];
+        openContextMenu(e, items);
+      });
 
       // --- Drag to reorder / drop-on-Recycle-Bin to delete ---
       iconBtn.addEventListener('dragstart', (e) => {
@@ -709,8 +870,9 @@ export function createDesktopOverlay(): DesktopOverlay {
     tb.id = 'apex-taskbar';
     tb.style.cssText = `
       position: absolute; bottom: 0; left: 0; right: 0; height: 48px;
-      background: linear-gradient(180deg, rgba(40,52,66,0.62), rgba(18,24,32,0.78));
-      border-top: 1px solid rgba(255,255,255,0.12);
+      background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+      border-top: 1px solid var(--glass-border);
+      color: var(--glass-text);
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 -8px 24px rgba(0,0,0,0.35);
       backdrop-filter: blur(26px) saturate(150%);
       -webkit-backdrop-filter: blur(26px) saturate(150%);
@@ -718,20 +880,56 @@ export function createDesktopOverlay(): DesktopOverlay {
       padding: 0 8px; z-index: 50;
     `;
 
+    // The taskbar's menu. Windows keeps window arrangement and Task Manager
+    // here; the arrangement commands are the useful half in a lab where people
+    // end up with six windows open on one screen.
+    tb.addEventListener('contextmenu', (e) => {
+      const wm = wmCtx.current;
+      const open = wm?.getOpenIds() ?? [];
+      openContextMenu(e, [
+        {
+          label: 'Cascade windows',
+          disabled: open.length === 0,
+          onClick: () => wm && cascadeWindows(wm),
+        },
+        {
+          label: 'Show windows side by side',
+          disabled: open.length < 2,
+          onClick: () => wm && tileWindows(wm),
+        },
+        {
+          label: 'Show the desktop',
+          disabled: open.length === 0,
+          onClick: () => open.forEach((id) => wm?.minimize(id)),
+        },
+        { separator: true },
+        {
+          label: 'Close all windows',
+          disabled: open.length === 0,
+          onClick: () => open.forEach((id) => wm?.close(id)),
+        },
+        { separator: true },
+        {
+          label: 'Taskbar settings',
+          onClick: () => currentServices && api.openWindow('settings', currentServices),
+        },
+      ]);
+    });
+
     const startBtn = document.createElement('button');
     startBtn.id = 'taskbar-start';
     startBtn.style.cssText = `
       height: 36px; padding: 0 14px; border-radius: 6px; border: none; cursor: pointer;
-      background: #232830; color: #4ec9b0; font-size: 13px; font-weight: 600;
+      background: var(--border); color: var(--accent); font-size: 13px; font-weight: 600;
       display: flex; align-items: center; gap: 6px;
       transition: background 0.15s;
     `;
     startBtn.innerHTML = `<span style="font-size:16px;">⌂</span><span>Start</span>`;
     startBtn.addEventListener('mouseenter', () => {
-      startBtn.style.background = '#2d343d';
+      startBtn.style.background = 'var(--border)';
     });
     startBtn.addEventListener('mouseleave', () => {
-      startBtn.style.background = '#232830';
+      startBtn.style.background = 'var(--border)';
     });
     startBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -740,7 +938,7 @@ export function createDesktopOverlay(): DesktopOverlay {
     tb.appendChild(startBtn);
 
     const sep = document.createElement('div');
-    sep.style.cssText = 'width:1px;height:24px;background:#2d343d;margin:0 4px;';
+    sep.style.cssText = 'width:1px;height:24px;background:var(--border);margin:0 4px;';
     tb.appendChild(sep);
 
     const appsStrip = document.createElement('div');
@@ -752,8 +950,8 @@ export function createDesktopOverlay(): DesktopOverlay {
     tray.style.cssText = `
       display: flex; align-items: center; gap: 8px;
       padding: 0 10px; border-radius: 6px;
-      background: #232830; height: 36px;
-      font-size: 12px; color: #8b95a1;
+      background: var(--border); height: 36px;
+      font-size: 12px; color: var(--muted);
     `;
     tray.innerHTML = `<span title="Connected" style="font-size:14px;">📶</span>`;
     const clock = document.createElement('button');
@@ -771,7 +969,7 @@ export function createDesktopOverlay(): DesktopOverlay {
     if (clockInterval) clearInterval(clockInterval);
     clockInterval = window.setInterval(updateClock, 10000);
     clock.addEventListener('mouseenter', () => {
-      clock.style.background = '#2d343d';
+      clock.style.background = 'var(--border)';
     });
     clock.addEventListener('mouseleave', () => {
       clock.style.background = 'transparent';
@@ -785,18 +983,18 @@ export function createDesktopOverlay(): DesktopOverlay {
     const logoutBtn = document.createElement('button');
     logoutBtn.style.cssText = `
       margin-left: 4px; height: 32px; padding: 0 12px; border-radius: 4px;
-      border: 1px solid #2d343d; background: transparent; color: #8b95a1;
+      border: 1px solid var(--border); background: transparent; color: var(--muted);
       font-size: 12px; cursor: pointer; transition: all 0.15s;
     `;
     logoutBtn.textContent = '↩ Sign out';
     logoutBtn.title = 'Sign out and return to the lock screen';
     logoutBtn.addEventListener('mouseenter', () => {
-      logoutBtn.style.background = '#2d343d';
-      logoutBtn.style.color = '#e6e6e6';
+      logoutBtn.style.background = 'var(--border)';
+      logoutBtn.style.color = 'var(--fg)';
     });
     logoutBtn.addEventListener('mouseleave', () => {
       logoutBtn.style.background = 'transparent';
-      logoutBtn.style.color = '#8b95a1';
+      logoutBtn.style.color = 'var(--muted)';
     });
     logoutBtn.addEventListener('click', () => {
       api.hide();
@@ -848,10 +1046,10 @@ export function createDesktopOverlay(): DesktopOverlay {
     cal.style.cssText = `
       display: none; position: absolute; bottom: 52px; right: 8px;
       width: 260px; background: rgba(27, 31, 36, 0.97);
-      border: 1px solid #2d343d; border-radius: 8px;
+      border: 1px solid var(--border); border-radius: 8px;
       box-shadow: 0 12px 40px rgba(0,0,0,0.6);
       backdrop-filter: blur(12px);
-      z-index: 100; padding: 14px; color: #e6e6e6; font-size: 12px;
+      z-index: 100; padding: 14px; color: var(--fg); font-size: 12px;
     `;
     c.appendChild(cal);
 
@@ -884,16 +1082,16 @@ export function createDesktopOverlay(): DesktopOverlay {
       for (let d = 1; d <= daysInMonth; d++) {
         const isToday = d === today;
         cells += `<div style="text-align:center;padding:4px 0;border-radius:4px;font-size:11px;${
-          isToday ? 'background:#4ec9b0;color:#0e1116;font-weight:700;' : 'color:#c8cdd3;'
+          isToday ? 'background:var(--accent);color:var(--panel);font-weight:700;' : 'color:var(--fg);'
         }">${d}</div>`;
       }
 
       cal.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
           <strong style="font-size:13px;">${MONTH_NAMES[month]} ${year}</strong>
-          <span style="color:#8b95a1;font-size:11px;">${now.toLocaleDateString([], { weekday: 'long' })}</span>
+          <span style="color:var(--muted);font-size:11px;">${now.toLocaleDateString([], { weekday: 'long' })}</span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:10px;color:#8b95a1;margin-bottom:4px;">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:10px;color:var(--muted);margin-bottom:4px;">
           ${DOW.map((d) => `<div style="text-align:center;">${d}</div>`).join('')}
         </div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">${cells}</div>
@@ -911,8 +1109,9 @@ export function createDesktopOverlay(): DesktopOverlay {
     sm.style.cssText = `
       display: none; position: absolute; bottom: 52px; left: 8px;
       width: 340px;
-      background: linear-gradient(180deg, rgba(38,50,64,0.80), rgba(16,22,30,0.88));
-      border: 1px solid rgba(255,255,255,0.14); border-radius: 10px;
+      background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+      border: 1px solid var(--glass-border); border-radius: 10px;
+      color: var(--glass-text);
       box-shadow: 0 20px 56px rgba(0,0,0,0.62), inset 0 1px 0 rgba(255,255,255,0.16);
       backdrop-filter: blur(30px) saturate(160%);
       -webkit-backdrop-filter: blur(30px) saturate(160%);
@@ -921,15 +1120,15 @@ export function createDesktopOverlay(): DesktopOverlay {
     `;
 
     const header = document.createElement('div');
-    header.style.cssText = 'padding: 16px 20px 12px; border-bottom: 1px solid #2d343d;';
+    header.style.cssText = 'padding: 16px 20px 12px; border-bottom: 1px solid var(--border);';
     header.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:36px;height:36px;background:#4ec9b0;border-radius:8px;display:flex;align-items:center;justify-content:center;">
-          <span style="font-size:20px;color:#0e1116;font-weight:bold;">${PRODUCT.name.charAt(0)}</span>
+        <div style="width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:20px;color:var(--panel);font-weight:bold;">${PRODUCT.name.charAt(0)}</span>
         </div>
         <div>
-          <div style="font-size:14px;font-weight:600;color:#e6e6e6;">${PRODUCT.name}</div>
-          <div id="sm-subtitle" style="font-size:11px;color:#8b95a1;">Workstation</div>
+          <div style="font-size:14px;font-weight:600;color:var(--fg);">${PRODUCT.name}</div>
+          <div id="sm-subtitle" style="font-size:11px;color:var(--muted);">Workstation</div>
         </div>
       </div>
     `;
@@ -939,7 +1138,7 @@ export function createDesktopOverlay(): DesktopOverlay {
     pinnedLabel.style.cssText = `
       padding: 10px 16px 6px;
       font-size: 11px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.08em; color: #8b95a1;
+      letter-spacing: 0.08em; color: var(--muted);
     `;
     pinnedLabel.textContent = 'Pinned';
     sm.appendChild(pinnedLabel);
@@ -962,12 +1161,12 @@ export function createDesktopOverlay(): DesktopOverlay {
         appBtn.style.cssText = `
           display: flex; align-items: center; gap: 10px;
           padding: 10px 12px; border-radius: 6px; border: none; cursor: pointer;
-          background: transparent; color: #e6e6e6; font-size: 13px; text-align: left;
+          background: transparent; color: var(--fg); font-size: 13px; text-align: left;
           transition: background 0.15s;
         `;
         appBtn.innerHTML = `<span style="font-size:20px;">${app.icon}</span><span>${app.title}</span>`;
         appBtn.addEventListener('mouseenter', () => {
-          appBtn.style.background = '#232830';
+          appBtn.style.background = 'var(--border)';
         });
         appBtn.addEventListener('mouseleave', () => {
           appBtn.style.background = 'transparent';
@@ -985,7 +1184,7 @@ export function createDesktopOverlay(): DesktopOverlay {
     // Windows 11 style: user account on the left, power button on the right
     const footer = document.createElement('div');
     footer.style.cssText = `
-      padding: 10px 16px; border-top: 1px solid #2d343d;
+      padding: 10px 16px; border-top: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between;
     `;
 
@@ -994,17 +1193,17 @@ export function createDesktopOverlay(): DesktopOverlay {
     userPill.style.cssText = `
       display: flex; align-items: center; gap: 10px; padding: 6px 10px;
       border-radius: 6px; border: none; background: transparent; cursor: pointer;
-      transition: background 0.15s; color: #e6e6e6; flex-shrink: 0;
+      transition: background 0.15s; color: var(--fg); flex-shrink: 0;
     `;
     userPill.innerHTML = `
-      <div style="width:28px;height:28px;background:#4ec9b0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:#0e1116;font-weight:700;flex-shrink:0;">A</div>
+      <div style="width:28px;height:28px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--panel);font-weight:700;flex-shrink:0;">A</div>
       <div style="text-align:left;">
         <div style="font-size:12px;font-weight:500;">${VM_HOST.email}</div>
-        <div style="font-size:10px;color:#8b95a1;">IAM Administrator</div>
+        <div style="font-size:10px;color:var(--muted);">IAM Administrator</div>
       </div>
     `;
     userPill.addEventListener('mouseenter', () => {
-      userPill.style.background = '#232830';
+      userPill.style.background = 'var(--border)';
     });
     userPill.addEventListener('mouseleave', () => {
       userPill.style.background = 'transparent';
@@ -1021,16 +1220,16 @@ export function createDesktopOverlay(): DesktopOverlay {
       width: 36px; height: 36px; border-radius: 6px; border: none;
       background: transparent; cursor: pointer; font-size: 18px;
       display: flex; align-items: center; justify-content: center;
-      transition: background 0.15s; color: #8b95a1;
+      transition: background 0.15s; color: var(--muted);
     `;
     powerBtn.textContent = '⏻';
     powerBtn.addEventListener('mouseenter', () => {
-      powerBtn.style.background = '#232830';
-      powerBtn.style.color = '#e6e6e6';
+      powerBtn.style.background = 'var(--border)';
+      powerBtn.style.color = 'var(--fg)';
     });
     powerBtn.addEventListener('mouseleave', () => {
       powerBtn.style.background = 'transparent';
-      powerBtn.style.color = '#8b95a1';
+      powerBtn.style.color = 'var(--muted)';
     });
     powerWrap.appendChild(powerBtn);
 
@@ -1038,7 +1237,7 @@ export function createDesktopOverlay(): DesktopOverlay {
     powerMenu.style.cssText = `
       display: none; position: absolute; bottom: calc(100% + 4px); right: 0;
       width: 200px; background: rgba(27, 31, 36, 0.97);
-      border: 1px solid #2d343d; border-radius: 8px;
+      border: 1px solid var(--border); border-radius: 8px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.6); padding: 6px;
       z-index: 200;
     `;
@@ -1108,12 +1307,12 @@ export function createDesktopOverlay(): DesktopOverlay {
       row.style.cssText = `
         display: flex; align-items: center; gap: 10px; width: 100%;
         padding: 8px 10px; border-radius: 6px; border: none;
-        background: transparent; cursor: pointer; color: #e6e6e6;
+        background: transparent; cursor: pointer; color: var(--fg);
         font-size: 13px; text-align: left; transition: background 0.15s;
       `;
       row.innerHTML = `<span style="font-size:16px;">${item.icon}</span><span>${item.label}</span>`;
       row.addEventListener('mouseenter', () => {
-        row.style.background = '#232830';
+        row.style.background = 'var(--border)';
       });
       row.addEventListener('mouseleave', () => {
         row.style.background = 'transparent';
@@ -1153,6 +1352,39 @@ export function createDesktopOverlay(): DesktopOverlay {
    * Supervisor and other apps remain accessible from the Start menu
    * and taskbar but are NOT opened by default to keep the desktop calm.
    */
+  /** Stack the open windows, each offset from the last. */
+  function cascadeWindows(wm: WindowManager): void {
+    const ids = wm.getOpenIds();
+    const width = Math.min(880, Math.round(window.innerWidth * 0.6));
+    const height = Math.min(620, window.innerHeight - 140);
+    ids.forEach((id, i) => {
+      const state = wm.windows.get(id);
+      if (!state) return;
+      state.el.style.left = `${40 + i * 30}px`;
+      state.el.style.top = `${30 + i * 30}px`;
+      state.el.style.width = `${width}px`;
+      state.el.style.height = `${height}px`;
+    });
+  }
+
+  /** Lay the open windows out side by side, sharing the width evenly. */
+  function tileWindows(wm: WindowManager): void {
+    const ids = wm.getOpenIds();
+    if (ids.length === 0) return;
+    const gap = 8;
+    const total = window.innerWidth - gap * (ids.length + 1);
+    const width = Math.floor(total / ids.length);
+    const height = window.innerHeight - 48 - gap * 2;
+    ids.forEach((id, i) => {
+      const state = wm.windows.get(id);
+      if (!state) return;
+      state.el.style.left = `${gap + i * (width + gap)}px`;
+      state.el.style.top = `${gap}px`;
+      state.el.style.width = `${width}px`;
+      state.el.style.height = `${height}px`;
+    });
+  }
+
   /**
    * Windows this account had open when it last signed out.
    *

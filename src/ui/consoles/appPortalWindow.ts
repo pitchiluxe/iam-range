@@ -99,7 +99,7 @@ const FAILURE_PAGES: Record<
   },
 };
 
-const TONE_COLOR = { denied: '#f48771', error: '#f48771', mfa: '#d7ba7d' };
+const TONE_COLOR = { denied: 'var(--err)', error: 'var(--err)', mfa: '#d7ba7d' };
 
 export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices): void {
   body.innerHTML = '';
@@ -112,7 +112,7 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
 
   const root = document.createElement('div');
   root.style.cssText =
-    'display:flex;flex-direction:column;height:100%;min-height:0;font-size:12px;color:#c8cdd3;' +
+    'display:flex;flex-direction:column;height:100%;min-height:0;font-size:12px;color:var(--fg);' +
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
   body.appendChild(root);
 
@@ -135,7 +135,7 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
       root.appendChild(
         el(
           'div',
-          'padding:28px;text-align:center;color:#8b95a1;line-height:1.6;',
+          'padding:28px;text-align:center;color:var(--muted);line-height:1.6;',
           'The identity services are not available. Reset the environment to re-seed.',
         ),
       );
@@ -150,19 +150,19 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
     // ── Header: who you are browsing as ────────────────────────────────────
     const header = el(
       'div',
-      'display:flex;align-items:center;gap:10px;padding:10px 14px;background:#232830;' +
-        'border-bottom:1px solid #2d343d;flex-shrink:0;',
+      'display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--border);' +
+        'border-bottom:1px solid var(--border);flex-shrink:0;',
     );
     const brand = el(
       'div',
-      'font-size:13px;font-weight:600;color:#4ec9b0;',
+      'font-size:13px;font-weight:600;color:var(--accent);',
       `${COMPANY.name} App Portal`,
     );
     const spacer = el('div', 'flex:1;');
-    const label = el('span', 'font-size:11px;color:#8b95a1;', 'Signed in as');
+    const label = el('span', 'font-size:11px;color:var(--muted);', 'Signed in as');
     const picker = document.createElement('select');
     picker.style.cssText =
-      'background:#0e1116;color:#e6e6e6;border:1px solid #2d343d;border-radius:4px;' +
+      'background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:4px;' +
       'padding:4px 8px;font-size:11.5px;outline:none;';
     for (const u of users) {
       const opt = new Option(`${u.username}${u.status === 'active' ? '' : ` (${u.status})`}`, u.id);
@@ -181,7 +181,7 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
     root.appendChild(content);
 
     if (!user) {
-      content.appendChild(el('div', 'color:#8b95a1;', 'No accounts in the directory yet.'));
+      content.appendChild(el('div', 'color:var(--muted);', 'No accounts in the directory yet.'));
       return;
     }
 
@@ -195,7 +195,7 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
   /** The MyApps grid. */
   function renderTiles(parent: HTMLElement, apps: Application[], user: User): void {
     parent.appendChild(
-      el('div', 'font-size:11px;color:#8b95a1;margin-bottom:10px;', 'My Applications'),
+      el('div', 'font-size:11px;color:var(--muted);margin-bottom:10px;', 'My Applications'),
     );
 
     if (apps.length === 0) {
@@ -212,18 +212,18 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
     for (const app of apps) {
       const tile = document.createElement('button');
       tile.style.cssText =
-        'text-align:left;background:#232830;border:1px solid #2d343d;border-radius:6px;' +
-        'padding:12px;cursor:pointer;color:#c8cdd3;';
+        'text-align:left;background:var(--border);border:1px solid var(--border);border-radius:6px;' +
+        'padding:12px;cursor:pointer;color:var(--fg);';
       tile.append(
-        el('div', 'font-size:12.5px;color:#e6e6e6;font-weight:600;', app.name),
+        el('div', 'font-size:12.5px;color:var(--fg);font-weight:600;', app.name),
         el(
           'div',
-          'font-size:10.5px;color:#8b95a1;margin-top:4px;',
+          'font-size:10.5px;color:var(--muted);margin-top:4px;',
           `SSO: ${app.protocol}${app.mfaRequired ? ' · MFA required' : ''}`,
         ),
         el(
           'div',
-          `font-size:10px;margin-top:6px;color:${app.status === 'configured' ? '#6a9955' : '#f48771'};`,
+          `font-size:10px;margin-top:6px;color:${app.status === 'configured' ? '#6a9955' : 'var(--err)'};`,
           app.status,
         ),
       );
@@ -249,7 +249,7 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
     const back = document.createElement('button');
     back.textContent = '← Back to My Apps';
     back.style.cssText =
-      'background:transparent;border:none;color:#4ec9b0;cursor:pointer;font-size:11.5px;' +
+      'background:transparent;border:none;color:var(--accent);cursor:pointer;font-size:11.5px;' +
       'padding:0 0 10px 0;';
     back.addEventListener('click', () => {
       openAppId = null;
@@ -258,7 +258,7 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
     parent.appendChild(back);
 
     if (!app) {
-      parent.appendChild(el('div', 'color:#f48771;', 'That application is no longer registered.'));
+      parent.appendChild(el('div', 'color:var(--err);', 'That application is no longer registered.'));
       return;
     }
 

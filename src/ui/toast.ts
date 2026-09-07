@@ -36,10 +36,10 @@ const KIND_COLORS: Record<
   NonNullable<ToastOptions['kind']>,
   { bg: string; border: string; icon: string }
 > = {
-  info: { bg: 'rgba(27,31,36,0.96)', border: '#4ec9b0', icon: 'ℹ' },
-  error: { bg: 'rgba(36,20,20,0.96)', border: '#f48771', icon: '✕' },
+  info: { bg: 'rgba(27,31,36,0.96)', border: 'var(--accent)', icon: 'ℹ' },
+  error: { bg: 'rgba(36,20,20,0.96)', border: 'var(--err)', icon: '✕' },
   warn: { bg: 'rgba(36,30,20,0.96)', border: '#d7ba7d', icon: '⚠' },
-  success: { bg: 'rgba(20,36,28,0.96)', border: '#4ec9b0', icon: '✓' },
+  success: { bg: 'rgba(20,36,28,0.96)', border: 'var(--accent)', icon: '✓' },
 };
 
 export function showToast(message: string, opts: ToastOptions = {}): void {
@@ -65,7 +65,7 @@ export function showToast(message: string, opts: ToastOptions = {}): void {
     background: ${bg};
     border: 1px solid ${border};
     border-radius: 6px;
-    color: #e6e6e6;
+    color: var(--fg);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 13px;
     max-width: 360px;

@@ -29,8 +29,8 @@ const MODES: TutorMode[] = ['socratic', 'explain', 'walkthrough'];
 
 export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   body.style.cssText =
-    'display:flex;flex-direction:column;height:100%;background:#0e1116;' +
-    'font-family:"Segoe UI",system-ui,sans-serif;color:#e6e6e6;';
+    'display:flex;flex-direction:column;height:100%;background:var(--panel);' +
+    'font-family:"Segoe UI",system-ui,sans-serif;color:var(--fg);';
 
   let mode: TutorMode = 'socratic';
 
@@ -38,7 +38,7 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   const header = document.createElement('div');
   header.style.cssText =
     'flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 14px;' +
-    'background:#1b1f24;border-bottom:1px solid #2d343d;';
+    'background:var(--panel-alt);border-bottom:1px solid var(--border);';
 
   const modeWrap = document.createElement('div');
   modeWrap.style.cssText = 'display:flex;gap:4px;';
@@ -46,8 +46,8 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
     const b = document.createElement('button');
     b.textContent = MODE_LABEL[m];
     b.style.cssText =
-      'padding:5px 10px;border-radius:4px;border:1px solid #2d343d;cursor:pointer;' +
-      'font-size:11px;background:#0e1116;color:#8b95a1;';
+      'padding:5px 10px;border-radius:4px;border:1px solid var(--border);cursor:pointer;' +
+      'font-size:11px;background:var(--panel);color:var(--muted);';
     b.onclick = () => {
       mode = m;
       paintModes();
@@ -58,15 +58,15 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   function paintModes(): void {
     for (const { m, b } of modeBtns) {
       const on = m === mode;
-      b.style.background = on ? '#2563eb' : '#0e1116';
-      b.style.color = on ? '#fff' : '#8b95a1';
-      b.style.borderColor = on ? '#2563eb' : '#2d343d';
+      b.style.background = on ? '#2563eb' : 'var(--panel)';
+      b.style.color = on ? '#fff' : 'var(--muted)';
+      b.style.borderColor = on ? '#2563eb' : 'var(--border)';
     }
   }
   paintModes();
 
   const status = document.createElement('span');
-  status.style.cssText = 'margin-left:auto;font-size:11px;color:#8b95a1;';
+  status.style.cssText = 'margin-left:auto;font-size:11px;color:var(--muted);';
   status.textContent = 'Checking for Ollama…';
 
   header.append(modeWrap, status);
@@ -76,7 +76,7 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   // behave differently and a learner should know which one they are reading.
   void tutorAvailable().then((up) => {
     status.textContent = up ? '● Ollama connected' : '○ Offline — answers quote the docs';
-    status.style.color = up ? '#4ec9b0' : '#8b95a1';
+    status.style.color = up ? 'var(--accent)' : 'var(--muted)';
   });
 
   // --- Transcript -----------------------------------------------------------
@@ -91,7 +91,7 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
       'white-space:pre-wrap;' +
       (who === 'you'
         ? 'align-self:flex-end;background:#2563eb;color:#fff;'
-        : 'align-self:flex-start;background:#161b22;border:1px solid #2d343d;');
+        : 'align-self:flex-start;background:var(--panel-alt);border:1px solid var(--border);');
     wrap.textContent = text;
     log.appendChild(wrap);
     log.scrollTop = log.scrollHeight;
@@ -104,14 +104,14 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
     const strip = document.createElement('div');
     strip.style.cssText =
       'align-self:flex-start;display:flex;flex-wrap:wrap;gap:6px;align-items:center;' +
-      'margin-top:-6px;font-size:10.5px;color:#8b95a1;';
+      'margin-top:-6px;font-size:10.5px;color:var(--muted);';
     strip.appendChild(document.createTextNode('Sources:'));
     for (const a of answer.citations) {
       const chip = document.createElement('button');
       chip.textContent = a.title;
       chip.style.cssText =
-        'padding:3px 8px;border-radius:10px;border:1px solid #2d343d;background:#0e1116;' +
-        'color:#4ec9b0;cursor:pointer;font-size:10.5px;';
+        'padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:var(--panel);' +
+        'color:var(--accent);cursor:pointer;font-size:10.5px;';
       chip.onclick = () => openDocumentation(a.id);
       strip.appendChild(chip);
     }
@@ -136,8 +136,8 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
     const chip = document.createElement('button');
     chip.textContent = q;
     chip.style.cssText =
-      'padding:5px 10px;border-radius:12px;border:1px solid #2d343d;background:#161b22;' +
-      'color:#c9d1d9;cursor:pointer;font-size:11px;text-align:left;';
+      'padding:5px 10px;border-radius:12px;border:1px solid var(--border);background:var(--panel-alt);' +
+      'color:var(--fg);cursor:pointer;font-size:11px;text-align:left;';
     chip.onclick = () => {
       input.value = q;
       void send();
@@ -149,15 +149,15 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   // --- Composer -------------------------------------------------------------
   const composer = document.createElement('div');
   composer.style.cssText =
-    'flex-shrink:0;display:flex;gap:8px;padding:10px 14px;background:#1b1f24;' +
-    'border-top:1px solid #2d343d;';
+    'flex-shrink:0;display:flex;gap:8px;padding:10px 14px;background:var(--panel-alt);' +
+    'border-top:1px solid var(--border);';
 
   const input = document.createElement('input');
   input.type = 'text';
   input.placeholder = 'Ask about this ticket, or about IAM and PIM…';
   input.style.cssText =
-    'flex:1;padding:8px 10px;border-radius:4px;border:1px solid #2d343d;background:#0e1116;' +
-    'color:#e6e6e6;font-size:12.5px;outline:none;';
+    'flex:1;padding:8px 10px;border-radius:4px;border:1px solid var(--border);background:var(--panel);' +
+    'color:var(--fg);font-size:12.5px;outline:none;';
 
   const sendBtn = document.createElement('button');
   sendBtn.textContent = 'Ask';

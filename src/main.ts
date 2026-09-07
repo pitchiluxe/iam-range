@@ -15,6 +15,11 @@ import { session } from '@/vm/session';
 import { login, LoginSession } from '@/vm/loginSession';
 import type { VmSession } from '@/vm/session';
 import { logoffChime } from '@/ui/sounds';
+import { applyTheme } from '@/ui/themes';
+
+// Before anything paints: the windows reference these variables in about a
+// hundred places and nothing defined them, so every one resolved to nothing.
+applyTheme();
 
 const appEl = document.getElementById('app');
 if (!appEl) throw new Error('[vm] #app container is missing from index.html');

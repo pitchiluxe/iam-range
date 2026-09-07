@@ -56,7 +56,7 @@ function newId(): string {
 export function renderWriterWindow(body: HTMLElement): void {
   body.innerHTML = '';
   body.style.cssText =
-    'display:flex;flex-direction:column;height:100%;background:#0e1116;color:#e6e6e6;' +
+    'display:flex;flex-direction:column;height:100%;background:var(--panel);color:var(--fg);' +
     'font-family:"Segoe UI",system-ui,sans-serif;';
 
   let docs = loadDocs();
@@ -68,17 +68,17 @@ export function renderWriterWindow(body: HTMLElement): void {
   const menubar = document.createElement('div');
   menubar.style.cssText =
     'flex-shrink:0;display:flex;align-items:center;gap:6px;padding:6px 10px;' +
-    'background:#1b1f24;border-bottom:1px solid #2d343d;font-size:12px;';
+    'background:var(--panel-alt);border-bottom:1px solid var(--border);font-size:12px;';
 
   const titleField = document.createElement('input');
   titleField.type = 'text';
   titleField.placeholder = 'Untitled document';
   titleField.style.cssText =
     'flex:1;min-width:0;background:transparent;border:1px solid transparent;border-radius:4px;' +
-    'color:#e6e6e6;font-size:13px;padding:4px 6px;outline:none;font-family:inherit;';
+    'color:var(--fg);font-size:13px;padding:4px 6px;outline:none;font-family:inherit;';
   titleField.addEventListener('focus', () => {
-    titleField.style.borderColor = '#2d343d';
-    titleField.style.background = '#0e1116';
+    titleField.style.borderColor = 'var(--border)';
+    titleField.style.background = 'var(--panel)';
   });
   titleField.addEventListener('blur', () => {
     titleField.style.borderColor = 'transparent';
@@ -111,7 +111,7 @@ export function renderWriterWindow(body: HTMLElement): void {
       'padding:5px 11px;border-radius:4px;cursor:pointer;font-size:11.5px;font-family:inherit;' +
       (tone === 'primary'
         ? 'background:#2563eb;color:#fff;border:1px solid #2563eb;'
-        : 'background:#0e1116;color:#c9d1d9;border:1px solid #2d343d;');
+        : 'background:var(--panel);color:var(--fg);border:1px solid var(--border);');
     b.addEventListener('click', onClick);
     return b;
   }
@@ -120,7 +120,7 @@ export function renderWriterWindow(body: HTMLElement): void {
   const toolbar = document.createElement('div');
   toolbar.style.cssText =
     'flex-shrink:0;display:flex;align-items:center;gap:3px;flex-wrap:wrap;padding:6px 10px;' +
-    'background:#161b22;border-bottom:1px solid #2d343d;';
+    'background:var(--panel-alt);border-bottom:1px solid var(--border);';
 
   /** Apply a formatting command to the selection and keep focus in the page. */
   function exec(command: string, value?: string): void {
@@ -136,20 +136,20 @@ export function renderWriterWindow(body: HTMLElement): void {
     b.title = title;
     b.style.cssText =
       'min-width:28px;height:26px;padding:0 7px;border-radius:3px;cursor:pointer;font-size:12px;' +
-      `background:#0e1116;color:#c9d1d9;border:1px solid #2d343d;font-family:inherit;${style}`;
+      `background:var(--panel);color:var(--fg);border:1px solid var(--border);font-family:inherit;${style}`;
     b.addEventListener('click', onClick);
     toolbar.appendChild(b);
   }
 
   function separator(): void {
     const s = document.createElement('span');
-    s.style.cssText = 'width:1px;height:18px;background:#2d343d;margin:0 4px;';
+    s.style.cssText = 'width:1px;height:18px;background:var(--border);margin:0 4px;';
     toolbar.appendChild(s);
   }
 
   const styleSelect = document.createElement('select');
   styleSelect.style.cssText =
-    'height:26px;border-radius:3px;background:#0e1116;color:#c9d1d9;border:1px solid #2d343d;' +
+    'height:26px;border-radius:3px;background:var(--panel);color:var(--fg);border:1px solid var(--border);' +
     'font-size:11.5px;font-family:inherit;padding:0 4px;';
   for (const [value, label] of [
     ['p', 'Body text'],
@@ -184,7 +184,7 @@ export function renderWriterWindow(body: HTMLElement): void {
 
   // --- Editor ---------------------------------------------------------------
   const page = document.createElement('div');
-  page.style.cssText = 'flex:1;overflow-y:auto;padding:26px 0;background:#0a0d12;';
+  page.style.cssText = 'flex:1;overflow-y:auto;padding:26px 0;background:var(--bg);';
 
   const editor = document.createElement('div');
   editor.contentEditable = 'true';
@@ -192,9 +192,9 @@ export function renderWriterWindow(body: HTMLElement): void {
   // A page rather than a full-width text area: line length matters for
   // something meant to be read by somebody else.
   editor.style.cssText =
-    'max-width:760px;min-height:600px;margin:0 auto;padding:48px 56px;background:#12161c;' +
-    'border:1px solid #21262d;border-radius:3px;outline:none;font-size:14px;line-height:1.75;' +
-    'color:#d7dde4;box-shadow:0 2px 18px rgba(0,0,0,0.45);';
+    'max-width:760px;min-height:600px;margin:0 auto;padding:48px 56px;background:var(--panel);' +
+    'border:1px solid var(--border);border-radius:3px;outline:none;font-size:14px;line-height:1.75;' +
+    'color:var(--fg);box-shadow:0 2px 18px rgba(0,0,0,0.45);';
   editor.addEventListener('input', () => {
     dirty = true;
     paintStatus();
@@ -206,7 +206,7 @@ export function renderWriterWindow(body: HTMLElement): void {
   const status = document.createElement('div');
   status.style.cssText =
     'flex-shrink:0;height:26px;display:flex;align-items:center;gap:16px;padding:0 12px;' +
-    'background:#1b1f24;border-top:1px solid #2d343d;font-size:11px;color:#8b95a1;';
+    'background:var(--panel-alt);border-top:1px solid var(--border);font-size:11px;color:var(--muted);';
   body.appendChild(status);
 
   function paintStatus(): void {
@@ -292,7 +292,7 @@ export function renderWriterWindow(body: HTMLElement): void {
       'align-items:center;justify-content:center;z-index:50;';
     const box = document.createElement('div');
     box.style.cssText =
-      'background:#161b22;border:1px solid #2d343d;border-radius:6px;min-width:420px;' +
+      'background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;min-width:420px;' +
       'max-width:80%;max-height:80%;overflow:auto;padding:16px 18px;' +
       'box-shadow:0 10px 40px rgba(0,0,0,0.6);';
     const h = document.createElement('div');
@@ -305,7 +305,7 @@ export function renderWriterWindow(body: HTMLElement): void {
     close.textContent = 'Cancel';
     close.style.cssText =
       'margin-top:14px;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:11.5px;' +
-      'background:#0e1116;color:#c9d1d9;border:1px solid #2d343d;font-family:inherit;';
+      'background:var(--panel);color:var(--fg);border:1px solid var(--border);font-family:inherit;';
     close.addEventListener('click', () => veil.remove());
     box.appendChild(close);
 
@@ -331,14 +331,14 @@ export function renderWriterWindow(body: HTMLElement): void {
         const card = document.createElement('button');
         card.style.cssText =
           'display:block;width:100%;text-align:left;padding:9px 11px;margin-bottom:6px;' +
-          'border-radius:4px;background:#0e1116;border:1px solid #2d343d;cursor:pointer;' +
-          'color:#e6e6e6;font-family:inherit;';
+          'border-radius:4px;background:var(--panel);border:1px solid var(--border);cursor:pointer;' +
+          'color:var(--fg);font-family:inherit;';
         const name = document.createElement('div');
         name.textContent = t.title;
         name.style.cssText = 'font-size:12.5px;margin-bottom:2px;';
         const desc = document.createElement('div');
         desc.textContent = t.description;
-        desc.style.cssText = 'font-size:11px;color:#8b95a1;';
+        desc.style.cssText = 'font-size:11px;color:var(--muted);';
         card.append(name, desc);
         card.addEventListener('click', () => {
           const template = TEMPLATE_BY_ID[t.id]!;
@@ -361,7 +361,7 @@ export function renderWriterWindow(body: HTMLElement): void {
       if (docs.length === 0) {
         const empty = document.createElement('div');
         empty.textContent = 'No saved documents yet.';
-        empty.style.cssText = 'color:#8b95a1;font-size:12px;';
+        empty.style.cssText = 'color:var(--muted);font-size:12px;';
         box.appendChild(empty);
         return;
       }
@@ -370,14 +370,14 @@ export function renderWriterWindow(body: HTMLElement): void {
         const row = document.createElement('button');
         row.style.cssText =
           'display:flex;width:100%;justify-content:space-between;align-items:center;gap:12px;' +
-          'padding:8px 11px;margin-bottom:5px;border-radius:4px;background:#0e1116;' +
-          'border:1px solid #2d343d;cursor:pointer;color:#e6e6e6;font-family:inherit;' +
+          'padding:8px 11px;margin-bottom:5px;border-radius:4px;background:var(--panel);' +
+          'border:1px solid var(--border);cursor:pointer;color:var(--fg);font-family:inherit;' +
           'font-size:12px;text-align:left;';
         const name = document.createElement('span');
         name.textContent = d.title;
         const when = document.createElement('span');
         when.textContent = new Date(d.updatedAt).toLocaleString();
-        when.style.cssText = 'font-size:10.5px;color:#8b95a1;flex-shrink:0;';
+        when.style.cssText = 'font-size:10.5px;color:var(--muted);flex-shrink:0;';
         row.append(name, when);
         row.addEventListener('click', () => {
           load(d);

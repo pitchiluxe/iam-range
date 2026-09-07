@@ -21,7 +21,7 @@ const VENDOR_IDS: CloudVendor[] = ['okta', 'entra'];
 export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServices): void {
   body.innerHTML = '';
   body.style.cssText =
-    'display:flex;flex-direction:column;height:100%;background:#0e1116;color:#e6e6e6;' +
+    'display:flex;flex-direction:column;height:100%;background:var(--panel);color:var(--fg);' +
     'font-family:"Segoe UI",system-ui,sans-serif;font-size:12.5px;';
 
   let vendor: CloudVendor = 'okta';
@@ -48,8 +48,8 @@ export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServic
   // --- Vendor tabs ----------------------------------------------------------
   const tabs = document.createElement('div');
   tabs.style.cssText =
-    'flex-shrink:0;display:flex;gap:2px;padding:8px 10px 0;background:#161b22;' +
-    'border-bottom:1px solid #2d343d;';
+    'flex-shrink:0;display:flex;gap:2px;padding:8px 10px 0;background:var(--panel-alt);' +
+    'border-bottom:1px solid var(--border);';
   body.appendChild(tabs);
 
   const pane = document.createElement('div');
@@ -63,13 +63,13 @@ export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServic
     const h = document.createElement('div');
     h.textContent = title;
     h.style.cssText =
-      'font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#6b7482;' +
+      'font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);' +
       'margin-bottom:6px;';
     wrap.appendChild(h);
     if (note) {
       const n = document.createElement('div');
       n.textContent = note;
-      n.style.cssText = 'color:#8b95a1;margin-bottom:8px;line-height:1.5;';
+      n.style.cssText = 'color:var(--muted);margin-bottom:8px;line-height:1.5;';
       wrap.appendChild(n);
     }
     pane.appendChild(wrap);
@@ -83,7 +83,7 @@ export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServic
       'padding:6px 12px;border-radius:4px;cursor:pointer;font-size:11.5px;margin-right:6px;' +
       (tone === 'primary'
         ? 'background:#2563eb;color:#fff;border:1px solid #2563eb;'
-        : 'background:#161b22;color:#c9d1d9;border:1px solid #2d343d;');
+        : 'background:var(--panel-alt);color:var(--fg);border:1px solid var(--border);');
     b.addEventListener('click', onClick);
     return b;
   }
@@ -92,7 +92,7 @@ export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServic
     if (rows.length === 0) {
       const e = document.createElement('div');
       e.textContent = empty;
-      e.style.cssText = 'color:#6b7482;font-style:italic;';
+      e.style.cssText = 'color:var(--muted);font-style:italic;';
       return e;
     }
     const t = document.createElement('table');
@@ -102,7 +102,7 @@ export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServic
       const th = document.createElement('th');
       th.textContent = h;
       th.style.cssText =
-        'text-align:left;padding:5px 8px;border-bottom:1px solid #2d343d;color:#8b95a1;' +
+        'text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);color:var(--muted);' +
         'font-weight:500;';
       thead.appendChild(th);
     }
@@ -138,7 +138,7 @@ export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServic
       tab.textContent = VENDORS[id].label;
       tab.style.cssText =
         'padding:7px 14px;border:none;cursor:pointer;font-size:12px;border-radius:4px 4px 0 0;' +
-        (on ? 'background:#0e1116;color:#fff;' : 'background:transparent;color:#8b95a1;');
+        (on ? 'background:var(--panel);color:#fff;' : 'background:transparent;color:var(--muted);');
       tab.addEventListener('click', () => {
         vendor = id;
         render();
@@ -171,7 +171,7 @@ export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServic
 
     const connected = document.createElement('div');
     connected.textContent = `● Connected to ${profile.tenantName}`;
-    connected.style.cssText = 'color:#4ec9b0;';
+    connected.style.cssText = 'color:var(--accent);';
     conn.appendChild(connected);
 
     // Sync
@@ -283,10 +283,10 @@ export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServic
       name.style.cssText = 'flex:1;';
       const state = document.createElement('span');
       state.textContent = app.scim ? 'SCIM on' : 'SCIM off';
-      state.style.cssText = `font-size:11px;color:${app.scim ? '#4ec9b0' : '#e2a03f'};`;
+      state.style.cssText = `font-size:11px;color:${app.scim ? 'var(--accent)' : '#e2a03f'};`;
       const count = document.createElement('span');
       count.textContent = `${app.accounts.size} account(s)`;
-      count.style.cssText = 'font-size:11px;color:#8b95a1;';
+      count.style.cssText = 'font-size:11px;color:var(--muted);';
       row.append(name, count, state);
       row.appendChild(
         button(app.scim ? 'Disable SCIM' : 'Enable SCIM', () =>
