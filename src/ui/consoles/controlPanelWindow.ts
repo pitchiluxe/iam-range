@@ -77,6 +77,16 @@ function kv(label: string, value: string): string {
   return `<div class="cp-kv"><span class="cp-kv-label">${label}</span><span class="cp-kv-value">${value}</span></div>`;
 }
 
+/**
+ * Wrap a value the clock tick rewrites.
+ *
+ * The applet renders to a string, so there is no element to hold on to. The
+ * attribute is the handle.
+ */
+function liveClock(which: 'time' | 'date', initial: string): string {
+  return `<span data-cp-clock="${which}">${initial}</span>`;
+}
+
 /** A row in the Programs and Features list. */
 function row(name: string, publisher: string, size: string, date: string): string {
   return `
@@ -222,8 +232,10 @@ const APPLETS: readonly Applet[] = [
     category: 'clock',
     render: () =>
       heading('Date and Time') +
-      kv('Current time', new Date().toLocaleTimeString()) +
-      kv('Current date', new Date().toLocaleDateString()) +
+      // Marked so the tick can find them. Everything else on this page is
+      // static; these two are the only things that move.
+      kv('Current time', liveClock('time', new Date().toLocaleTimeString())) +
+      kv('Current date', liveClock('date', new Date().toLocaleDateString())) +
       kv('Time zone', Intl.DateTimeFormat().resolvedOptions().timeZone) +
       kv('Synchronised with', ok(`${VM_HOST.domainController} (domain time)`)),
   },
@@ -465,9 +477,38 @@ export function renderControlPanelWindow(body: HTMLElement): void {
     render();
   }
 
+  /**
+   * Keep Date and Time honest.
+   *
+   * Started once and self-cancelling when the window goes away, so a closed
+   * Control Panel does not leave a timer running. Only the marked nodes are
+   * touched -- rewriting the pane once a second would fight the scroll
+   * position and any open applet, which is the mistake the ticket console
+   * already made and corrected.
+   */
+  let clockTick: number | null = null;
+  function startClockTick(): void {
+    if (clockTick !== null) return;
+    clockTick = window.setInterval(() => {
+      if (!document.contains(pane)) {
+        if (clockTick !== null) {
+          clearInterval(clockTick);
+          clockTick = null;
+        }
+        return;
+      }
+      const now = new Date();
+      for (const el of pane.querySelectorAll<HTMLElement>('[data-cp-clock]')) {
+        el.textContent =
+          el.dataset.cpClock === 'date' ? now.toLocaleDateString() : now.toLocaleTimeString();
+      }
+    }, 1000);
+  }
+
   function renderPane(): void {
     pane.innerHTML = '';
     pane.scrollTop = 0;
+    startClockTick();
 
     // An open applet.
     if (openApplet) {

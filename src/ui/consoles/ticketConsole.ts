@@ -273,6 +273,24 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     lastSeenIds = new Set(now);
   });
 
+  /**
+   * Rewrite the age on each card.
+   *
+   * This was written once at render and then never again, while the SLA badge
+   * beside it ticked every second. A card left alone for a few minutes showed
+   * the two disagreeing -- "raised 2m 55s ago" next to "20m 24s left" of a
+   * thirty-minute SLA -- which is two clocks on one card, one live and one
+   * stopped.
+   */
+  function updateAges(): void {
+    for (const el of body.querySelectorAll<HTMLElement>('[data-age-for]')) {
+      const t = queue.get(el.dataset.ageFor as TicketId);
+      if (!t) continue;
+      const who = t.assigneeId ? `\u{1F464} ${t.assigneeId}` : 'Unassigned';
+      el.textContent = `${who} \u00b7 \u23f1\ufe0f ${formatElapsed(Date.now() - t.createdAt)}`;
+    }
+  }
+
   /** Rewrite just the SLA countdown badges, leaving the rest of the DOM alone. */
   function updateSLABadges(): void {
     const badges = body.querySelectorAll<HTMLElement>('[data-sla-for]');
@@ -302,11 +320,13 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
         }
         return;
       }
-      // Update the countdown badges in place. This used to call render(),
-      // which rebuilt every card once a second — destroying the scroll
-      // position, any half-typed comment, and stealing focus. Nothing outside
-      // the badges changes on a clock tick, so nothing else should be touched.
+      // Update the clocks in place. This used to call render(), which rebuilt
+      // every card once a second — destroying the scroll position, any
+      // half-typed comment, and stealing focus. Only the clocks change on a
+      // tick, so only the clocks are touched: the countdown badge, and the age
+      // beside it that was left out of that fix and silently froze.
       updateSLABadges();
+      updateAges();
     }, 1000);
   }
   startSLATick();
@@ -646,7 +666,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
         </div>
         <div style="display:flex;justify-content:space-between;gap:6px;margin-bottom:6px;">
           <span style="color:${color};font-size:10px;text-transform:uppercase;letter-spacing:0.05em;">${kindEmoji(t.kind)} ${t.kind}</span>
-          <span style="color:var(--muted);font-size:10px;">${t.assigneeId ? `👤 ${t.assigneeId}` : 'Unassigned'} · ⏱️ ${elapsed}</span>
+          <span data-age-for="${t.id}" style="color:var(--muted);font-size:10px;">${t.assigneeId ? `👤 ${t.assigneeId}` : 'Unassigned'} · ⏱️ ${elapsed}</span>
         </div>
         <div style="color:var(--muted);margin-bottom:8px;">${t.body}</div>
       `;
