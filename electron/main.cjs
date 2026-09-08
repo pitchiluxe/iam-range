@@ -14,8 +14,9 @@
 //
 // The renderer stays sandboxed. Everything it needs crosses through preload.
 
-const { app, BrowserWindow, shell, ipcMain, net } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, net, desktopCapturer } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let autoUpdater = null;
 try {
@@ -207,6 +208,57 @@ ipcMain.handle('capture:screen', async () => {
   }
 });
 
+/**
+ * Write a capture to the real filesystem.
+ *
+ * The annotation tools used to "save" through an <a download> from a file://
+ * page, which in a packaged application is at best a dialog and at worst
+ * nothing at all — the tool said "Saved." and there was no file. This writes
+ * the bytes itself, under Documents\IAM Range, and returns the path so the
+ * toast can name it.
+ *
+ * The filename is taken apart and rebuilt rather than trusted: it arrives from
+ * the renderer, and a name is not a path. Anything with a separator, a drive
+ * letter or a traversal in it is reduced to its basename, so a capture cannot
+ * be written outside the folder this function owns.
+ */
+ipcMain.handle('capture:save', async (_event, payload) => {
+  try {
+    const raw = String(payload?.name ?? '');
+    const base = path.basename(raw).replace(/[^A-Za-z0-9._-]/g, '_');
+    if (!base || base === '.' || base === '..') return null;
+    // Only the two things the capture tools produce.
+    if (!/\.(png|webm)$/i.test(base)) return null;
+
+    const base64 = String(payload?.base64 ?? '');
+    if (!base64 || !/^[A-Za-z0-9+/=\s]+$/.test(base64)) return null;
+
+    const dir = path.join(app.getPath('documents'), 'IAM Range');
+    await fs.promises.mkdir(dir, { recursive: true });
+    const target = path.join(dir, base);
+    await fs.promises.writeFile(target, Buffer.from(base64, 'base64'));
+    return target;
+  } catch (err) {
+    console.error('[capture] save failed', err);
+    return null;
+  }
+});
+
+/** Reveal a saved capture in the real file manager. */
+ipcMain.handle('capture:reveal', (_event, target) => {
+  try {
+    const dir = path.join(app.getPath('documents'), 'IAM Range');
+    const resolved = path.resolve(String(target));
+    // Only inside the folder this application writes to. "Show me a file"
+    // must not become "show me any file on the disk".
+    if (!resolved.startsWith(path.resolve(dir) + path.sep)) return false;
+    shell.showItemInFolder(resolved);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
 // Opening a link is the one thing the renderer cannot do for itself, and it
 // must never become "run whatever the page passes". Only http and https.
 ipcMain.handle('shell:openExternal', (_event, url) => {
@@ -218,6 +270,51 @@ ipcMain.handle('shell:openExternal', (_event, url) => {
   } catch {
     return false;
   }
+});
+
+/**
+ * Ask the renderer which screen or window to share, and wait for the answer.
+ *
+ * One request at a time: `pendingPick` is the resolver for the outstanding
+ * question. A second request while one is open cancels the first rather than
+ * leaving a picker on screen that nothing is listening to.
+ *
+ * The timeout exists because this promise gates a permission callback. If the
+ * renderer never answers -- a crash, a closed window -- the callback would
+ * never fire and getDisplayMedia would hang forever with no way for the user
+ * to get out of it.
+ */
+let pendingPick = null;
+
+function askRendererToPick(sources) {
+  if (pendingPick) {
+    pendingPick(null);
+    pendingPick = null;
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      if (pendingPick === settle) pendingPick = null;
+      resolve(null);
+    }, 120_000);
+
+    const settle = (id) => {
+      clearTimeout(timer);
+      resolve(id);
+    };
+    pendingPick = settle;
+    mainWindow.webContents.send('capture:pick-source', sources);
+  });
+}
+
+// The renderer's answer. A null id is "cancelled", which is an ordinary
+// outcome and not an error.
+ipcMain.handle('capture:sourcePicked', (_event, id) => {
+  const settle = pendingPick;
+  pendingPick = null;
+  if (settle) settle(id == null ? null : String(id));
+  return true;
 });
 
 // ---------------------------------------------------------------------------
@@ -261,12 +358,16 @@ function createWindow() {
    *
    * Without a handler Electron's default applies to everything this window
    * loads, and this window renders arbitrary pages inside a webview. The
-   * recorder needs a microphone for narration, so the microphone is granted
-   * to the workstation's own document -- loaded from file: -- and to nothing
-   * else. A page in the browser asking for the microphone, the camera, the
-   * user's location or notifications is refused, because there is no feature
-   * here that needs any of those and an unasked-for grant is the kind of thing
-   * nobody discovers until it matters.
+   * recorder needs a microphone for narration and a camera for the presenter
+   * bubble, so media is granted to the workstation's own document -- loaded
+   * from file: -- and to nothing else. A page in the in-VM browser asking for
+   * the microphone, the camera, the user's location or notifications is
+   * refused, because there is no feature there that needs any of those and an
+   * unasked-for grant is the kind of thing nobody discovers until it matters.
+   *
+   * That fence is the part that always mattered. Widening the workstation's
+   * own capability to record a tutorial does not widen anything a browsed page
+   * can reach.
    */
   mainWindow.webContents.session.setPermissionRequestHandler(
     (contents, permission, callback) => {
@@ -285,6 +386,58 @@ function createWindow() {
   mainWindow.webContents.session.setPermissionCheckHandler((_contents, permission, origin) => {
     return permission === 'media' && String(origin).startsWith('file://');
   });
+
+  /**
+   * What the recorder is allowed to record.
+   *
+   * getDisplayMedia does not work in Electron at all without this: with no
+   * handler the request is denied outright, which is why the recorder had to
+   * be built out of repeated window captures in the first place.
+   *
+   * The user still chooses. `useSystemPicker` hands the decision to the
+   * operating system where one exists; where it does not, the source list is
+   * sent to the renderer, which shows its own picker with a thumbnail of every
+   * screen and window. Nothing is granted until something is picked, and
+   * cancelling grants nothing -- callback({}) is a denial, and the recorder
+   * treats it as "the user changed their mind" rather than an error.
+   */
+  mainWindow.webContents.session.setDisplayMediaRequestHandler(
+    async (_request, callback) => {
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ['screen', 'window'],
+          thumbnailSize: { width: 320, height: 200 },
+          fetchWindowIcons: false,
+        });
+        if (sources.length === 0) {
+          callback({});
+          return;
+        }
+
+        const chosenId = await askRendererToPick(
+          sources.map((s) => ({
+            id: s.id,
+            name: s.name,
+            kind: s.id.startsWith('screen:') ? 'screen' : 'window',
+            thumbnail: s.thumbnail.isEmpty() ? null : s.thumbnail.toDataURL(),
+          })),
+        );
+
+        const source = sources.find((s) => s.id === chosenId);
+        if (!source) {
+          callback({});
+          return;
+        }
+        // 'loopback' is system audio on Windows. The user still has to have
+        // asked for audio; a video-only request gets video only.
+        callback({ video: source, audio: 'loopback' });
+      } catch (err) {
+        console.error('[capture] display media request failed', err);
+        callback({});
+      }
+    },
+    { useSystemPicker: true },
+  );
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {

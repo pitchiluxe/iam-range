@@ -30,6 +30,24 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('update:status', handler);
     return () => ipcRenderer.removeListener('update:status', handler);
   },
+
+  /**
+   * Subscribe to "which screen should I share?".
+   *
+   * Sent by the main process when getDisplayMedia is called and the platform
+   * has no picker of its own. The renderer answers with
+   * invoke('capture:sourcePicked', id), or null to cancel. Delivered as an
+   * event rather than a return value because the question originates in the
+   * main process, which invoke() cannot express.
+   *
+   * @param {(sources: {id:string,name:string,kind:string,thumbnail:string|null}[]) => void} fn
+   * @returns {() => void} unsubscribe
+   */
+  onPickCaptureSource: (fn) => {
+    const handler = (_event, sources) => fn(sources);
+    ipcRenderer.on('capture:pick-source', handler);
+    return () => ipcRenderer.removeListener('capture:pick-source', handler);
+  },
 });
 
 // Read synchronously. exposeInMainWorld clones the value at call time, so an

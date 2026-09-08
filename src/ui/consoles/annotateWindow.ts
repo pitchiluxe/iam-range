@@ -22,9 +22,14 @@
  * only. desktopCapturer would let a page photograph the user's real desktop,
  * which is not a capability a training VM should hold.
  */
-import { captureScreen, canCaptureScreen } from '@/util/screenCapture';
+import {
+  captureWindow,
+  captureDisplay,
+  canCaptureWindow,
+  canCaptureDisplay,
+} from '@/util/screenCapture';
 import { appButton } from '@/ui/appChrome';
-import { FS } from '@/terminal/shellIntrinsics';
+import { saveCapture, describeSave } from '@/util/saveCapture';
 import { showToast } from '@/ui/toast';
 
 type Tool = 'arrow' | 'box' | 'highlight' | 'pen' | 'text' | 'redact';
@@ -270,16 +275,38 @@ export function renderAnnotateWindow(body: HTMLElement): void {
 
   // ---- Actions -----------------------------------------------------------
 
+  /**
+   * Photograph the workstation.
+   *
+   * Prefers the silent window capture, because that is the evidence case: a
+   * picture of this console after a change, with no picker and no share
+   * indicator. On the web build there is no window capture, so it falls
+   * through to the screen picker rather than reporting itself unavailable —
+   * which is what it used to do, and why Snip did nothing in a browser.
+   */
   async function snip(): Promise<void> {
-    const dataUrl = await captureScreen();
+    const dataUrl = (await captureWindow()) ?? (await captureDisplay());
     if (!dataUrl) {
       showToast(
-        'Screen capture needs the installed application. Open an image or paste one instead.',
+        canCaptureDisplay()
+          ? 'Nothing was captured. Pick a screen or window, or open an image instead.'
+          : 'Screen capture is not available here. Open an image or paste one instead.',
         { kind: 'warn' },
       );
       return;
     }
     loadImage(dataUrl, 'Captured. Mark it up, and redact anything that should not travel.');
+  }
+
+  /** Photograph a screen, window or tab the user picks. */
+  async function snipScreen(): Promise<void> {
+    const dataUrl = await captureDisplay();
+    if (!dataUrl) {
+      // Cancelling the picker is the common case and is not a failure.
+      showToast('No screen was captured.', { kind: 'info' });
+      return;
+    }
+    loadImage(dataUrl, 'Captured. Redact anything that should not travel.');
   }
 
   const fileInput = document.createElement('input');
@@ -311,25 +338,34 @@ export function renderAnnotateWindow(body: HTMLElement): void {
   }
   document.addEventListener('paste', onPaste);
 
-  function save(): void {
+  /**
+   * Write the marked-up picture out.
+   *
+   * Exported from the same canvas the marks were drawn on, so a redaction
+   * block is pixels in the file rather than a layer somebody can peel off.
+   *
+   * This used to click a detached <a download> and write the literal string
+   * "[png image] evidence-....png" into the in-VM filesystem, then report
+   * "Saved." either way. Neither produced a file anybody could open. The toast
+   * now names where the file actually went, and claims success only when it
+   * went somewhere.
+   */
+  async function save(): Promise<void> {
     if (!image) {
       showToast('Nothing to save yet.', { kind: 'warn' });
       return;
     }
-    // Exported from the same canvas the marks were drawn on, so a redaction
-    // block is pixels in the file rather than a layer somebody can peel off.
     const name = `evidence-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
-    const dataUrl = canvas.toDataURL('image/png');
-    try {
-      FS.writeFile(`C:\\Users\\admin\\Documents\\${name}`, `[png image] ${name}`);
-    } catch {
-      /* the download below is the copy that matters */
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/png'),
+    );
+    if (!blob) {
+      showToast('The image could not be encoded.', { kind: 'error' });
+      return;
     }
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = name;
-    a.click();
-    showToast(`Saved as ${name}.`, { kind: 'success' });
+    const result = await saveCapture(blob, name);
+    const saved = Boolean(result.path) || result.downloaded || result.inVm;
+    showToast(describeSave(result, name), { kind: saved ? 'success' : 'error' });
   }
 
   // ---- Views -------------------------------------------------------------
@@ -340,10 +376,17 @@ export function renderAnnotateWindow(body: HTMLElement): void {
     tools.append(
       appButton('📸 Snip', () => void snip(), {
         variant: 'primary',
-        title: canCaptureScreen()
-          ? 'Capture this workstation'
-          : 'Available in the installed application',
+        title: canCaptureWindow()
+          ? 'Capture this workstation — no picker, no share indicator'
+          : 'Capture a screen or window you pick',
       }),
+      ...(canCaptureDisplay()
+        ? [
+            appButton('🖥️ Snip screen', () => void snipScreen(), {
+              title: 'Pick a screen, window or tab to capture',
+            }),
+          ]
+        : []),
       appButton('📂 Open', () => fileInput.click()),
       fileInput,
     );
@@ -392,7 +435,7 @@ export function renderAnnotateWindow(body: HTMLElement): void {
         shapes = [];
         paint();
       }, { variant: 'quiet' }),
-      appButton('💾 Save PNG', save),
+      appButton('💾 Save PNG', () => void save()),
     );
   }
 

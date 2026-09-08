@@ -18,6 +18,7 @@ import { logoffChime } from '@/ui/sounds';
 import { applyTheme } from '@/ui/themes';
 import { installAppChrome } from '@/ui/appChrome';
 import { startUpdateNotifier } from '@/ui/updateNotifier';
+import { installCaptureSourcePicker } from '@/ui/captureSourcePicker';
 
 // Before anything paints: the windows reference these variables in about a
 // hundred places and nothing defined them, so every one resolved to nothing.
@@ -63,6 +64,11 @@ loginScreen.present();
 // somebody signed out, so the one moment it mattered — an update arriving while
 // you work — was the one moment nothing was listening.
 startUpdateNotifier();
+
+// Answer the main process when it asks which screen to share. Installed at the
+// top level for the same reason: the question arrives while the recorder is
+// starting, and a listener wired inside some other flow would not be there yet.
+installCaptureSourcePicker();
 
 /** Dev/test hook. */
 (

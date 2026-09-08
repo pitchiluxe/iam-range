@@ -1,25 +1,29 @@
 /**
- * tests/screenRecorder.test.ts — record this window, and ask nobody else's
- * permission for it.
+ * tests/screenRecorder.test.ts — recording a walkthrough, and cleaning up after.
  *
- * Recording a lab means two new capabilities: something that produces video,
- * and a microphone. Both are the kind of thing that is easy to over-grant and
- * impossible to withdraw once a build has shipped.
+ * The recorder used to be built from repeated window captures, and this file
+ * asserted it could never be anything else: no getDisplayMedia, no camera, one
+ * getUserMedia call and audio only. That produced ten frames a second of the
+ * application's own window, which is not a tutorial — the screen being
+ * explained is the real one, and the person explaining it should be visible.
  *
- * The video is built from repeated capturePage frames rather than
- * getDisplayMedia or desktopCapturer, so it can only ever contain this window
- * — by construction, not by policy. That is asserted here because it is the
- * property somebody would quietly lose while "improving the frame rate".
+ * So both capabilities are now used, and what is asserted is the discipline
+ * around them. Three things, in order of how quietly they would break:
  *
- * The microphone is granted to the workstation's own document and to nothing
- * else. This window renders arbitrary pages inside a webview, and before the
- * recorder there was no permission handler at all, so the default applied to
- * whatever a learner browsed to.
+ *   1. Every device this opens gets stopped. A camera left running after a
+ *      recording ends is a light on somebody's face with nothing recording it,
+ *      and it is invisible in every test that only checks the output file.
+ *   2. The share ending from outside — the browser's own "stop sharing" bar —
+ *      finalises the recording. Unhandled, the canvas compositor keeps drawing
+ *      the last frame it saw and the file ends in a still image.
+ *   3. The webview fence is untouched. Widening what the workstation's own
+ *      document may do must not widen what a page loaded in the in-VM browser
+ *      may do, and those two go through the same permission handler.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { canRecord } from '@/util/screenRecorder';
+import { canRecord, canRecordCamera } from '@/util/screenRecorder';
 
 /** Source with comments removed: prose about an API is not a use of it. */
 function code(source: string): string {
@@ -28,36 +32,80 @@ function code(source: string): string {
 
 const MAIN = readFileSync(join(process.cwd(), 'electron', 'main.cjs'), 'utf8');
 const RECORDER = readFileSync(join(process.cwd(), 'src', 'util', 'screenRecorder.ts'), 'utf8');
+const SOURCE = code(RECORDER);
 
-describe('what the recorder can see', () => {
-  it('never reaches for the whole screen', () => {
-    // getDisplayMedia and desktopCapturer both hand over everything behind
-    // the window. Somebody recording a lab is not consenting to publish
-    // their mail.
-    const source = code(RECORDER);
-    expect(source).not.toContain('getDisplayMedia');
-    expect(source).not.toContain('desktopCapturer');
+describe('what the recorder composes', () => {
+  it('records the screen the user picked', () => {
+    expect(SOURCE).toContain('getDisplayMedia');
   });
 
-  it('builds its video from the window capture that already exists', () => {
-    expect(RECORDER).toContain('captureScreen');
-    expect(RECORDER).toContain('captureStream');
+  it('draws both tracks into one canvas, because a recorder writes one video', () => {
+    // MediaRecorder cannot be handed two video tracks and told to overlay
+    // one. The canvas is what makes the picture-in-picture possible at all.
+    expect(SOURCE).toContain('captureStream');
+    expect(SOURCE).toContain('requestAnimationFrame');
   });
 
-  it('asks only for audio when it asks for a device', () => {
-    // getUserMedia({ video: true }) would turn on the webcam, which is not
-    // what "record my lab" means to anybody.
-    const calls = code(RECORDER).match(/getUserMedia\([^)]*\)/g) ?? [];
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toContain('audio');
-    expect(calls[0]).not.toContain('video');
+  it('asks for the camera and the microphone separately', () => {
+    // One combined getUserMedia would mean a refused camera costs the
+    // narration too, which is the more valuable of the two.
+    const calls = SOURCE.match(/getUserMedia\(\{[\s\S]*?\}\)/g) ?? [];
+    expect(calls.length).toBe(2);
+    expect(calls.some((c) => c.includes('video') && c.includes('audio: false'))).toBe(true);
+    expect(calls.some((c) => c.includes('echoCancellation'))).toBe(true);
+  });
+
+  it('records without the camera when it is refused', () => {
+    // Losing the walkthrough over a declined webcam would be the wrong trade.
+    expect(SOURCE).toMatch(/cameraVideo = null;/);
+  });
+
+  it('records without narration when the microphone is refused', () => {
+    expect(SOURCE).toMatch(/micStream = null;/);
+  });
+
+  it('mixes system audio under the voice rather than over it', () => {
+    // Two audio tracks, one output. Full-level system audio talks over the
+    // person explaining what is on screen.
+    expect(SOURCE).toContain('createMediaStreamDestination');
+    expect(SOURCE).toMatch(/sysGain\.gain\.value = 0\.\d/);
   });
 });
 
-describe('who may use the microphone', () => {
+describe('cleaning up', () => {
+  it('stops every stream it opened, camera included', () => {
+    // cleanup collects the screen, the camera and the microphone, and stopAll
+    // is what turns the camera light off.
+    expect(SOURCE).toContain('const cleanup: MediaStream[]');
+    expect(SOURCE).toMatch(/for \(const s of cleanup\) for \(const t of s\.getTracks\(\)\) t\.stop\(\)/);
+    const finish = SOURCE.slice(SOURCE.indexOf('const finish'));
+    expect(finish).toContain('stopAll()');
+    expect(finish).toContain('cancelAnimationFrame');
+  });
+
+  it('closes the audio graph', () => {
+    // An AudioContext left open holds the audio device awake.
+    expect(SOURCE).toContain('audioCtx?.close()');
+  });
+
+  it('finalises when the user stops sharing from the browser bar', () => {
+    // Otherwise the compositor keeps painting the last frame it saw and the
+    // recording ends in a freeze rather than at the moment it stopped.
+    expect(SOURCE).toContain("addEventListener('ended'");
+    expect(SOURCE).toContain('opts.onEnded');
+  });
+
+  it('stops only once, however many ways stop is reached', () => {
+    // The toolbar button and the 'ended' handler can both fire. A second
+    // recorder.stop() on an inactive recorder throws.
+    expect(SOURCE).toContain('if (stopped) return stopped;');
+  });
+});
+
+describe('who may use the camera and microphone', () => {
   it('has a permission handler at all', () => {
-    // There was none before this. The default applied to every page the
-    // in-VM browser loads.
+    // There was none before the recorder existed. The default applied to
+    // every page the in-VM browser loads.
     expect(MAIN).toContain('setPermissionRequestHandler');
     expect(MAIN).toContain('setPermissionCheckHandler');
   });
@@ -84,38 +132,10 @@ describe('who may use the microphone', () => {
 
 describe('availability', () => {
   it('reports honestly when the runtime cannot record', () => {
-    // No MediaRecorder in the test environment, which is the same answer a
-    // browser without it would give. The caller shows a message rather than
-    // offering a button that fails.
+    // No MediaRecorder and no mediaDevices in the test environment, which is
+    // the same answer a browser without them would give. The caller shows a
+    // message rather than offering a button that fails.
     expect(canRecord()).toBe(false);
-  });
-});
-
-describe('the recording itself', () => {
-  it('keeps the frame rate inside what capturePage can sustain', () => {
-    // capturePage is far heavier than a compositor tap. Asking for sixty
-    // would queue frames faster than they can be produced.
-    expect(RECORDER).toMatch(/Math\.min\(15/);
-  });
-
-  it('paces with setTimeout rather than setInterval', () => {
-    // An interval does not wait for the previous frame, so a slow capture
-    // stacks work until the window stops responding.
-    const loop = RECORDER.slice(RECORDER.indexOf('const pump'));
-    expect(loop).toContain('setTimeout');
-    expect(loop).not.toContain('setInterval');
-  });
-
-  it('still records when the microphone is refused', () => {
-    // Losing the walkthrough because narration was declined would be the
-    // wrong trade.
-    expect(RECORDER).toMatch(/micStream = null;/);
-  });
-
-  it('stops every track it started', () => {
-    // A live microphone track after the recording ends is a light left on.
-    const stop = RECORDER.slice(RECORDER.indexOf('recorder.onstop'));
-    expect(stop).toContain('track.stop()');
-    expect(stop).toContain('micStream?.getTracks()');
+    expect(canRecordCamera()).toBe(false);
   });
 });

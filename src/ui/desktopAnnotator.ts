@@ -24,10 +24,10 @@
  * once meant it.
  */
 import { showToast } from '@/ui/toast';
-import { captureScreen } from '@/util/screenCapture';
-import { startRecording, canRecord } from '@/util/screenRecorder';
-import type { RecorderHandle } from '@/util/screenRecorder';
-import { FS } from '@/terminal/shellIntrinsics';
+import { captureWindow, captureDisplay } from '@/util/screenCapture';
+import { startRecording, canRecord, canRecordCamera } from '@/util/screenRecorder';
+import type { RecorderHandle, CameraCorner } from '@/util/screenRecorder';
+import { saveCapture, describeSave } from '@/util/saveCapture';
 
 const OVERLAY_ID = 'desktop-annotator';
 const POSITION_KEY = 'annotator_toolbar_position';
@@ -115,6 +115,28 @@ export function annotatorActive(): boolean {
   return active;
 }
 
+const CAMERA_KEY = 'annotator_camera_on';
+
+/** Whether the camera bubble was on last time. Defaults to on where a camera
+ *  is possible at all: recording a walkthrough is what this is for. */
+function loadCameraPreference(): boolean {
+  try {
+    const raw = localStorage.getItem(CAMERA_KEY);
+    if (raw !== null) return raw === '1';
+  } catch {
+    /* fall through to the default */
+  }
+  return canRecordCamera();
+}
+
+function saveCameraPreference(on: boolean): void {
+  try {
+    localStorage.setItem(CAMERA_KEY, on ? '1' : '0');
+  } catch {
+    /* the preference lasts the session, which is not fatal */
+  }
+}
+
 function loadPosition(): { x: number; y: number } {
   try {
     const raw = localStorage.getItem(POSITION_KEY);
@@ -158,6 +180,10 @@ export function toggleDesktopAnnotator(): void {
   let current: Stroke | null = null;
   let recorder: RecorderHandle | null = null;
   let recordTick: number | null = null;
+  // Remembered across openings of the toolbar: somebody who recorded with the
+  // camera on once is recording a tutorial and will want it on again.
+  let cameraOn = loadCameraPreference();
+  let cameraCorner: CameraCorner = 'bottom-right';
 
   const overlay = document.createElement('div');
   overlay.id = OVERLAY_ID;
@@ -273,20 +299,20 @@ export function toggleDesktopAnnotator(): void {
   bar.style.top = `${pos.y}px`;
 
   /** Hand a file to the browser and drop a copy in the VM's Documents. */
-  function deliver(blob: Blob, name: string, note: string): void {
-    try {
-      FS.writeFile(`C:\\Users\\admin\\Documents\\${name}`, `[recording] ${name}`);
-    } catch {
-      // The download below is the copy that matters.
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    a.click();
-    // Revoked late: revoking immediately can cancel the download in Chromium.
-    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
-    showToast(note, { kind: 'success' });
+  /**
+   * Hand a capture to the file system, and say where it went.
+   *
+   * The previous version wrote the literal string "[recording] lab-....webm"
+   * into the in-VM filesystem and clicked a detached anchor, then reported
+   * success regardless of whether either worked. saveCapture writes the real
+   * bytes and reports what actually happened.
+   */
+  async function deliver(blob: Blob, name: string, note: string): Promise<void> {
+    const result = await saveCapture(blob, name);
+    const saved = Boolean(result.path) || result.downloaded || result.inVm;
+    showToast(saved ? `${note} ${describeSave(result, name)}` : describeSave(result, name), {
+      kind: saved ? 'success' : 'error',
+    });
   }
 
   const stamp = (): string =>
@@ -303,15 +329,18 @@ export function toggleDesktopAnnotator(): void {
     bar.style.visibility = 'hidden';
     // A frame, so the hide has actually painted before the capture.
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const dataUrl = await captureScreen();
+    // The window capture first: it is silent and needs no picker. Falling
+    // back to the screen picker is what makes this work on the web build,
+    // where it used to report itself unavailable and do nothing.
+    const dataUrl = (await captureWindow()) ?? (await captureDisplay());
     bar.style.visibility = 'visible';
 
     if (!dataUrl) {
-      showToast('Screen capture needs the installed application.', { kind: 'warn' });
+      showToast('Nothing was captured.', { kind: 'warn' });
       return;
     }
     const res = await fetch(dataUrl);
-    deliver(await res.blob(), `lab-${stamp()}.png`, 'Screenshot saved.');
+    await deliver(await res.blob(), `lab-${stamp()}.png`, 'Screenshot saved.');
   }
 
   async function toggleRecording(): Promise<void> {
@@ -328,7 +357,7 @@ export function toggleDesktopAnnotator(): void {
         showToast('The recording produced nothing.', { kind: 'warn' });
         return;
       }
-      deliver(blob, `lab-${stamp()}.webm`, 'Recording saved.');
+      await deliver(blob, `lab-${stamp()}.webm`, 'Recording saved.');
       return;
     }
 
@@ -336,10 +365,35 @@ export function toggleDesktopAnnotator(): void {
       showToast('Recording is not available in this build.', { kind: 'warn' });
       return;
     }
-    showToast('Starting the recorder\u2026', { kind: 'info' });
-    const handle = await startRecording({ fps: 10, audio: true });
+    showToast('Choose what to share\u2026', { kind: 'info' });
+    const handle = await startRecording({
+      fps: 30,
+      audio: true,
+      camera: cameraOn,
+      cameraCorner,
+      // Ending the share from the browser's own bar has to land here too, or
+      // the toolbar goes on showing a clock for a recording that has stopped.
+      onEnded: () => {
+        if (!recorder) return;
+        const ending = recorder;
+        recorder = null;
+        if (recordTick !== null) {
+          clearInterval(recordTick);
+          recordTick = null;
+        }
+        renderBar();
+        void ending.stop().then(async (blob) => {
+          if (!blob) {
+            showToast('The recording produced nothing.', { kind: 'warn' });
+            return;
+          }
+          await deliver(blob, `lab-${stamp()}.webm`, 'Recording saved.');
+        });
+      },
+    });
     if (!handle) {
-      showToast('Recording needs the installed application.', { kind: 'warn' });
+      // Cancelling the picker is the ordinary case, not a failure.
+      showToast('No screen was shared, so nothing is being recorded.', { kind: 'info' });
       return;
     }
     recorder = handle;
@@ -347,12 +401,31 @@ export function toggleDesktopAnnotator(): void {
     // leave running.
     recordTick = window.setInterval(renderBar, 1000);
     renderBar();
+
+    const parts = ['Recording the screen you picked'];
+    if (handle.hasCamera()) parts.push('with your camera in the corner');
+    if (handle.hasAudio()) {
+      parts.push(handle.hasSystemAudio() ? 'and microphone + system audio' : 'and your microphone');
+    }
     showToast(
       handle.hasAudio()
-        ? 'Recording this window with your microphone. Roughly ten frames a second \u2014 fine for a walkthrough.'
-        : 'Recording without audio: no microphone, or permission was declined.',
+        ? `${parts.join(' ')}.`
+        : `${parts.join(' ')} \u2014 but with no audio: no microphone, or permission was declined.`,
       { kind: handle.hasAudio() ? 'success' : 'warn' },
     );
+  }
+
+  /** Move the camera bubble off whatever it is covering. */
+  function cycleCameraCorner(): void {
+    const order: CameraCorner[] = ['bottom-right', 'bottom-left', 'top-left', 'top-right'];
+    const next = order[(order.indexOf(cameraCorner) + 1) % order.length];
+    if (!next) return;
+    cameraCorner = next;
+    // Mid-recording the handle owns the corner, so it has to be told. The
+    // stored value is what the next recording starts from.
+    recorder?.setCameraCorner(next);
+    renderBar();
+    showToast(`Camera bubble: ${next.replace('-', ' ')}.`, { kind: 'info' });
   }
 
   function setMode(next: boolean): void {
@@ -471,7 +544,9 @@ export function toggleDesktopAnnotator(): void {
 
     const rec = button(
       recorder ? `\u23F9 ${formatElapsed(recorder.elapsed())}` : '\u23FA',
-      recorder ? 'Stop recording and save' : 'Record this window with narration',
+      recorder
+        ? 'Stop recording and save'
+        : 'Record a screen you pick, with your camera and narration',
       Boolean(recorder),
       () => {
         void toggleRecording();
@@ -480,6 +555,44 @@ export function toggleDesktopAnnotator(): void {
     );
     if (recorder) rec.style.color = 'var(--on-accent)';
     bar.appendChild(rec);
+
+    // Camera controls, only where there is a camera to control. The toggle is
+    // disabled mid-recording: turning the bubble on halfway through would mean
+    // asking for the device while the compositor is already running, and the
+    // recording would change shape in the middle.
+    if (canRecordCamera()) {
+      const cam = button(
+        cameraOn ? '\u{1F3A5}' : '\u{1F6AB}',
+        recorder
+          ? 'The camera cannot be changed while recording'
+          : cameraOn
+            ? 'Camera bubble on \u2014 click to record the screen alone'
+            : 'Camera bubble off \u2014 click to include yourself',
+        cameraOn,
+        () => {
+          if (recorder) {
+            showToast('Stop the recording before changing the camera.', { kind: 'warn' });
+            return;
+          }
+          cameraOn = !cameraOn;
+          saveCameraPreference(cameraOn);
+          renderBar();
+        },
+      );
+      if (recorder) cam.style.opacity = '0.5';
+      bar.appendChild(cam);
+
+      if (cameraOn) {
+        bar.appendChild(
+          button(
+            '\u25F3',
+            `Camera bubble: ${cameraCorner.replace('-', ' ')} \u2014 click to move it`,
+            false,
+            cycleCameraCorner,
+          ),
+        );
+      }
+    }
 
     // The mode toggle, which is the control that keeps the desktop usable.
     const mode = document.createElement('button');
