@@ -781,7 +781,57 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
 
     dialog.append(bar, content, footer);
     overlay.appendChild(dialog);
+
+    /*
+     * Keyboard, so the dialog behaves like the Windows one it imitates.
+     *
+     * Enter commits and Escape cancels, and neither existed: the only way out
+     * was to find and click the right button. Scoped to the overlay rather
+     * than the document so a dialog cannot answer for the window behind it.
+     *
+     * Enter is ignored inside a textarea, where the key means a new line.
+     */
+    overlay.addEventListener('keydown', (e) => {
+      const typingMultiline = (e.target as HTMLElement | null)?.tagName === 'TEXTAREA';
+      if (e.key === 'Enter' && !typingMultiline) {
+        e.preventDefault();
+        if (!onOk) close();
+        else if (onOk()) close();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        // Escape must not travel on to the console behind the dialog, which
+        // has Escape bindings of its own.
+        e.stopPropagation();
+        close();
+      }
+    });
+
     document.body.appendChild(overlay);
+    focusFirstField(content);
+  }
+
+  /**
+   * Put the caret in the dialog's first field.
+   *
+   * The dialogs are where every text box in Active Directory lives, and none
+   * of them placed the caret -- the dialog opened looking ready to type into
+   * and was not, so a keystroke went to whatever had focus before it and
+   * vanished. That is the same symptom as a field that refuses input, and it
+   * is why "the Active Directory text box does not accept anything" was
+   * reported alongside a genuine full-screen overlay bug.
+   *
+   * Existing text is selected, so retyping a value replaces it rather than
+   * appending to it.
+   */
+  function focusFirstField(content: HTMLElement): void {
+    const first = content.querySelector<HTMLElement>(
+      'input:not([type=checkbox]):not([type=radio]), textarea, select',
+    );
+    if (!first) return;
+    first.focus();
+    if (first instanceof HTMLInputElement && first.value) first.select();
   }
 
   /** Labelled field, returning a reader for its value. */

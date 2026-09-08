@@ -32,6 +32,7 @@ import { reviewTicketSync, explainReview, type TicketReview } from '@/vm/ticketR
 // not this application's strings — the model rewrites the first two and the
 // learner types the third.
 import { escapeHtml } from '@/util/escapeHtml';
+import { isTypingEvent } from '@/util/typing';
 
 type SortMode = 'priority' | 'created' | 'kind' | 'status';
 type FilterKind = 'all' | TicketKind;
@@ -1279,14 +1280,13 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
   // ----- Keyboard shortcuts (only active when console is open) -----
   const keyHandler = (e: KeyboardEvent) => {
     if (!document.contains(body)) return;
-    const target = e.target as HTMLElement | null;
-    if (
-      target &&
-      (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')
-    ) {
-      // Don't hijack typing in input/textarea/select
-      if (e.key !== 'Escape') return;
-    }
+    // Never hijack a keystroke that a field is already receiving. This is a
+    // document-level capture-phase handler, so it sees typing in every window
+    // in the workstation, not only this one. The guard used to test tagName
+    // against INPUT/TEXTAREA/SELECT and so missed contenteditable -- with the
+    // queue open, every `r` typed into Writer or a sticky note was swallowed
+    // here and silently resolved a ticket instead of appearing on the page.
+    if (isTypingEvent(e) && e.key !== 'Escape') return;
 
     // Esc clears selection
     if (e.key === 'Escape') {

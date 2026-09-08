@@ -12,6 +12,7 @@
  * input as explicit, testable cases.
  */
 import { evaluateExpression } from '@/util/calculator';
+import { isTypingEvent } from '@/util/typing';
 
 const KEYS: ReadonlyArray<ReadonlyArray<string>> = [
   ['C', '±', '%', '÷'],
@@ -165,10 +166,10 @@ export function renderCalculatorWindow(body: HTMLElement): void {
       document.removeEventListener('keydown', onKey);
       return;
     }
-    const target = e.target as HTMLElement | null;
-    if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
-      return;
-    }
+    // A keystroke a field is already receiving is not a calculator key. The
+    // shared guard, so this window and the Ticket Queue cannot drift apart on
+    // what counts as typing.
+    if (isTypingEvent(e)) return;
     if (
       !body.closest('[data-win-id]')?.contains(document.activeElement) &&
       document.activeElement !== document.body

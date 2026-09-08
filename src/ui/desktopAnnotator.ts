@@ -55,6 +55,36 @@ const STYLES = `
   #${OVERLAY_ID}.draw .da-canvas { cursor: crosshair; }
   #${OVERLAY_ID}.click-through .da-canvas { pointer-events: none; }
 
+  /*
+   * A frame and a label on the screen while the sheet is taking clicks.
+   *
+   * The toolbar says which mode it is in, but the toolbar is one small strip
+   * that can be dragged anywhere, and the thing it is describing is the whole
+   * screen. Without a marker on the screen itself, "my clicks do nothing" and
+   * "the pen is in drawing mode" are two facts with nothing connecting them.
+   * Drawn on the overlay rather than as separate elements so they cannot be
+   * left behind, and pointer-events: none so neither eats a click of its own.
+   *
+   * The label is a filled pill at the bottom, not text at the top: the
+   * toolbar opens across the top and the label was landing underneath it, and
+   * transparent text in --on-accent is invisible against a dark wallpaper --
+   * which is the whole failure this is here to prevent.
+   */
+  #${OVERLAY_ID}.draw::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none;
+    border: 2px solid var(--accent);
+    box-sizing: border-box;
+  }
+  #${OVERLAY_ID}.draw::before {
+    content: 'Drawing — clicks go to the pen. Press Esc to use the desktop.';
+    position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%);
+    pointer-events: none; z-index: 1;
+    font: 600 12px "Segoe UI", system-ui, sans-serif;
+    color: var(--on-accent, #06080c); background: var(--accent, #4ec9b0);
+    padding: 6px 14px; border-radius: 999px; white-space: nowrap;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  }
+
   .da-bar {
     position: fixed; z-index: 8100; display: flex; align-items: center; gap: 4px;
     padding: 6px; border-radius: 10px; pointer-events: auto;
@@ -110,6 +140,17 @@ function formatElapsed(seconds: number): string {
 
 let active = false;
 
+/**
+ * Detach for the Escape handler, held at module level.
+ *
+ * The pen has two ways off the screen -- its own close button and toggling
+ * the Start menu entry again -- and the second one runs in a different call
+ * than the one that registered the listener. Without this, that path left a
+ * document-level keydown handler behind, closed over a dead overlay, still
+ * swallowing Escape for the rest of the session.
+ */
+let detachEscape: (() => void) | null = null;
+
 /** Whether the desktop annotator is currently up. */
 export function annotatorActive(): boolean {
   return active;
@@ -161,6 +202,8 @@ export function toggleDesktopAnnotator(): void {
   if (existing) {
     existing.remove();
     document.querySelector('.da-bar')?.remove();
+    detachEscape?.();
+    detachEscape = null;
     active = false;
     return;
   }
@@ -175,7 +218,22 @@ export function toggleDesktopAnnotator(): void {
 
   let tool: Tool = 'pen';
   let color = COLORS[0]!;
-  let drawMode = true;
+  /*
+   * Opens in click-through, not drawing.
+   *
+   * Drawing mode lays a full-screen canvas over the workstation, so every
+   * click lands on the canvas instead of whatever is underneath it. Opening
+   * straight into that made the whole application look broken: fields render
+   * normally, because they are simply underneath, so nothing appears disabled
+   * -- you click a text box, no caret arrives, and nothing you type shows up.
+   * The same for the taskbar, the ticket queue, every dialog. Somebody who
+   * opened the pen and forgot about it had no way to connect the two.
+   *
+   * The safe state is therefore the default, and drawing is one clearly
+   * labelled click away. A pen that has to be switched on is a smaller
+   * surprise than a workstation that has silently stopped accepting input.
+   */
+  let drawMode = false;
   let strokes: Stroke[] = [];
   let current: Stroke | null = null;
   let recorder: RecorderHandle | null = null;
@@ -187,7 +245,7 @@ export function toggleDesktopAnnotator(): void {
 
   const overlay = document.createElement('div');
   overlay.id = OVERLAY_ID;
-  overlay.className = 'draw';
+  overlay.className = 'click-through';
 
   const canvas = document.createElement('canvas');
   canvas.className = 'da-canvas';
@@ -434,6 +492,31 @@ export function toggleDesktopAnnotator(): void {
     renderBar();
   }
 
+  /*
+   * Escape hands the workstation back.
+   *
+   * Drawing mode covers the screen with a canvas that takes every click, so
+   * while it is on, nothing underneath can be focused or typed into -- and
+   * the only way out was a chip on a toolbar that can be dragged anywhere.
+   * Somebody who opened the pen, moved on, and then found that Active
+   * Directory's dialogs and the interview answer box would not accept a
+   * single character had no way to connect the two.
+   *
+   * Capture phase, because the pen must win over an application's own Escape
+   * while it is holding the screen. It only acts in drawing mode, so a plain
+   * click-through pen never intercepts anybody's Escape.
+   */
+  const onEscape = (e: KeyboardEvent): void => {
+    if (e.key !== 'Escape') return;
+    if (!drawMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setMode(false);
+    showToast('Click-through — the applications take clicks again.', { kind: 'info' });
+  };
+  document.addEventListener('keydown', onEscape, true);
+  detachEscape = () => document.removeEventListener('keydown', onEscape, true);
+
   function button(
     label: string,
     title: string,
@@ -611,6 +694,8 @@ export function toggleDesktopAnnotator(): void {
         if (recorder) void toggleRecording();
         document.removeEventListener('mousemove', move);
         document.removeEventListener('mouseup', drop);
+        document.removeEventListener('keydown', onEscape, true);
+        detachEscape = null;
         window.removeEventListener('resize', sizeCanvas);
         overlay.remove();
         bar.remove();
@@ -624,7 +709,7 @@ export function toggleDesktopAnnotator(): void {
   sizeCanvas();
 
   showToast(
-    'Drawing over the desktop. Switch to click-through when you need the applications back.',
+    'Screen Pen ready, click-through. Pick a tool to draw; Esc gives the desktop back.',
     { kind: 'info' },
   );
 }
