@@ -30,6 +30,8 @@ export function isOverdue(t: Ticket, now = Date.now()): boolean {
 export type NewTicket =
   | {
       id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
       kind: 'onboarding';
       requesterId: UserId;
       subject: string;
@@ -40,6 +42,8 @@ export type NewTicket =
     }
   | {
       id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
       kind: 'mover';
       requesterId: UserId;
       subject: string;
@@ -50,6 +54,8 @@ export type NewTicket =
     }
   | {
       id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
       kind: 'leaver';
       requesterId: UserId;
       subject: string;
@@ -60,6 +66,8 @@ export type NewTicket =
     }
   | {
       id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
       kind: 'transfer';
       requesterId: UserId;
       subject: string;
@@ -70,6 +78,8 @@ export type NewTicket =
     }
   | {
       id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
       kind: 'termination';
       requesterId: UserId;
       subject: string;
@@ -80,6 +90,8 @@ export type NewTicket =
     }
   | {
       id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
       kind: 'access-request';
       requesterId: UserId;
       subject: string;
@@ -90,6 +102,8 @@ export type NewTicket =
     }
   | {
       id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
       kind: 'password-reset';
       requesterId: UserId;
       subject: string;
@@ -100,6 +114,8 @@ export type NewTicket =
     }
   | {
       id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
       kind: 'mfa-issue';
       requesterId: UserId;
       subject: string;
@@ -110,6 +126,8 @@ export type NewTicket =
     }
   | {
       id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
       kind: 'incident';
       requesterId: UserId;
       subject: string;
@@ -153,6 +171,10 @@ export class MockTicketQueue {
       approvals: [],
       comments: [],
       relatedUserIds: t.relatedUserIds ?? [],
+      // Kept so the reviewer can tell a ticket about the estate from one
+      // about a person. It was discarded here, which is what made the
+      // structural tickets impossible to resolve.
+      ...(t.scenarioId ? { scenarioId: t.scenarioId } : {}),
     };
     const ticket = { kind: t.kind, ...base, payload: t.payload } as Ticket;
     this.tickets.set(id, ticket);

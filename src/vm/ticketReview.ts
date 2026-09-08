@@ -72,10 +72,90 @@ function subjectsOf(ticket: Ticket, dir: MockDirectory): ReturnType<MockDirector
  * it saw rather than whether it liked it — "still enabled" is more useful to a
  * learner than "failed".
  */
+/**
+ * Checks for a ticket about the directory's shape rather than about a person.
+ *
+ * Returns null when this is an ordinary ticket, so the caller carries on to
+ * the per-kind checks.
+ *
+ * Keyed on the scenario id, which is deterministic. The fallback below reads
+ * the subject, and exists only for tickets raised before the id was carried
+ * through -- a learner with the queue already open when they update should
+ * not be left with a ticket they still cannot close.
+ */
+function estateChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] | null {
+  const { dir } = deps;
+  const named = ticket.relatedUserIds.length > 0;
+  const subject = ticket.subject.toLowerCase();
+
+  const wantsOus =
+    ticket.scenarioId === 'build-ou-structure' ||
+    (!ticket.scenarioId && !named && subject.includes('organisational unit'));
+
+  const wantsGroups =
+    ticket.scenarioId === 'define-group-model' ||
+    (!ticket.scenarioId && !named && subject.includes('group model'));
+
+  if (wantsOus) {
+    const ous = dir.listOus();
+    // A hierarchy, not one box. The lesson is delegation, which needs a
+    // parent and something beneath it.
+    const nested = ous.filter((o) => o.parentId !== undefined);
+    return [
+      ous.length >= 2
+        ? pass('Structure exists', `${ous.length} OU(s): ${ous.map((o) => o.name).join(', ')}.`)
+        : fail(
+            'Structure exists',
+            ous.length === 0
+              ? 'No organisational unit has been created.'
+              : `Only ${ous[0]!.name} exists. An OU structure needs more than one container.`,
+          ),
+      nested.length >= 1
+        ? pass('It is a hierarchy', `${nested.length} OU(s) sit beneath another.`)
+        : fail(
+            'It is a hierarchy',
+            'Every OU is at the top level. Delegation and Group Policy follow the tree, so ' +
+              'the point of the structure is what sits beneath what.',
+          ),
+    ];
+  }
+
+  if (wantsGroups) {
+    const groups = dir.listGroups();
+    const placed = groups.filter((g) => g.ouId !== undefined);
+    return [
+      groups.length >= 3
+        ? pass('Groups exist', `${groups.length} security group(s) defined.`)
+        : fail(
+            'Groups exist',
+            `${groups.length} group(s) so far. Access is granted through groups, so the model ` +
+              'needs one per role people actually hold.',
+          ),
+      placed.length > 0
+        ? pass('They live somewhere', `${placed.length} group(s) placed in an OU.`)
+        : fail(
+            'They live somewhere',
+            'Every group is in the default container. A group is a directory object like an ' +
+              'account, and it is placed where delegation reaches it.',
+          ),
+    ];
+  }
+
+  return null;
+}
+
 function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
   const { dir, audit } = deps;
   const subjects = subjectsOf(ticket, dir);
   const checks: ReviewCheck[] = [];
+
+  // Some tickets are not about a person. "Build the organisational unit
+  // structure" and "Define the security group model" ask you to change the
+  // shape of the directory, and they name nobody because there is nobody to
+  // name. Judging those by looking for an account made them impossible to
+  // resolve once the review became binding.
+  const estate = estateChecks(ticket, deps);
+  if (estate) return estate;
 
   if (subjects.length === 0) {
     return [

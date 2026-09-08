@@ -440,6 +440,8 @@ function raise(deps: GeneratorDeps, scenario: Scenario): void {
 
   deps.tickets.create({
     kind: scenario.kind as 'onboarding',
+    // So the reviewer can tell an estate ticket from one about a person.
+    scenarioId: scenario.id,
     requesterId: admin.id,
     subject: scenario.subject,
     body: scenario.body,

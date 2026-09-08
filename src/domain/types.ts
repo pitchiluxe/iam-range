@@ -217,6 +217,17 @@ export interface TicketComment {
 }
 
 interface TicketBase {
+  /**
+   * The generator scenario that raised this ticket, when one did.
+   *
+   * Carried so the reviewer can judge a ticket that names no account -- the
+   * ones asking for an OU structure or a group model -- against the estate
+   * rather than against a person who does not exist. It was being discarded
+   * at creation, which left those tickets impossible to resolve once the
+   * review became binding.
+   */
+  scenarioId?: string;
+
   /** When this ticket passed its response target, if it did.
    *
    *  The countdown badge went red and said OVERDUE and nothing was recorded,
