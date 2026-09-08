@@ -28,6 +28,10 @@ import { clearToasts, showToast } from '@/ui/toast';
 import { errorTone, fanfare, ticketBlip, ticketResolved, urgentAlert } from '@/ui/audio';
 import { generateTickets } from '@/vm/ticketGenerator';
 import { reviewTicketSync, explainReview, type TicketReview } from '@/vm/ticketReview';
+// The cards are built with innerHTML, and the subject, body and comments are
+// not this application's strings — the model rewrites the first two and the
+// learner types the third.
+import { escapeHtml } from '@/util/escapeHtml';
 
 type SortMode = 'priority' | 'created' | 'kind' | 'status';
 type FilterKind = 'all' | TicketKind;
@@ -342,7 +346,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     card.innerHTML =
       '<div class="tq-celebrate-mark">✓</div>' +
       '<div><div class="tq-celebrate-title">Objectives met</div>' +
-      `<div class="tq-celebrate-sub">${t.subject}</div></div>`;
+      `<div class="tq-celebrate-sub">${escapeHtml(t.subject)}</div></div>`;
     body.appendChild(card);
     // Removed by the clock rather than by an animation event, so a browser
     // that skips animations still cleans it up.
@@ -817,7 +821,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
           <div style="display:flex;align-items:center;gap:6px;flex:1;">
             <input type="checkbox" class="ticket-card-checkbox" ${isSelected ? 'checked' : ''} style="cursor:pointer;" />
             ${indexLabel}
-            <span style="font-weight:600;flex:1;">${t.subject}</span>
+            <span style="font-weight:600;flex:1;">${escapeHtml(t.subject)}</span>
           </div>
           <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
             ${slaHtml}
@@ -826,9 +830,9 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
         </div>
         <div style="display:flex;justify-content:space-between;gap:6px;margin-bottom:6px;">
           <span style="color:${color};font-size:10px;text-transform:uppercase;letter-spacing:0.05em;">${kindEmoji(t.kind)} ${t.kind}</span>
-          <span data-age-for="${t.id}" style="color:var(--muted);font-size:10px;">${t.assigneeId ? `👤 ${t.assigneeId}` : 'Unassigned'} · ⏱️ ${elapsed}</span>
+          <span data-age-for="${t.id}" style="color:var(--muted);font-size:10px;">${t.assigneeId ? `👤 ${escapeHtml(t.assigneeId)}` : 'Unassigned'} · ⏱️ ${elapsed}</span>
         </div>
-        <div style="color:var(--muted);margin-bottom:8px;">${t.body}</div>
+        <div style="color:var(--muted);margin-bottom:8px;">${escapeHtml(t.body)}</div>
       `;
       const actions = document.createElement('div');
       actions.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;';
@@ -1072,7 +1076,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
         const row = document.createElement('div');
         row.style.cssText =
           'padding:4px 0;border-bottom:1px solid var(--panel-alt);font-size:11px;color:var(--fg);';
-        row.innerHTML = `<div><strong style="color:var(--accent);">${c.authorId}</strong> <span style="color:var(--muted);font-size:10px;">${new Date(c.at).toLocaleTimeString()}</span></div><div style="color:var(--muted);margin-top:2px;">${c.body}</div>`;
+        row.innerHTML = `<div><strong style="color:var(--accent);">${escapeHtml(c.authorId)}</strong> <span style="color:var(--muted);font-size:10px;">${new Date(c.at).toLocaleTimeString()}</span></div><div style="color:var(--muted);margin-top:2px;">${escapeHtml(c.body)}</div>`;
         block.appendChild(row);
       }
     }

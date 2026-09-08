@@ -174,12 +174,22 @@ describe('transfer review', () => {
     });
     const oldGroup = s.dir.getGroupByName('grp-helpdesk-tier1')!;
     const newGroup = s.dir.createGroup('grp-hr-readers', 'HR read access', ACTOR);
+    // Onboarding put them in a group; that is history, not this ticket's work.
     s.dir.addToGroup(user.id, oldGroup.id, ACTOR);
+
+    // The ticket arrives, and then the work is done. That order matters now:
+    // the group checks are bounded to the ticket, as the move check always
+    // was, so a transfer can no longer be closed by the membership somebody
+    // was given when they joined. This test did the work first and passed only
+    // because every timestamp landed in the same millisecond — under load it
+    // did not, which is how the bound got noticed.
+    const ticket = ticketFor(s, 'transfer', user.id, 'Move mchen');
     s.dir.removeFromGroup(user.id, oldGroup.id, ACTOR);
     s.dir.addToGroup(user.id, newGroup.id, ACTOR);
     s.dir.moveUser(user.id, 'HR', ACTOR);
 
-    const review = reviewTicketSync(ticketFor(s, 'transfer', user.id, 'Move mchen'), deps(s), ACTOR);
+    const review = reviewTicketSync(ticket, deps(s), ACTOR);
+    expect(review.checks.filter((c) => !c.passed).map((c) => c.label)).toEqual([]);
     expect(review.passed).toBe(true);
   });
 

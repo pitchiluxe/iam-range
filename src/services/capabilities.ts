@@ -214,12 +214,22 @@ export const CAPABILITIES: readonly IamCapability[] = [
         kind: 'bool',
         required: false,
       },
+      // Named to match New-ADUser -Path, and resolved the way New-ADGroup and
+      // New-ADOrganizationalUnit resolve theirs. Without it the onboarding
+      // tickets — "place them in the right OU" — could not be done from the
+      // console or the terminal at all: every account landed in CN=Users and
+      // had to be rescued afterwards with Move-ADObject.
+      { name: 'Path', label: 'Target OU', kind: 'text', required: false },
     ],
     resolvesTicketKinds: ['onboarding'],
     run(ctx, a) {
       if (!a.SamAccountName || !a.Name) return err('SamAccountName and Name are required.');
       if (ctx.dir.getUserByUsername(a.SamAccountName))
         return err(`A user named '${a.SamAccountName}' already exists.`);
+      // Resolved before anything is written, so a typo in the OU name fails
+      // the whole provision rather than half of it.
+      const target = a.Path ? ctx.dir.getOuByName(a.Path) : undefined;
+      if (a.Path && !target) return err(`Cannot find an OU named '${a.Path}'.`);
       const u = ctx.dir.createUser({
         username: a.SamAccountName,
         displayName: a.Name,
@@ -227,6 +237,7 @@ export const CAPABILITIES: readonly IamCapability[] = [
         department: a.Department ?? 'Unassigned',
         title: a.Title ?? 'Employee',
         mfa: 'none',
+        ...(target ? { ouId: target.id } : {}),
       });
 
       // An account with no credential cannot sign in, which makes the new user
@@ -239,7 +250,13 @@ export const CAPABILITIES: readonly IamCapability[] = [
         ctx.idp.resetPassword(u.id, password, { forceChangeAtNextLogin: true }, ctx.actor);
       }
 
-      return ok(`Created ${u.username} (${u.displayName}). Password set.`);
+      // The destination is named on the way out. "Created jdoe" with no
+      // container is what made the wrong placement invisible until somebody
+      // went looking in the tree for an account that was not there.
+      return ok(
+        `Created ${u.username} (${u.displayName}) in ${target ? target.name : 'CN=Users'}. ` +
+          'Password set.',
+      );
     },
   },
   {

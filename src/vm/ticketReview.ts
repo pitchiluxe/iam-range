@@ -49,6 +49,9 @@ export interface TicketReview {
 const pass = (label: string, detail: string): ReviewCheck => ({ label, passed: true, detail });
 const fail = (label: string, detail: string): ReviewCheck => ({ label, passed: false, detail });
 
+/** What may appear inside a logon, and therefore what does not end one. */
+const NAME_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789._-';
+
 /**
  * The accounts a ticket is about.
  *
@@ -61,8 +64,30 @@ function subjectsOf(ticket: Ticket, dir: MockDirectory): ReturnType<MockDirector
     .filter((u): u is NonNullable<typeof u> => Boolean(u));
   if (byId && byId.length > 0) return byId;
 
+  // Whole words only. `includes` made a ticket about jdoe2 a ticket about
+  // jdoe as well, and any ticket containing the word "administrator" a ticket
+  // about the admin account -- so the review graded somebody the ticket was
+  // never about, and the learner could not answer the failing check. Logons
+  // contain dots and hyphens, which a regex word boundary does not treat as
+  // boundaries, so the rule is
+  // spelled out here as "no name character on either side" and scanned by
+  // hand. Building a pattern out of a logon would mean escaping directory
+  // data into regex syntax — a second bug waiting behind the first.
   const haystack = `${ticket.subject} ${ticket.body}`.toLowerCase();
-  return dir.listUsers().filter((u) => haystack.includes(u.username.toLowerCase()));
+  const isNameChar = (ch: string | undefined): boolean =>
+    ch !== undefined && NAME_CHARS.includes(ch);
+
+  const namedInText = (username: string): boolean => {
+    const name = username.toLowerCase();
+    let from = 0;
+    for (;;) {
+      const at = haystack.indexOf(name, from);
+      if (at === -1) return false;
+      if (!isNameChar(haystack[at - 1]) && !isNameChar(haystack[at + name.length])) return true;
+      from = at + 1;
+    }
+  };
+  return dir.listUsers().filter((u) => namedInText(u.username));
 }
 
 /**
@@ -246,16 +271,22 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
       }
 
       case 'password-reset': {
+        // Since the ticket was raised. Without the bound, a reset from the
+        // last lockout about the same person closed this one for free -- and
+        // password-reset is the most-generated kind in the app.
         const reset = audit.events.some(
-          (e) => e.action === 'password.reset' && (e.targetId === user.id || e.subjectId === user.id),
+          (e) =>
+            e.action === 'password.reset' &&
+            e.at >= ticket.createdAt &&
+            (e.targetId === user.id || e.subjectId === user.id),
         );
         checks.push(
           reset
             ? pass('Password was reset', 'The audit log records a reset for this account.')
             : fail(
                 'Password was reset',
-                'No reset appears in the audit log for this account, so whatever was done ' +
-                  'was not this.',
+                'No reset appears in the audit log for this account since the ticket was ' +
+                  'raised, so whatever was done was not this.',
               ),
         );
         checks.push(
@@ -272,10 +303,16 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
       case 'mover':
       case 'transfer': {
         const groups = dir.listGroups().filter((g) => g.memberIds.includes(user.id));
+        // Both bounded to this ticket, as the move check below already was.
+        // Unbounded, the group they were put in when they joined counted as
+        // "new access granted" for every transfer they ever have.
         const removed = audit.events.some(
-          (e) => e.action === 'group.remove' && e.subjectId === user.id,
+          (e) =>
+            e.action === 'group.remove' && e.at >= ticket.createdAt && e.subjectId === user.id,
         );
-        const added = audit.events.some((e) => e.action === 'group.add' && e.subjectId === user.id);
+        const added = audit.events.some(
+          (e) => e.action === 'group.add' && e.at >= ticket.createdAt && e.subjectId === user.id,
+        );
         checks.push(
           added
             ? pass('New access granted', `Now in ${groups.map((g) => g.name).join(', ') || 'no groups'}.`)
@@ -286,8 +323,8 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
             ? pass('Old access removed', 'A group removal is recorded for this account.')
             : fail(
                 'Old access removed',
-                'Nothing was removed. This is the half of a transfer people skip, and it is ' +
-                  'how privilege accumulates.',
+                'No group was removed for this account since the ticket was raised. This is ' +
+                  'the half of a transfer people skip, and it is how privilege accumulates.',
               ),
         );
         // A move is not only a change of access. The account has to end up
@@ -397,6 +434,26 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
         );
       }
     }
+  }
+
+  /*
+   * A review that examined nothing is not a pass.
+   *
+   * `checks.every()` is true of an empty array, so any path that pushed no
+   * checks returned a green verdict having looked at nothing -- an incident
+   * ticket on a host with no cloud tenant did exactly that, because its whole
+   * branch sits behind `if (tenant)`. This is the same failure the
+   * exhaustiveness guard above was added to prevent, one level up: a vacuous
+   * check produces a verdict the learner calibrates on.
+   */
+  if (checks.length === 0) {
+    return [
+      fail(
+        'Something was checked',
+        'There was nothing to check this ticket against on this host, so it cannot be ' +
+          'confirmed as done. This is a gap in the lab rather than in your work — report it.',
+      ),
+    ];
   }
 
   return checks;

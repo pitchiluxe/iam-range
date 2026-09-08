@@ -820,11 +820,23 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     'flex:1;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:2px;' +
     'padding:4px 7px;font-size:12px;outline:none;';
 
+  /**
+   * New user, created inside whichever OU is selected.
+   *
+   * New OU and New Group both learned this; New User did not, and it is the
+   * one the onboarding tickets use. Selecting Corp > Users and creating a
+   * starter filed them under CN=Users at the top of the tree, so the ticket's
+   * "place them in the right OU" was impossible from the console that the
+   * ticket tells you to use. The title names the destination for the same
+   * reason the snap-in does: the container you are about to write into should
+   * be visible before you commit, not discovered afterwards.
+   */
   function newUserDialog(): void {
     // Pre-fill the department from the OU you right-clicked, as the snap-in does.
     const dept = selectedNodeId.startsWith('users:')
       ? selectedNodeId.slice('users:'.length)
       : DEPARTMENTS[0];
+    const parent = selectedParentOuName();
 
     let readFirst = (): string => '';
     let readLast = (): string => '';
@@ -835,7 +847,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
     let mustChange = false;
 
     modal(
-      'New Object — User',
+      parent ? `New Object — User (in ${parent})` : 'New Object — User',
       (b) => {
         readFirst = field(b, 'First name:');
         readLast = field(b, 'Last name:');
@@ -878,6 +890,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
           Title: readTitle(),
           AccountPassword: readPwd(),
           ChangePasswordAtLogon: mustChange ? 'true' : 'false',
+          ...(parent ? { Path: parent } : {}),
         });
       },
     );

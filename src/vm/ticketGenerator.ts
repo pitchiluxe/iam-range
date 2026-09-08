@@ -223,9 +223,13 @@ function pimScenarios(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
     body:
       `The quarterly privileged access review flagged ${target} as holding ` +
       `${adminRole.name} permanently, with no expiry and no approval on record. ` +
-      'Standing privilege is what PIM exists to remove. Make them eligible instead, ' +
-      'so the role has to be activated with a reason and lapses on its own, then ' +
-      'remove the permanent assignment. Confirm with Get-PimStandingPrivilege.',
+      'Standing privilege is what PIM exists to remove. Take the permanent ' +
+      'assignment away first with Remove-PimAssignment, then make them eligible ' +
+      'with New-PimEligibility, so the role has to be activated with a reason and ' +
+      'lapses on its own. The order matters: a person holds one assignment per ' +
+      'role, so eligibility cannot be added underneath a standing grant — and ' +
+      'doing it the other way round would leave them privileged in the gap. ' +
+      'Confirm with Get-PimStandingPrivilege.',
     prepare: ({ dir, pim }) => {
       const u = dir.getUserByUsername(target);
       if (!u || !pim) return [];
@@ -381,6 +385,37 @@ export { ollamaAvailable } from '@/config/ollama';
  * wording. If it returns something unusable the original text is kept, because
  * a lab that breaks when the model has an off day is worse than a plain one.
  */
+/**
+ * The names a rewrite is not allowed to lose.
+ *
+ * Three sources, because they answer different halves of the question:
+ *
+ *   - what exists now, from the environment — accounts, groups and OUs the
+ *     ticket refers to;
+ *   - what the ticket asks the learner to create, which by definition is not
+ *     in the environment yet. "Create grp-helpdesk-tier1, grp-hr-readers…"
+ *     names five groups that do not exist, and those are exactly the strings
+ *     the reviewer will later check for, so they are the ones that matter
+ *     most. Those are read out of the text by shape.
+ *
+ * Only names actually present in the original are required, so a rewrite is
+ * never held to something the scenario never said.
+ */
+function namesToKeep(scenario: Scenario, env: EnvironmentState): string[] {
+  const body = `${scenario.subject} ${scenario.body}`;
+  const keep = new Set<string>();
+
+  for (const name of [...env.staffLogons, ...env.groupNames, ...env.ouNames]) {
+    if (name && body.includes(name)) keep.add(name);
+  }
+  // Objects the ticket asks for that do not exist yet. Matched on the naming
+  // conventions this lab uses throughout: grp-, role-, svc-, and the OU paths.
+  for (const m of body.matchAll(/\b(?:grp|role|svc)-[A-Za-z0-9-]+/g)) keep.add(m[0]);
+  for (const m of body.matchAll(/\bCorp(?:\/[A-Za-z]+)*/g)) keep.add(m[0]);
+
+  return [...keep];
+}
+
 async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Scenario> {
   const prompt = [
     'You are writing an IT service desk ticket for an identity administration lab.',
@@ -409,11 +444,13 @@ async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Sce
     const data = (await res.json()) as { response?: string };
     const parsed = JSON.parse(data.response ?? '{}') as { subject?: string; body?: string };
 
-    // Guard against a model that drops the account it was told to name: if the
-    // rewrite loses the subject of the task, keep the original.
-    const namesInOriginal = env.staffLogons.filter((l) => scenario.body.includes(l));
-    const keptNames = namesInOriginal.every((l) => (parsed.body ?? '').includes(l));
-    if (!parsed.subject || !parsed.body || !keptNames) return scenario;
+    // Guard against a model that drops something it was told to name. The
+    // rewrite supplies wording; it does not get to change what the ticket is
+    // about, and a ticket that says "create the groups we agreed on" instead
+    // of naming them is one nobody can action and the reviewer will fail.
+    const required = namesToKeep(scenario, env);
+    const kept = required.every((n) => `${parsed.subject ?? ''} ${parsed.body ?? ''}`.includes(n));
+    if (!parsed.subject || !parsed.body || !kept) return scenario;
 
     return { ...scenario, subject: parsed.subject, body: parsed.body };
   } catch {
@@ -424,6 +461,33 @@ async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Sce
 // ---------------------------------------------------------------------------
 // Raising tickets
 // ---------------------------------------------------------------------------
+
+/**
+ * Drop the scenarios that already have a ticket open.
+ *
+ * Keyed on the scenario id, not on the subject line.
+ *
+ * The subject was the key, and Ollama rewrites the subject — that is the whole
+ * point of the rewrite. So the check compared the generator's original wording
+ * against a queue full of rewritten wording, matched nothing, and raised every
+ * scenario again on the next pass. With the model running, leaving the queue
+ * open filled it with the same tickets under different headlines, each one
+ * having staged its state again: three lockouts for the same person, three
+ * copies of the same standing-privilege grant.
+ *
+ * It was invisible without a model, because with the model off the stored
+ * subject is the original and the comparison works.
+ *
+ * The subject is still consulted, for tickets raised before scenario ids were
+ * carried through. A learner who leaves the queue open across an update should
+ * not be handed duplicates of everything they already have.
+ */
+function notAlreadyOpen(scenarios: Scenario[], deps: GeneratorDeps): Scenario[] {
+  const open = deps.tickets.list().filter((t) => t.status !== 'resolved');
+  const openIds = new Set(open.map((t) => t.scenarioId).filter(Boolean));
+  const legacySubjects = new Set(open.filter((t) => !t.scenarioId).map((t) => t.subject));
+  return scenarios.filter((s) => !openIds.has(s.id) && !legacySubjects.has(s.subject));
+}
 
 function raise(deps: GeneratorDeps, scenario: Scenario): void {
   const admin = deps.dir.getUserByUsername('admin') ?? deps.dir.listUsers()[0];
@@ -469,12 +533,7 @@ export async function generateTickets(
   options: { useOllama?: boolean; max?: number } = {},
 ): Promise<GenerateResult> {
   const env = readEnvironment(deps.dir);
-  const open = deps.tickets.list().filter((t) => t.status !== 'resolved');
-  const openSubjects = new Set(open.map((t) => t.subject));
-
-  const candidates = scenariosFor(env, deps)
-    .filter((s) => !openSubjects.has(s.subject))
-    .slice(0, options.max ?? 3);
+  const candidates = notAlreadyOpen(scenariosFor(env, deps), deps).slice(0, options.max ?? 3);
 
   if (candidates.length === 0) {
     return { raised: 0, usedOllama: false, stage: env.stage };
@@ -493,15 +552,7 @@ export async function generateTickets(
  *  the first paint. Always uses the built-in scenarios. */
 export function generateTicketsSync(deps: GeneratorDeps, max = 3): number {
   const env = readEnvironment(deps.dir);
-  const openSubjects = new Set(
-    deps.tickets
-      .list()
-      .filter((t) => t.status !== 'resolved')
-      .map((t) => t.subject),
-  );
-  const candidates = scenariosFor(env, deps)
-    .filter((s) => !openSubjects.has(s.subject))
-    .slice(0, max);
+  const candidates = notAlreadyOpen(scenariosFor(env, deps), deps).slice(0, max);
   for (const s of candidates) raise(deps, s);
   return candidates.length;
 }

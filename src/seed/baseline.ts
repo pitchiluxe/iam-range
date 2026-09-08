@@ -59,7 +59,7 @@ export function applyBaseline(
   // into the bare domain the first tickets ask the learner to build.
   if (withStructure) {
     for (const name of GROUP_NAMES) {
-      const g = dir.createGroup(name, `Security group ${name}`, 'system' as UserId);
+      const g = dir.ensureGroup(name, `Security group ${name}`, 'system' as UserId);
       groupIds[name] = g.id;
     }
   }

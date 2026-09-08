@@ -106,11 +106,24 @@ export class MockDirectory {
     this.audit.record({ actorId: actor, action: 'group.updated', targetId: groupId });
   }
 
-  /** Move an account into an OU. */
+  /**
+   * Move an account into an OU (or out to CN=Users with `undefined`).
+   *
+   * The OU is checked, as setGroupOu checks it. Without that, an account could
+   * be pointed at an OU that does not exist — and such an account appears
+   * nowhere in the console at all: not under CN=Users, which lists accounts
+   * with no ouId, and not under any OU, because no OU has that id. The account
+   * is still in the directory and invisible in the snap-in, which is the worst
+   * of both.
+   */
   setUserOu(userId: UserId, ouId: OuId | undefined, actor: UserId = SYSTEM_ACTOR): void {
     const u = this.users.get(userId);
     if (!u) throw new Error(`[directory] setUserOu: user ${userId} not found`);
-    u.ouId = ouId;
+    if (ouId && !this.ous.has(ouId)) {
+      throw new Error(`[directory] setUserOu: OU ${ouId} not found`);
+    }
+    if (ouId) u.ouId = ouId;
+    else delete u.ouId;
     this.audit.record({ actorId: actor, action: 'user.moved', targetId: userId });
   }
 
@@ -149,6 +162,14 @@ export class MockDirectory {
       managerId?: UserId;
       mfa?: MfaMethod;
       groupIds?: GroupId[];
+      /**
+       * Where the account lives. Optional, and absent means CN=Users, which is
+       * what a real directory does with an account nobody placed.
+       *
+       * Last in the shape for the same reason createGroup's is last: the seed
+       * and every existing caller predate it and must keep compiling.
+       */
+      ouId?: OuId;
     },
     actor: UserId = SYSTEM_ACTOR,
   ): User {
@@ -160,6 +181,13 @@ export class MockDirectory {
     const existing = this.getUserByUsername(input.username);
     if (existing) {
       throw new Error(`[directory] createUser: a user named '${input.username}' already exists.`);
+    }
+    // Checked before the account is written, not after. A provision that
+    // reports a bad OU but leaves the account behind anyway is the worse of
+    // the two failures: the ticket looks done and the account is in the wrong
+    // place, which is precisely the bug this parameter exists to fix.
+    if (input.ouId && !this.ous.has(input.ouId)) {
+      throw new Error(`[directory] createUser: OU ${input.ouId} not found`);
     }
     const id = mkUserId(input.username + '-' + nanoid(6));
     const user: User = {
@@ -174,6 +202,7 @@ export class MockDirectory {
       groupIds: input.groupIds ?? [],
       createdAt: Date.now(),
       ...(input.managerId ? { managerId: input.managerId } : {}),
+      ...(input.ouId ? { ouId: input.ouId } : {}),
     };
     this.users.set(id, user);
     this.audit.record({ actorId: actor, action: 'user.created', targetId: id });
@@ -266,8 +295,18 @@ export class MockDirectory {
   getGroup(id: GroupId): Group | undefined {
     return this.groups.get(id);
   }
+  /**
+   * Find a group by name, case-insensitively.
+   *
+   * As getUserByUsername and getOuByName already were, and as a real directory
+   * is. This was the one exact-match lookup left, so `Add-ADGroupMember -Group
+   * GRP-HR-READERS` reported that the group did not exist while the console
+   * listed it two panes away — and the learner has no way to tell a typo from
+   * a broken cmdlet.
+   */
   getGroupByName(name: string): Group | undefined {
-    return Array.from(this.groups.values()).find((g) => g.name === name);
+    const want = name.toLowerCase();
+    return Array.from(this.groups.values()).find((g) => g.name.toLowerCase() === want);
   }
 
   /**
@@ -283,11 +322,39 @@ export class MockDirectory {
     actor: UserId = SYSTEM_ACTOR,
     ouId?: OuId,
   ): Group {
+    // A group id is its name, so a second group of the same name replaced the
+    // first in the map — silently, taking its entire membership with it. The
+    // console's Create Group checked for a duplicate first and so never hit
+    // it; a seed re-run, a script, or the same name in a different case did.
+    // Names are the natural key here as they are for OUs and accounts, and a
+    // duplicate is a mistake to report rather than absorb.
+    const existing = this.getGroupByName(name);
+    if (existing) {
+      throw new Error(`[directory] createGroup: a group named '${name}' already exists.`);
+    }
     const id = mkGroupId(name);
     const g: Group = { id, name, description, memberIds: [], ...(ouId ? { ouId } : {}) };
     this.groups.set(id, g);
     this.audit.record({ actorId: actor, action: 'group.created', targetId: id });
     return g;
+  }
+
+  /**
+   * Idempotent create: returns the existing group when the name is taken.
+   *
+   * The counterpart to ensureUser, and it exists for the same reason. Seeds
+   * compose — a per-lab seed calls applyBaseline() and a template seed may
+   * call it again — so seeding has to be safe to re-run. Use this in seeds,
+   * and createGroup for learner-driven work, where a duplicate name is a
+   * mistake that should be reported rather than absorbed.
+   */
+  ensureGroup(
+    name: string,
+    description: string,
+    actor: UserId = SYSTEM_ACTOR,
+    ouId?: OuId,
+  ): Group {
+    return this.getGroupByName(name) ?? this.createGroup(name, description, actor, ouId);
   }
 
   updateGroup(
@@ -313,20 +380,41 @@ export class MockDirectory {
     this.audit.record({ actorId: actor, action: 'group.deleted', targetId: id });
   }
 
+  /**
+   * Add an account to a group.
+   *
+   * The audit event is written only when the membership actually changed.
+   * These events are evidence: the ticket reviewer reads `group.add` and
+   * `group.remove` to decide whether a transfer was carried out. An event for
+   * a change that did not happen is a check that cannot be failed, which is
+   * worse than no check because it produces a verdict the learner trusts.
+   */
   addToGroup(userId: UserId, groupId: GroupId, by: UserId): void {
     const g = this.groups.get(groupId);
     const u = this.users.get(userId);
     if (!g) throw new Error(`[directory] addToGroup: group ${groupId} not found`);
     if (!u) throw new Error(`[directory] addToGroup: user ${userId} not found`);
+    if (g.memberIds.includes(userId) && u.groupIds.includes(groupId)) return;
     if (!g.memberIds.includes(userId)) g.memberIds.push(userId);
     if (!u.groupIds.includes(groupId)) u.groupIds.push(groupId);
     this.audit.record({ actorId: by, action: 'group.add', targetId: groupId, subjectId: userId });
   }
 
+  /**
+   * Remove an account from a group.
+   *
+   * Same rule as addToGroup, and this is the direction where it mattered: the
+   * transfer review's "Old access removed" check looks for a `group.remove`
+   * event, and this used to write one whether or not the account had ever been
+   * in the group. Running the cmdlet against any group at all closed the
+   * ticket — which is exactly the half of a transfer the ticket is trying to
+   * teach people not to skip.
+   */
   removeFromGroup(userId: UserId, groupId: GroupId, by: UserId): void {
     const g = this.groups.get(groupId);
     const u = this.users.get(userId);
     if (!g || !u) return;
+    if (!g.memberIds.includes(userId) && !u.groupIds.includes(groupId)) return;
     g.memberIds = g.memberIds.filter((id) => id !== userId);
     u.groupIds = u.groupIds.filter((id) => id !== groupId);
     this.audit.record({

@@ -182,11 +182,21 @@ export class MockTicketQueue {
     return ticket;
   }
 
+  /**
+   * Take ownership of a ticket.
+   *
+   * A resolved ticket keeps its status. 'Assign all to me' is a bulk action
+   * over whatever happens to be selected, and this used to set 'in-progress'
+   * unconditionally — so a closed ticket silently reopened, with no audit
+   * event saying it had, and the resolved count went down without explanation.
+   * Reopening is a decision; it should not be a side effect of tidying the
+   * queue.
+   */
   assign(id: TicketId, by: UserId): void {
     const t = this.tickets.get(id);
     if (!t) return;
     t.assigneeId = by;
-    t.status = 'in-progress';
+    if (t.status !== 'resolved') t.status = 'in-progress';
     t.updatedAt = Date.now();
   }
 
@@ -229,6 +239,9 @@ export class MockTicketQueue {
   resolve(id: TicketId, by: UserId): void {
     const t = this.tickets.get(id);
     if (!t) return;
+    // Already closed. Resolving twice wrote two 'ticket.resolved' events, and
+    // the count of work done at the end of a session is read off those.
+    if (t.status === 'resolved') return;
     // Sweep before closing it. A ticket finished twenty minutes late is
     // recorded as late even if nobody had the queue open to watch the clock
     // run out.
