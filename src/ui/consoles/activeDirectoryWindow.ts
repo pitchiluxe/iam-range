@@ -256,6 +256,13 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         { label: 'New  \u25b8  Organizational Unit', onClick: () => newOuDialog() },
         { separator: true },
         {
+          label: 'Edit\u2026',
+          disabled: !user,
+          onClick: () => {
+            if (user) editUserDialog(user);
+          },
+        },
+        {
           label: 'Reset Password\u2026',
           disabled: !user,
           onClick: () => {
@@ -613,6 +620,9 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
   function userContextMenu(e: MouseEvent, u: User): void {
     contextMenu(e, [
       { label: 'Properties', onClick: () => propertiesDialog(u) },
+      // Directly under Properties, which is the sheet somebody opens looking
+      // for a way to change what it shows.
+      { label: 'Edit…', onClick: () => editUserDialog(u) },
       { separator: true },
       { label: 'Reset Password…', onClick: () => resetPasswordDialog(u) },
       {
@@ -941,6 +951,76 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
           AccountPassword: readPwd(),
           ChangePasswordAtLogon: mustChange ? 'true' : 'false',
           ...(parent ? { Path: parent } : {}),
+        });
+      },
+    );
+  }
+
+  /**
+   * Correct an account that was created wrong.
+   *
+   * The gap this closes: Properties is a read-only sheet and the right-click
+   * menu offered Delete, so a typo in a surname or a logon name could only be
+   * repaired by destroying the account and making it again. That loses the
+   * group memberships, the OU, the password and the account’s place in the
+   * audit log -- everything, to fix one character.
+   *
+   * The fields mirror New User so the two read as one form seen twice, minus
+   * Department: changing that is a transfer, which Move already models and
+   * which carries an approval that a spelling correction does not.
+   */
+  function editUserDialog(u: User): void {
+    /*
+     * The directory stores one display name; New User asks for two fields.
+     * Splitting on the first space rather than the last means a name left
+     * untouched rejoins to exactly the string that came in, whatever its
+     * shape -- "Anne Marie van der Berg" survives a round trip that a
+     * last-space split would quietly rewrite.
+     */
+    const gap = u.displayName.indexOf(' ');
+    const firstIn = gap === -1 ? u.displayName : u.displayName.slice(0, gap);
+    const lastIn = gap === -1 ? '' : u.displayName.slice(gap + 1);
+
+    let readFirst = (): string => '';
+    let readLast = (): string => '';
+    let readLogon = (): string => '';
+    let readTitle = (): string => '';
+    let readEmail = (): string => '';
+
+    modal(
+      `Edit \u2014 ${u.displayName}`,
+      (b) => {
+        readFirst = field(b, 'First name:', { value: firstIn });
+        readLast = field(b, 'Last name:', { value: lastIn });
+        readLogon = field(b, 'User logon name:', { value: u.username });
+        readTitle = field(b, 'Job title:', { value: u.title });
+        readEmail = field(b, 'E-mail:', { value: u.email });
+
+        const hint = document.createElement('div');
+        hint.textContent =
+          'Corrects the account in place, so its groups, its OU and its history ' +
+          'are kept. To change department, use Move / Transfer.';
+        hint.style.cssText = 'font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5;';
+        b.appendChild(hint);
+      },
+      () => {
+        const first = readFirst().trim();
+        const last = readLast().trim();
+        const logon = readLogon().trim();
+        if (!first && !last) {
+          showToast('A name is required.', { kind: 'error' });
+          return false;
+        }
+        if (!logon) {
+          showToast('A logon name is required.', { kind: 'error' });
+          return false;
+        }
+        return run('user.update', {
+          Identity: u.username,
+          SamAccountName: logon,
+          DisplayName: [first, last].filter(Boolean).join(' '),
+          Title: readTitle(),
+          EmailAddress: readEmail(),
         });
       },
     );

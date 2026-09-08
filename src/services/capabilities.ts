@@ -260,6 +260,105 @@ export const CAPABILITIES: readonly IamCapability[] = [
     },
   },
   {
+    /*
+     * Correct an account that was created wrong.
+     *
+     * Every attribute here is typed by hand at creation, so every one of them
+     * can carry a typo, and until this existed none of them could be changed
+     * afterwards -- Properties is a read-only sheet, and the only repair on
+     * offer was Delete followed by New User. That costs the account its id,
+     * and with it every group membership, audit entry and ticket that points
+     * at the id. Fixing one character should not cost a person their history,
+     * and a real operator would reach for Set-ADUser rather than start again.
+     *
+     * Department is deliberately absent: a change of department is a transfer,
+     * which is a business event with an approval behind it, and user.move
+     * already models it. Mixing the two would let a transfer be performed as
+     * though it were a spelling correction.
+     */
+    id: 'user.update',
+    label: 'Edit User',
+    synopsis: 'Correct an account’s name, logon name, title or e-mail.',
+    consoleSection: 'users',
+    cmdlet: 'Set-ADUser',
+    validator: 'user-updated',
+    params: [
+      P.identity,
+      { name: 'SamAccountName', label: 'New logon name', kind: 'text', required: false },
+      { name: 'DisplayName', label: 'Display name', kind: 'text', required: false },
+      { name: 'Title', label: 'Job title', kind: 'text', required: false },
+      { name: 'EmailAddress', label: 'E-mail', kind: 'text', required: false },
+    ],
+    // A correction is not a workflow: nothing in the queue is asking for it.
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const u = findUser(ctx, a.Identity ?? '');
+      if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
+
+      const oldUsername = u.username;
+      const newUsername = (a.SamAccountName ?? '').trim() || oldUsername;
+      const renaming = newUsername !== oldUsername;
+
+      if (renaming && findUser(ctx, newUsername)) {
+        return err(`A user named '${newUsername}' already exists.`);
+      }
+
+      /*
+       * The address follows the logon name while it still looks derived.
+       *
+       * user.create writes `<logon>@<domain>`, so after a rename an untouched
+       * address points at a name that no longer exists. Rewriting one an
+       * operator actually typed would be wrong the other way round, so the
+       * test is the address's shape: does it still equal what the system
+       * generated for the old name?
+       *
+       * Shape rather than "did the caller pass -EmailAddress", because the
+       * console pre-fills every field and sends them all -- so the address
+       * arrives echoed back rather than absent, and a check on absence left
+       * the running application pointing at the old name while the unit test,
+       * which omitted the parameter, passed.
+       */
+      const derived = `${oldUsername}@${COMPANY.domain}`;
+      const typed = (a.EmailAddress ?? '').trim();
+      const stale = renaming && (typed === derived || (!typed && u.email === derived));
+      const email = stale
+        ? `${newUsername}@${COMPANY.domain}`
+        : typed || u.email;
+
+      const display = (a.DisplayName ?? '').trim() || u.displayName;
+      const title = (a.Title ?? '').trim() || u.title;
+
+      if (
+        !renaming &&
+        display === u.displayName &&
+        title === u.title &&
+        email === u.email
+      ) {
+        return ok(`Nothing to change on ${u.username}.`);
+      }
+
+      try {
+        ctx.dir.updateUser(
+          u.id,
+          { username: newUsername, displayName: display, email, title },
+          ctx.actor,
+        );
+      } catch (e) {
+        // The directory throws on a clash; the console shows a message.
+        return err(e instanceof Error ? e.message.replace(/^\[directory\] \w+: /, '') : String(e));
+      }
+
+      // The credential is filed under the username, so it has to move too, or
+      // the account this just repaired can no longer sign in.
+      if (renaming) ctx.idp.renameAccount(oldUsername, newUsername);
+
+      const what = renaming
+        ? `Renamed ${oldUsername} to ${newUsername}.`
+        : `Updated ${u.username}.`;
+      return ok(what);
+    },
+  },
+  {
     id: 'user.disable',
     legacyConsoleForm: true,
     label: 'Disable User',

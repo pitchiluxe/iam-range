@@ -257,13 +257,38 @@ export class MockDirectory {
     this.audit.record({ actorId: by, action: 'account.unlock', targetId: id });
   }
 
+  /**
+   * Correct an account in place.
+   *
+   * `username` is here for the same reason the rest are: a logon name is typed
+   * by hand at creation and a typo in it used to be unfixable, because the only
+   * repair available was Delete and New User. That throws away the account id,
+   * and the id is what every group membership, audit entry and ticket points
+   * at -- so correcting one character cost the person their history.
+   *
+   * Renaming does not touch the id. Callers that hold a credential keyed by
+   * username must be told separately; MockIdP.renameAccount is the one that
+   * matters, and the user.update capability calls both.
+   */
   updateUser(
     id: UserId,
-    changes: Partial<Pick<User, 'displayName' | 'email' | 'department' | 'title'>>,
+    changes: Partial<Pick<User, 'username' | 'displayName' | 'email' | 'department' | 'title'>>,
     actor: UserId = SYSTEM_ACTOR,
   ): void {
     const u = this.users.get(id);
     if (!u) throw new Error(`[directory] updateUser: user ${id} not found`);
+    if (changes.username !== undefined && changes.username !== u.username) {
+      // Usernames are the directory's natural key, so the same uniqueness rule
+      // createUser enforces applies to a rename. Checked before anything is
+      // written: a half-applied correction is worse than a refused one.
+      const clash = this.getUserByUsername(changes.username);
+      if (clash) {
+        throw new Error(
+          `[directory] updateUser: a user named '${changes.username}' already exists.`,
+        );
+      }
+      u.username = changes.username;
+    }
     if (changes.displayName !== undefined) u.displayName = changes.displayName;
     if (changes.email !== undefined) u.email = changes.email;
     if (changes.department !== undefined) u.department = changes.department;

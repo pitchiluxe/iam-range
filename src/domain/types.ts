@@ -439,6 +439,10 @@ export type ValidatorKind =
   | 'user-enabled'
   | 'user-moved'
   | 'user-deleted'
+  /** An account was corrected in place -- a name, logon name, title or
+   *  e-mail put right without deleting and recreating the person, which
+   *  would take their id and every record that points at it. */
+  | 'user-updated'
   | 'password-reset'
   | 'mfa-reset'
   | 'account-unlocked'

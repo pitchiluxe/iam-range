@@ -65,6 +65,26 @@ export class MockIdP {
     for (const [u, p] of Object.entries(map)) this.passwords.set(u, p);
   }
 
+  /**
+   * Move a credential to a renamed account.
+   *
+   * Passwords are filed under the username rather than the user id, because
+   * that is what sign-in presents and what the resolver is asked about. That
+   * choice is fine until an account is renamed, at which point the credential
+   * is stranded under a name nobody will ever type again and the person can no
+   * longer sign in -- a correction that silently breaks the account it was
+   * fixing. Whoever renames the account calls this too.
+   *
+   * A no-op when the old name has no stored password: the account may be one
+   * the resolver answers for, and inventing an entry here would shadow it.
+   */
+  renameAccount(oldUsername: string, newUsername: string): void {
+    if (oldUsername === newUsername) return;
+    const password = this.passwords.get(oldUsername);
+    this.passwords.delete(oldUsername);
+    if (password !== undefined) this.passwords.set(newUsername, password);
+  }
+
   signIn(username: string, password: string, ip?: string, asn?: string): SignInResult {
     const user = this.dir.getUserByUsername(username);
     if (!user) return { ok: false, reason: 'bad-password' };
