@@ -19,6 +19,7 @@
  */
 import { DOCUMENT_TEMPLATES, TEMPLATE_BY_ID } from '@/config/documentTemplates';
 import { showToast } from '@/ui/toast';
+import { copyText } from '@/util/copyText';
 
 const STORE_KEY = 'writer_documents';
 const LAST_OPEN_KEY = 'writer_last_open';
@@ -277,11 +278,11 @@ export function renderWriterWindow(body: HTMLElement): void {
   }
 
   function copyPlainText(): void {
-    const text = editor.innerText;
-    void navigator.clipboard
-      ?.writeText(text)
-      .then(() => showToast('Copied as plain text.', { kind: 'success' }))
-      .catch(() => showToast('Could not reach the clipboard.', { kind: 'error' }));
+    copyText(editor.innerText).then((ok) =>
+      ok
+        ? showToast('Copied as plain text.', { kind: 'success' })
+        : showToast('Could not reach the clipboard.', { kind: 'error' }),
+    );
   }
 
   // --- Dialogs --------------------------------------------------------------

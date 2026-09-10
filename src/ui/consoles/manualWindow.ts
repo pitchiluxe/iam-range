@@ -15,6 +15,7 @@ import { MANUAL, ALL_LESSONS, type Chapter, type Lesson } from '@/config/manual'
 import { openDocumentation } from './documentationWindow';
 import { requestApp } from '@/util/appLauncher';
 import { showToast } from '@/ui/toast';
+import { copyText } from '@/util/copyText';
 
 const DONE_KEY = 'manual_completed';
 const LAST_KEY = 'manual_last_lesson';
@@ -104,10 +105,11 @@ export function renderManualWindow(body: HTMLElement): void {
       'flex-shrink:0;padding:3px 9px;border-radius:3px;border:1px solid var(--border);' +
       'background:var(--panel-alt);color:var(--muted);font-size:10.5px;cursor:pointer;font-family:inherit;';
     copy.addEventListener('click', () => {
-      void navigator.clipboard
-        ?.writeText(text)
-        .then(() => showToast('Copied. Paste it into the terminal.', { kind: 'success' }))
-        .catch(() => showToast('Could not reach the clipboard.', { kind: 'error' }));
+      copyText(text).then((ok) =>
+        ok
+          ? showToast('Copied. Paste it into the terminal.', { kind: 'success' })
+          : showToast('Could not reach the clipboard.', { kind: 'error' }),
+      );
     });
     wrap.append(code, copy);
     return wrap;

@@ -39,9 +39,44 @@ export const WALLPAPERS: Wallpaper[] = [
     gradient: 'linear-gradient(145deg, #241a0d 0%, #3d2e10 60%, #1a1000 100%)',
   },
   {
+    id: 'purple-haze',
+    label: 'Purple Haze',
+    gradient: 'linear-gradient(160deg, #1a1029 0%, #3a2468 50%, #1a1029 100%)',
+  },
+  {
+    id: 'forest-green',
+    label: 'Forest Green',
+    gradient: 'linear-gradient(150deg, #0b1a13 0%, #163626 55%, #0b1a13 100%)',
+  },
+  {
+    id: 'rose-gold',
+    label: 'Rose Gold',
+    gradient: 'linear-gradient(150deg, #2b181c 0%, #5a333e 50%, #2b181c 100%)',
+  },
+  {
     id: 'iamlab-dark',
     label: 'IAMLab Dark',
     gradient: wordmarkWallpaper('#0a0c10', 'IAMLab', '#5a6570'),
+  },
+  {
+    id: 'iamlab-slate',
+    label: 'IAMLab Slate',
+    gradient: wordmarkWallpaper('#10151c', 'IAMLab', '#4a5a6a'),
+  },
+  {
+    id: 'iamlab-amber',
+    label: 'IAMLab Amber',
+    gradient: wordmarkWallpaper('#1a1208', 'IAMLab', '#8a6a3a'),
+  },
+  {
+    id: 'iamlab-purple',
+    label: 'IAMLab Purple',
+    gradient: wordmarkWallpaper('#130a1c', 'IAMLab', '#604080'),
+  },
+  {
+    id: 'iamlab-forest',
+    label: 'IAMLab Forest',
+    gradient: wordmarkWallpaper('#09140f', 'IAMLab', '#3a6a4a'),
   },
   {
     id: 'windows-blue',
@@ -87,9 +122,44 @@ export const LOCK_SCREENS: Wallpaper[] = [
     gradient: 'linear-gradient(150deg,#0d2818 0%,#14432a 45%,#08170f 100%)',
   },
   {
+    id: 'magenta',
+    label: 'Magenta',
+    gradient: 'linear-gradient(160deg,#2a0d1e 0%,#5a1e42 45%,#2a0d1e 100%)',
+  },
+  {
+    id: 'obsidian',
+    label: 'Obsidian',
+    gradient: 'linear-gradient(150deg,#0c0c0c 0%,#1f1f1f 45%,#0c0c0c 100%)',
+  },
+  {
+    id: 'copper',
+    label: 'Copper',
+    gradient: 'linear-gradient(160deg,#2a1b0e 0%,#5a3a1e 45%,#2a1b0e 100%)',
+  },
+  {
     id: 'iamlab',
     label: 'IAMLab',
     gradient: wordmarkWallpaper('#0a1420', 'IAMLab', '#4f6b86'),
+  },
+  {
+    id: 'iamlab-teal',
+    label: 'IAMLab Teal',
+    gradient: wordmarkWallpaper('#07131a', 'IAMLab', '#3a6a6a'),
+  },
+  {
+    id: 'iamlab-midnight',
+    label: 'IAMLab Midnight',
+    gradient: wordmarkWallpaper('#080c14', 'IAMLab', '#3a4a5a'),
+  },
+  {
+    id: 'iamlab-crimson',
+    label: 'IAMLab Crimson',
+    gradient: wordmarkWallpaper('#1a0a0e', 'IAMLab', '#7a3a45'),
+  },
+  {
+    id: 'iamlab-gold',
+    label: 'IAMLab Gold',
+    gradient: wordmarkWallpaper('#141008', 'IAMLab', '#8a6a2a'),
   },
 ];
 

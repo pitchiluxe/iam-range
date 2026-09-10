@@ -8,6 +8,8 @@ import { FS } from '@/terminal/shellIntrinsics';
 import { openContextMenu, type MenuItem } from '@/ui/contextMenu';
 import { requestApp } from '@/util/appLauncher';
 import { showToast } from '@/ui/toast';
+import { copyText } from '@/util/copyText';
+import { openPs1File } from '@/util/ps1Opener';
 
 export function renderFileExplorerWindow(body: HTMLElement): void {
   body.style.cssText =
@@ -256,10 +258,11 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
       {
         label: 'Copy path',
         onClick: () => {
-          void navigator.clipboard
-            ?.writeText(path)
-            .then(() => showToast('Path copied.', { kind: 'success' }))
-            .catch(() => showToast('Could not reach the clipboard.', { kind: 'error' }));
+          copyText(path).then((ok) =>
+            ok
+              ? showToast('Path copied.', { kind: 'success' })
+              : showToast('Could not reach the clipboard.', { kind: 'error' }),
+          );
         },
       },
       {
@@ -289,6 +292,10 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
       if (__lab?.desktop && __lab.conductor) {
         __lab.desktop.openWindow(item.launch, __lab.conductor);
       }
+    } else if (item.type === 'file' && item.path?.toLowerCase().endsWith('.ps1')) {
+      const content = FS.readFile(item.path);
+      if (content !== null) openPs1File(item.name, content);
+      else showToast('Could not read that script.', { kind: 'error' });
     }
   }
 

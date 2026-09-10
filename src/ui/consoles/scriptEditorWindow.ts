@@ -18,6 +18,7 @@ import {
   deleteSavedScript,
   type ScriptTemplate,
 } from '@/config/scriptTemplates';
+import { LOAD_PS1_EVENT, takePendingPs1, type PendingPs1 } from '@/util/ps1Opener';
 
 const CATEGORY_LABEL: Record<ScriptTemplate['category'], string> = {
   provisioning: 'Provisioning',
@@ -266,6 +267,26 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
     }
   });
 
+  const loadFile = (file: PendingPs1): void => {
+    editor.value = file.content;
+    scriptName.value = file.name;
+    output.innerHTML = '';
+    write(`Opened ${file.name}`, '#6a9955');
+  };
+
+  const onLoadPs1 = (e: Event): void => {
+    if (!body.isConnected) {
+      document.removeEventListener(LOAD_PS1_EVENT, onLoadPs1);
+      return;
+    }
+    const detail = (e as CustomEvent<PendingPs1>).detail;
+    if (detail) loadFile(detail);
+  };
+  document.addEventListener(LOAD_PS1_EVENT, onLoadPs1);
+
+  const pending = takePendingPs1();
+  if (pending) loadFile(pending);
+
   renderGallery();
-  write('Pick a template on the left, edit the name list, then Run (Ctrl+Enter).', '#6a9955');
+  if (!pending) write('Pick a template on the left, edit the name list, then Run (Ctrl+Enter).', '#6a9955');
 }
