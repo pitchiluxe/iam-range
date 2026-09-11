@@ -277,6 +277,13 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
           },
         },
         {
+          label: 'Remove from Group\u2026',
+          disabled: !user,
+          onClick: () => {
+            if (user) removeFromGroupDialog(user);
+          },
+        },
+        {
           label: 'Move\u2026',
           disabled: !user && !group,
           onClick: () => {
@@ -636,6 +643,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
           run(u.status === 'disabled' ? 'user.enable' : 'user.disable', { Identity: u.username }),
       },
       { label: 'Add to Group…', onClick: () => addToGroupDialog(u) },
+      { label: 'Remove from Group…', onClick: () => removeFromGroupDialog(u) },
       { label: 'Move…', onClick: () => moveDialog(u) },
       { separator: true },
       {
@@ -1126,6 +1134,25 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
         });
       },
       () => run('group.addMember', { Identity: u.username, Group: readGroup() }),
+    );
+  }
+
+  function removeFromGroupDialog(u: User): void {
+    const memberOf = conductor.dir
+      .listGroups()
+      .filter((g) => g.memberIds.includes(u.id))
+      .map((g) => g.name);
+    if (memberOf.length === 0) {
+      showToast(`${u.displayName} is not a member of any group.`, { kind: 'info' });
+      return;
+    }
+    let readGroup = (): string => '';
+    modal(
+      `Remove ${u.displayName} from Group`,
+      (b) => {
+        readGroup = field(b, 'Group:', { options: memberOf });
+      },
+      () => run('group.removeMember', { Identity: u.username, Group: readGroup() }),
     );
   }
 
