@@ -1,7 +1,7 @@
 {
   "name": "iam-vm-workstation",
   "type": "module",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "description": "IAM Range — a simulated Windows workstation for practising Identity and Access Management and Privileged Identity Management.",
   "engines": {
     "node": ">=22"

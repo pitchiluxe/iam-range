@@ -476,6 +476,59 @@ the log claims, verify the state directly rather than trusting the entry.
 and name the failure-then-success pattern. Mentioning that logs can record intent
 rather than effect will distinguish you.`,
   },
+  {
+    id: 'portfolio',
+    title: 'Building a job portfolio from IAM Range',
+    summary: 'How to turn the lessons into interview-ready artifacts.',
+    topic: 'operations',
+    keywords: ['portfolio', 'interview', 'resume', 'linkedin', 'job', 'career', 'artifact'],
+    body: `IAM Range is not a game; it is a source of evidence. Every command changes a simulated directory and writes an audit entry. Those changes are the artifacts a hiring manager wants to see.
+
+**What an IAM Analyst does.** You create and disable accounts from HR or CSV feeds, build AD groups and OUs, enforce password and lockout policies, review access requests and group memberships, investigate failed sign-ins and access-denied reports, and produce evidence an auditor can read.
+
+**Artifacts to capture.**
+
+- OU and group structure from the Active Directory tree.
+- The bulk onboarding script and its before/after output.
+- Least-privilege file share with Allow and Deny permissions.
+- Password and lockout policy output.
+- Privilege-creep finding with the audit trail.
+- Dormant-account review.
+- Entra ID sync verification.
+- Offboarding SOP, password guide and auditor evidence pack.
+
+**How to present it.** Create a PDF or markdown file called IAM-Range-Portfolio.md. For each artifact, list the scenario, the commands, the evidence and the business outcome. Host it on LinkedIn, GitHub or a personal site. In interviews, walk through one finding from start to finish; a clean story beats a long list.
+
+**One-line pitch.** "I built a simulated enterprise workstation and used it to demonstrate RBAC, privilege-creep remediation, dormant-account review, Entra sync and auditor-ready evidence collection."`,
+  },
+  {
+    id: 'interview-prep',
+    title: 'Common IAM Analyst interview questions',
+    summary: 'Sample answers for the questions this job attracts.',
+    topic: 'operations',
+    keywords: ['interview', 'question', 'answer', 'career', 'role', 'hire'],
+    body: `These questions come up in IAM Analyst interviews. Each one maps to a command or concept inside IAM Range. Practise the command, then say the answer out loud.
+
+**What is the difference between an OU and a group?** An OU is an administrative container; a group is an access container. OUs control who can administer what and which policy applies. Groups control what a person can access.
+
+**What is privilege creep?** It is when a user keeps access from an old role or team after moving. Fix it by listing current groups with Get-ADPrincipalGroupMembership, removing the old groups with Remove-ADGroupMember, adding the new role groups with Add-ADGroupMember, and documenting the change.
+
+**What is the difference between a disabled and a locked account?** Locked is a temporary, automatic state from too many failed sign-ins; Unlock-ADAccount clears it. Disabled is an intentional administrative action and needs a separate enable or re-provisioning decision.
+
+**How do you enforce a strong password policy?** Use Set-PasswordPolicy for minimum length, complexity and maximum age. Verify with Get-PasswordPolicy and test it by trying a weak password.
+
+**What do you do when a user cannot access a share?** Check effective access, not the account itself: confirm the user, check group membership, read share permissions and run Get-EffectiveAccess. The most common mistake is checking the account but not the group it belongs to.
+
+**What is Deny precedence?** Deny takes precedence over Allow. If a user is in two groups and one has Deny while the other has Allow on the same share, the user is denied. This lets you give broad Allow and then narrowly exclude.
+
+**How do you find dormant accounts?** Query last sign-in. In the lab, use Get-DormantAccount -Days 90. Watch for never-used and privileged accounts.
+
+**How do you know a directory sync worked?** Connect, run the sync and verify a cloud user. A successful sync shows Origin: synced.
+
+**What is a standing privileged assignment?** A user always has admin rights instead of activating them for a window. PIM replaces this with eligibility plus activation.
+
+**What does an auditor want in an access review?** The population reviewed, the evidence used, the decision and the trail of removals. The Auditor evidence pack template in Writer is built around those four things.`,
+  },
 ];
 
 /**

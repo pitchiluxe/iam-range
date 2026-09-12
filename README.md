@@ -1,5 +1,8 @@
 # IAM Range
 
+[![CI](https://github.com/pitchiluxe/iam-range/actions/workflows/ci.yml/badge.svg)](https://github.com/pitchiluxe/iam-range/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/pitchiluxe/iam-range)](https://github.com/pitchiluxe/iam-range/releases/latest)
+
 IAM Range is a simulated Windows workstation for practising Identity and Access Management
 and Privileged Identity Management. The directory behind it is real enough to
 be wrong: you can misconfigure it, and it will behave the way a misconfigured
@@ -26,6 +29,24 @@ somebody provisioned it.
 Which applications appear depends on the department of the account signed in.
 HR does not get Active Directory. Signing in as somebody else to see what their
 desktop has is a genuine diagnostic step.
+
+## Using this to land an IAM Analyst role
+
+The lab is mapped to an entry-level IAM Analyst job description. See
+`docs/iam-analyst-lab.md` for the full curriculum and `docs/interview-prep.md`
+for sample answers.
+
+To build a portfolio from it, open `docs/portfolio.md`. It lists the exact
+artifacts to capture:
+
+- OU and group structure
+- Bulk onboarding script
+- Least-privilege file share with Deny
+- Password and lockout policy
+- Privilege-creep finding with audit trail
+- Dormant-account review
+- Entra ID sync verification
+- Offboarding SOP and auditor evidence pack
 
 ## Running it
 
