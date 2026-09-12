@@ -16,6 +16,9 @@ you explicitly run these scripts on a Windows host with Hyper-V.
 - `04-FILE-SERVER/` — build the optional `OMARI-FS01` file server.
 - `05-CONFIGURATION/` — AD structure, DNS, DHCP, GPO and service accounts.
 - `06-CHECKPOINTS/` — save and restore Hyper-V checkpoints between sessions.
+- `07-YEAR-2-IAM-ANALYST/` — seed the IAM analyst scenario (RBAC, privilege creep, MFA, Entra/Okta concepts).
+- `08-YEAR-3-IAM-ENGINEER/` — seed the IAM engineer scenario (PAM, IGA, automation, incident response).
+- `09-YEAR-4-IAM-ARCHITECT/` — read-only risk and governance reports for architecture decisions.
 - `99-TESTS/` — validation tests that prove each phase actually worked.
 
 ## Prerequisites

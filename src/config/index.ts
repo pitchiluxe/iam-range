@@ -15,3 +15,4 @@ export {
 } from './company';
 export { SEED_USERS, SEED_ADMINS, seedEmail } from './credentials';
 export type { SeedUser } from './credentials';
+export { CAREER_LABS } from './careerLabs';
