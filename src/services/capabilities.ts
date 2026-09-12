@@ -19,7 +19,7 @@
 import type { MfaMethod, TicketKind, UserId, ValidatorKind } from '@/domain';
 import { COMPANY } from '@/config';
 import type { MockAuditLog } from './mockAuditLog';
-import type { MockDirectory } from './mockDirectory';
+import type { MockDirectory, ShareAccess } from './mockDirectory';
 import type { MockIdP } from './mockIdP';
 import type { MockTicketQueue } from './mockTicketQueue';
 import type { MockPim } from './mockPim';
@@ -243,12 +243,15 @@ export const CAPABILITIES: readonly IamCapability[] = [
 
       // An account with no credential cannot sign in, which makes the new user
       // invisible at the lock screen and the ticket impossible to finish.
-      // Default to the house convention so provisioning always yields a
-      // usable account, and let the caller override it.
-      const password = a.AccountPassword?.trim() || `${a.SamAccountName}123`;
-      ctx.idp.seedPasswords({ [u.username]: password });
-      if (truthy(a.ChangePasswordAtLogon)) {
-        ctx.idp.resetPassword(u.id, password, { forceChangeAtNextLogin: true }, ctx.actor);
+      const explicitPassword = a.AccountPassword?.trim();
+      if (explicitPassword) {
+        const res = ctx.idp.resetPassword(u.id, explicitPassword, { forceChangeAtNextLogin: truthy(a.ChangePasswordAtLogon) }, ctx.actor);
+        if (!res.ok) return err(res.reason);
+      } else {
+        // Default to the house convention so provisioning always yields a
+        // usable account. A generated default bypasses the live policy so the
+        // account can always be created; the user must change it before using it.
+        ctx.idp.seedPasswords({ [u.username]: `${a.SamAccountName}123` });
       }
 
       // The destination is named on the way out. "Created jdoe" with no
@@ -479,7 +482,8 @@ export const CAPABILITIES: readonly IamCapability[] = [
       if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
       if (!a.NewPassword) return err('NewPassword is required.');
       const force = truthy(a.ChangePasswordAtLogon);
-      ctx.idp.resetPassword(u.id, a.NewPassword, { forceChangeAtNextLogin: force }, ctx.actor);
+      const res = ctx.idp.resetPassword(u.id, a.NewPassword, { forceChangeAtNextLogin: force }, ctx.actor);
+      if (!res.ok) return err(res.reason);
       return ok(
         `Password reset for ${u.username}` +
           (force ? ' — user must change it at next sign-in.' : '.'),
@@ -500,7 +504,86 @@ export const CAPABILITIES: readonly IamCapability[] = [
       if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
       if (u.status !== 'locked') return err(`${u.username} is not locked out.`);
       ctx.dir.unlockUser(u.id, ctx.actor);
+      ctx.idp.clearFailedAttempts(u.id);
       return ok(`Unlocked ${u.username}.`);
+    },
+  },
+  {
+    id: 'password.policy.set',
+    label: 'Set Password Policy',
+    synopsis: 'Configure minimum length, complexity and maximum age for passwords.',
+    consoleSection: 'credentials',
+    cmdlet: 'Set-PasswordPolicy',
+    validator: 'password-policy-set',
+    params: [
+      { name: 'MinimumLength', label: 'Minimum length', kind: 'text', required: false },
+      { name: 'ComplexityEnabled', label: 'Require complexity', kind: 'bool', required: false },
+      { name: 'MaximumAge', label: 'Maximum age (days)', kind: 'text', required: false },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      ctx.idp.setPasswordPolicy(
+        {
+          minimumLength: a.MinimumLength ? Number(a.MinimumLength) : undefined,
+          complexityEnabled: a.ComplexityEnabled !== undefined ? truthy(a.ComplexityEnabled) : undefined,
+          maximumAge: a.MaximumAge ? Number(a.MaximumAge) : undefined,
+        },
+        ctx.actor,
+      );
+      const p = ctx.idp.getPasswordPolicy();
+      return ok(`Password policy set: minimum ${p.minimumLength}, complexity ${p.complexityEnabled}, max age ${p.maximumAge}.`);
+    },
+  },
+  {
+    id: 'password.policy.get',
+    label: 'Get Password Policy',
+    synopsis: 'Show the current password policy.',
+    consoleSection: 'credentials',
+    cmdlet: 'Get-PasswordPolicy',
+    readOnly: true,
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      const p = ctx.idp.getPasswordPolicy();
+      return ok(`Minimum ${p.minimumLength}, complexity ${p.complexityEnabled}, max age ${p.maximumAge}.`);
+    },
+  },
+  {
+    id: 'lockout.policy.set',
+    label: 'Set Account Lockout Policy',
+    synopsis: 'Configure how many failed sign-ins lock an account and for how long.',
+    consoleSection: 'credentials',
+    cmdlet: 'Set-AccountLockoutPolicy',
+    validator: 'lockout-policy-set',
+    params: [
+      { name: 'Threshold', label: 'Failed attempts before lockout', kind: 'text', required: false },
+      { name: 'Duration', label: 'Lockout duration (minutes)', kind: 'text', required: false },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      ctx.idp.setLockoutPolicy(
+        {
+          threshold: a.Threshold ? Number(a.Threshold) : undefined,
+          duration: a.Duration ? Number(a.Duration) : undefined,
+        },
+        ctx.actor,
+      );
+      const p = ctx.idp.getLockoutPolicy();
+      return ok(`Lockout policy set: threshold ${p.threshold}, duration ${p.duration} minutes.`);
+    },
+  },
+  {
+    id: 'lockout.policy.get',
+    label: 'Get Account Lockout Policy',
+    synopsis: 'Show the current lockout policy.',
+    consoleSection: 'credentials',
+    cmdlet: 'Get-AccountLockoutPolicy',
+    readOnly: true,
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      const p = ctx.idp.getLockoutPolicy();
+      return ok(`Threshold ${p.threshold}, duration ${p.duration} minutes.`);
     },
   },
   {
@@ -695,6 +778,161 @@ export const CAPABILITIES: readonly IamCapability[] = [
         `${groups.length} group(s).`,
         groups.map((g) => ({ Name: g.name, Members: g.memberIds.length })),
       );
+    },
+  },
+  // ── Shares ───────────────────────────────────────────────────────────────
+  {
+    id: 'share.create',
+    label: 'Create File Share',
+    synopsis: 'Create an NTFS-style share that groups or users can be granted access to.',
+    consoleSection: 'groups',
+    cmdlet: 'New-Share',
+    validator: 'share-created',
+    params: [P.name, { name: 'Path', label: 'UNC or local path', kind: 'text', required: true }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const name = a.Name?.trim();
+      const path = a.Path?.trim();
+      if (!name) return err('Name is required.');
+      if (!path) return err('Path is required.');
+      if (ctx.dir.getShare(name)) return err(`A share named '${name}' already exists.`);
+      ctx.dir.createShare(name, path, ctx.actor);
+      return ok(`Created share ${name}.`);
+    },
+  },
+  {
+    id: 'share.delete',
+    label: 'Delete File Share',
+    synopsis: 'Remove a share.',
+    consoleSection: 'groups',
+    cmdlet: 'Remove-Share',
+    validator: 'share-deleted',
+    params: [P.name],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const name = a.Name?.trim();
+      if (!name) return err('Name is required.');
+      try {
+        ctx.dir.deleteShare(name, ctx.actor);
+        return ok(`Deleted share ${name}.`);
+      } catch (e) {
+        return err(String(e));
+      }
+    },
+  },
+  {
+    id: 'share.list',
+    label: 'List File Shares',
+    synopsis: 'List shares and their permissions.',
+    consoleSection: 'groups',
+    cmdlet: 'Get-Share',
+    readOnly: true,
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      const shares = ctx.dir.listShares();
+      return ok(`${shares.length} share(s).`, shares.map((s) => ({
+        Name: s.name,
+        Path: s.path,
+        Permissions: s.permissions.map((p) => `${p.type} ${p.access} for ${p.trusteeName}`).join(', '),
+      })));
+    },
+  },
+  {
+    id: 'share.grant',
+    label: 'Grant Share Permission',
+    synopsis: 'Allow or deny access to a share for a user or group.',
+    consoleSection: 'groups',
+    cmdlet: 'Grant-SharePermission',
+    validator: 'share-permission-granted',
+    params: [
+      { name: 'Name', label: 'Share name', kind: 'text', required: true },
+      { name: 'Trustee', label: 'User or group name', kind: 'text', required: true },
+      {
+        name: 'Access',
+        label: 'Access level',
+        kind: 'enum',
+        required: true,
+        options: ['Read', 'Modify', 'Full'],
+      },
+      {
+        name: 'Type',
+        label: 'Allow or Deny',
+        kind: 'enum',
+        required: false,
+        options: ['Allow', 'Deny'],
+      },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const name = a.Name?.trim();
+      const trustee = a.Trustee?.trim();
+      const access = a.Access as ShareAccess;
+      const type = (a.Type as 'Allow' | 'Deny') ?? 'Allow';
+      if (!name) return err('Name is required.');
+      if (!trustee) return err('Trustee is required.');
+      if (!access || !['Read', 'Modify', 'Full'].includes(access)) return err('Access must be Read, Modify or Full.');
+      if (!['Allow', 'Deny'].includes(type)) return err('Type must be Allow or Deny.');
+      const s = ctx.dir.getShare(name);
+      if (!s) return err(`Cannot find a share named '${name}'.`);
+      // Verify the trustee exists as a user or group so the permission is not a typo.
+      const u = ctx.dir.getUserByUsername(trustee);
+      const g = ctx.dir.getGroupByName(trustee);
+      if (!u && !g) return err(`Cannot find a user or group named '${trustee}'.`);
+      ctx.dir.grantSharePermission(name, trustee, access, type, ctx.actor);
+      return ok(`Granted ${type} ${access} on ${name} to ${trustee}.`);
+    },
+  },
+  {
+    id: 'share.revoke',
+    label: 'Revoke Share Permission',
+    synopsis: 'Remove all share permissions for a trustee.',
+    consoleSection: 'groups',
+    cmdlet: 'Revoke-SharePermission',
+    validator: 'share-revoked',
+    params: [
+      { name: 'Name', label: 'Share name', kind: 'text', required: true },
+      { name: 'Trustee', label: 'User or group name', kind: 'text', required: true },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const name = a.Name?.trim();
+      const trustee = a.Trustee?.trim();
+      if (!name) return err('Name is required.');
+      if (!trustee) return err('Trustee is required.');
+      try {
+        ctx.dir.revokeSharePermission(name, trustee, ctx.actor);
+        return ok(`Revoked permissions on ${name} for ${trustee}.`);
+      } catch (e) {
+        return err(String(e));
+      }
+    },
+  },
+  {
+    id: 'share.effective',
+    label: 'Effective Access',
+    synopsis: 'Show the access a user has to a share after group membership is resolved.',
+    consoleSection: 'groups',
+    cmdlet: 'Get-EffectiveAccess',
+    readOnly: true,
+    validator: 'effective-access-checked',
+    params: [
+      { name: 'Name', label: 'Share name', kind: 'text', required: true },
+      P.identity,
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const name = a.Name?.trim();
+      const identity = a.Identity ?? '';
+      if (!name) return err('Name is required.');
+      const u = findUser(ctx, identity);
+      if (!u) return err(`Cannot find an object with identity '${identity}'.`);
+      try {
+        const effective = ctx.dir.getEffectiveAccess(name, u.username);
+        return ok(`${u.username} has ${effective} on ${name}.`);
+      } catch (e) {
+        return err(String(e));
+      }
     },
   },
   {
@@ -1286,6 +1524,63 @@ export const CAPABILITIES: readonly IamCapability[] = [
           Target: e.targetId ?? '—',
         })),
       );
+    },
+  },
+  {
+    id: 'dormant.users',
+    label: 'Dormant Accounts',
+    synopsis: 'List accounts that have not signed in recently — a common risk in access reviews.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-DormantAccount',
+    readOnly: true,
+    params: [{ name: 'Days', label: 'Days since last sign-in', kind: 'text', required: false }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const days = Number(a.Days ?? 90);
+      const threshold = ctx.idp.now() - days * 24 * 60 * 60 * 1000;
+      const users = ctx.dir
+        .listUsers()
+        .filter((u) => u.status === 'active')
+        .filter((u) => !u.lastSignInAt || u.lastSignInAt < threshold)
+        .map((u) => ({
+          User: u.username,
+          Department: u.department,
+          'Last sign-in': u.lastSignInAt ? new Date(u.lastSignInAt).toLocaleDateString() : 'Never',
+          Created: new Date(u.createdAt).toLocaleDateString(),
+        }));
+      return ok(`${users.length} dormant account(s).`, users);
+    },
+  },
+  {
+    id: 'audit.export',
+    label: 'Export Audit Log',
+    synopsis: 'Export recent audit events as CSV for spreadsheet analysis.',
+    consoleSection: 'audit',
+    cmdlet: 'Export-IamAuditLog',
+    readOnly: true,
+    params: [
+      { name: 'Last', label: 'Entries', kind: 'text', required: false },
+      { name: 'Filter', label: 'Action contains', kind: 'text', required: false },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const n = Number(a.Last ?? 100);
+      const filter = a.Filter?.toLowerCase() ?? '';
+      const events = ctx.audit
+        .tail(Number.isFinite(n) && n > 0 ? n : 100)
+        .filter((e) => !filter || e.action.toLowerCase().includes(filter));
+      const header = 'Time,Action,Actor,Target,Note';
+      const rows = events.map((e) =>
+        [
+          new Date(e.at).toISOString(),
+          e.action,
+          ctx.dir.getUser(e.actorId)?.username ?? e.actorId,
+          e.targetId ?? '',
+          (e.note ?? '').replace(/,/g, ';'),
+        ].join(','),
+      );
+      const csv = [header, ...rows].join('\n');
+      return ok(`${events.length} event(s) exported. Copy the CSV below and open it in Sheets.`, [{ CSV: csv }]);
     },
   },
 ];

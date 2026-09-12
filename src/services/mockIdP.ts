@@ -20,6 +20,22 @@ import { IDP_ISSUER } from '@/config';
 
 export type PasswordResolver = (username: string) => string | undefined;
 
+export interface PasswordPolicy {
+  /** Minimum character length. 0 means no minimum. */
+  minimumLength: number;
+  /** Require a mix of upper, lower, digit and symbol. */
+  complexityEnabled: boolean;
+  /** Maximum age in days before a password must be changed. 0 means no age limit. */
+  maximumAge: number;
+}
+
+export interface LockoutPolicy {
+  /** Failed attempts before an account is locked. 0 means no lockout. */
+  threshold: number;
+  /** How long the lockout lasts, in minutes. 0 means until an admin unlocks. */
+  duration: number;
+}
+
 export interface IdPConditionalPolicy {
   /** A name, so a policy can be excluded from or reported on by identity. */
   name?: string;
@@ -43,6 +59,11 @@ export class MockIdP {
   private policies: IdPConditionalPolicy[] = [];
   /** Time source — overridable for fault injection. */
   now: () => number = () => Date.now();
+  private passwordPolicy: PasswordPolicy = { minimumLength: 0, complexityEnabled: false, maximumAge: 0 };
+  private lockoutPolicy: LockoutPolicy = { threshold: 0, duration: 0 };
+  private failedAttempts = new Map<UserId, number>();
+  /** When each failure was recorded, so the counter can be aged out. */
+  private failedAt = new Map<UserId, number>();
 
   /**
    * When true, every MFA challenge fails.
@@ -94,6 +115,7 @@ export class MockIdP {
     const expected = this.passwords.get(username) ?? this.passwordResolver(username);
     if (expected !== password) {
       const sessionId = mkSessionId('failed-' + nanoid(8));
+      this.recordFailedSignIn(user.id);
       this.audit.record({
         actorId: user.id,
         action: 'signin.failure',
@@ -103,6 +125,10 @@ export class MockIdP {
       });
       return { ok: false, reason: 'bad-password' };
     }
+
+    // Correct credential clears the bad-attempt counter, including the case
+    // where an admin reset then refuses the session.
+    this.clearFailedAttempts(user.id);
 
     // Credential is correct — but an admin reset can still require the user to
     // choose their own password before any session is issued.
@@ -194,12 +220,15 @@ export class MockIdP {
     newPassword: string,
     opts: { forceChangeAtNextLogin: boolean },
     by: UserId,
-  ): void {
+  ): { ok: true } | { ok: false; reason: string } {
     const u = this.dir.getUser(userId);
     if (!u) throw new Error(`[idp] resetPassword: user ${userId} not found`);
+    const validation = this.validatePassword(newPassword);
+    if (!validation.ok) return validation;
     this.passwords.set(u.username, newPassword);
     u.mustChangePassword = opts.forceChangeAtNextLogin;
     this.audit.record({ actorId: by, action: 'password.reset', targetId: userId });
+    return { ok: true };
   }
 
   /**
@@ -207,15 +236,17 @@ export class MockIdP {
    * Kept separate from resetPassword() because the actor differs: this one
    * requires the current credential, an admin reset does not.
    */
-  changeOwnPassword(userId: UserId, currentPassword: string, newPassword: string): boolean {
+  changeOwnPassword(userId: UserId, currentPassword: string, newPassword: string): { ok: boolean; reason?: string } {
     const u = this.dir.getUser(userId);
-    if (!u) return false;
+    if (!u) return { ok: false, reason: 'User not found.' };
     const expected = this.passwords.get(u.username) ?? this.passwordResolver(u.username);
-    if (expected !== currentPassword) return false;
+    if (expected !== currentPassword) return { ok: false, reason: 'Current password is incorrect.' };
+    const validation = this.validatePassword(newPassword);
+    if (!validation.ok) return { ok: false, reason: validation.reason };
     this.passwords.set(u.username, newPassword);
     u.mustChangePassword = false;
     this.audit.record({ actorId: userId, action: 'password.reset', targetId: userId });
-    return true;
+    return { ok: true };
   }
 
   resetMfa(userId: UserId, by: UserId): void {
@@ -357,10 +388,88 @@ export class MockIdP {
     return false;
   }
 
+  private recordFailedSignIn(userId: UserId): void {
+    if (this.lockoutPolicy.threshold <= 0) return;
+    const now = this.now();
+    const last = this.failedAt.get(userId) ?? 0;
+    // A correct sign-in or a long gap resets the counter, but here we only
+    // age the counter by a lockout-duration window.
+    const window = this.lockoutPolicy.duration > 0 ? this.lockoutPolicy.duration * 60 * 1000 : Infinity;
+    if (now - last > window) {
+      this.failedAttempts.set(userId, 0);
+    }
+    const n = (this.failedAttempts.get(userId) ?? 0) + 1;
+    this.failedAttempts.set(userId, n);
+    this.failedAt.set(userId, now);
+    if (n >= this.lockoutPolicy.threshold) {
+      const u = this.dir.getUser(userId);
+      if (u && u.status === 'active') {
+        u.status = 'locked';
+        this.audit.record({
+          actorId: userId,
+          action: 'account.lockout',
+          targetId: userId,
+          note: `Locked after ${n} failed sign-in attempts.`,
+        });
+      }
+    }
+  }
+
+  clearFailedAttempts(userId: UserId): void {
+    this.failedAttempts.delete(userId);
+    this.failedAt.delete(userId);
+  }
+
+  setPasswordPolicy(p: Partial<PasswordPolicy>, by: UserId = SYSTEM_ACTOR): void {
+    this.passwordPolicy = { ...this.passwordPolicy, ...p };
+    this.audit.record({
+      actorId: by,
+      action: 'policy.updated',
+      note: `Password policy: min length ${this.passwordPolicy.minimumLength}, complexity ${this.passwordPolicy.complexityEnabled}, max age ${this.passwordPolicy.maximumAge}.`,
+    });
+  }
+
+  getPasswordPolicy(): PasswordPolicy {
+    return { ...this.passwordPolicy };
+  }
+
+  setLockoutPolicy(p: Partial<LockoutPolicy>, by: UserId = SYSTEM_ACTOR): void {
+    this.lockoutPolicy = { ...this.lockoutPolicy, ...p };
+    this.audit.record({
+      actorId: by,
+      action: 'policy.updated',
+      note: `Lockout policy: threshold ${this.lockoutPolicy.threshold}, duration ${this.lockoutPolicy.duration} min.`,
+    });
+  }
+
+  getLockoutPolicy(): LockoutPolicy {
+    return { ...this.lockoutPolicy };
+  }
+
+  validatePassword(password: string): { ok: true } | { ok: false; reason: string } {
+    if (this.passwordPolicy.minimumLength > 0 && password.length < this.passwordPolicy.minimumLength) {
+      return { ok: false, reason: `Password is too short. Minimum length is ${this.passwordPolicy.minimumLength}.` };
+    }
+    if (this.passwordPolicy.complexityEnabled) {
+      const hasUpper = /[A-Z]/.test(password);
+      const hasLower = /[a-z]/.test(password);
+      const hasDigit = /\d/.test(password);
+      const hasSymbol = /[^A-Za-z0-9]/.test(password);
+      if (!hasUpper || !hasLower || !hasDigit || !hasSymbol) {
+        return { ok: false, reason: 'Password must contain upper, lower, digit and symbol characters.' };
+      }
+    }
+    return { ok: true };
+  }
+
   reset(): void {
     this.passwords.clear();
     this.sessions.clear();
     this.policies = [];
+    this.passwordPolicy = { minimumLength: 0, complexityEnabled: false, maximumAge: 0 };
+    this.lockoutPolicy = { threshold: 0, duration: 0 };
+    this.failedAttempts.clear();
+    this.failedAt.clear();
     this.now = () => Date.now();
   }
 }

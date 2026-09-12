@@ -140,7 +140,7 @@ $affected = @(
 )
 
 foreach ($a in $affected) {
-  Set-ADAccountPassword -Identity $a -NewPassword "TempPass!2026" -ChangePasswordAtLogon
+  Set-ADAccountPassword -Identity $a -NewPassword "TempPass!2026#" -ChangePasswordAtLogon
 }
 
 Get-IamAuditLog -Last 20
@@ -244,27 +244,27 @@ New-ADGroup -Name grp-sales-readers -Description "Sales read access" -Path Group
 New-ADGroup -Name grp-helpdesk-tier1 -Description "Help Desk tier 1" -Path Groups
 
 foreach ($n in $hrUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department HR -Title "HR Staff" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  New-ADUser -SamAccountName $n -Name $n -Department HR -Title "HR Staff" -Path Users -AccountPassword "TempPass!2026##" -ChangePasswordAtLogon
   Add-ADGroupMember -Identity $n -Group grp-hr-readers
 }
 
 foreach ($n in $itUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department IT -Title "IT Admin" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  New-ADUser -SamAccountName $n -Name $n -Department IT -Title "IT Admin" -Path Users -AccountPassword "TempPass!2026#" -ChangePasswordAtLogon
   Add-ADGroupMember -Identity $n -Group grp-iam-admins
 }
 
 foreach ($n in $financeUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department Finance -Title "Finance Analyst" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  New-ADUser -SamAccountName $n -Name $n -Department Finance -Title "Finance Analyst" -Path Users -AccountPassword "TempPass!2026#" -ChangePasswordAtLogon
   Add-ADGroupMember -Identity $n -Group grp-finance-payroll
 }
 
 foreach ($n in $salesUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department Sales -Title "Sales Rep" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  New-ADUser -SamAccountName $n -Name $n -Department Sales -Title "Sales Rep" -Path Users -AccountPassword "TempPass!2026#" -ChangePasswordAtLogon
   Add-ADGroupMember -Identity $n -Group grp-sales-readers
 }
 
 foreach ($n in $helpdeskUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department "Help Desk" -Title "Service Desk Analyst" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  New-ADUser -SamAccountName $n -Name $n -Department "Help Desk" -Title "Service Desk Analyst" -Path Users -AccountPassword "TempPass!2026#" -ChangePasswordAtLogon
   Add-ADGroupMember -Identity $n -Group grp-helpdesk-tier1
 }
 

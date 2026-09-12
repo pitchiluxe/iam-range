@@ -608,7 +608,12 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Create the manager role group for HR.', cmdlet: 'New-ADGroup', example: 'New-ADGroup -Name grp-hr-managers -Description "HR managers with write access" -Path Groups' },
           { do: 'Promote an HR staff member into the manager group.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity cara.reid -Group grp-hr-managers' },
           { do: 'Remove the old group that no longer matches the promoted role.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity cara.reid -Group grp-hr-readers' },
-          { do: 'Read back the membership to confirm the move is clean.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity cara.reid' },
+          { do: 'Create the HR file share to practise least-privilege file permissions.', cmdlet: 'New-Share', example: 'New-Share -Name HR -Path "C:\\CompanyData\\HR"' },
+          { do: 'Grant HR managers Modify access to the share.', cmdlet: 'Grant-SharePermission', example: 'Grant-SharePermission -Name HR -Trustee grp-hr-managers -Access Modify' },
+          { do: 'Grant HR staff Read access to the share.', cmdlet: 'Grant-SharePermission', example: 'Grant-SharePermission -Name HR -Trustee grp-hr-readers -Access Read' },
+          { do: 'Deny the IT admin group access to the HR share.', cmdlet: 'Grant-SharePermission', example: 'Grant-SharePermission -Name HR -Trustee grp-iam-admins -Access Full -Type Deny' },
+          { do: 'Read the membership to confirm the move is clean.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity cara.reid' },
+          { do: 'Check the effective access for an HR staff member.', cmdlet: 'Get-EffectiveAccess', example: 'Get-EffectiveAccess -Name HR -Identity ana.smith' },
         ],
         verify:
           'Get-ADPrincipalGroupMembership for each sample user shows only the groups for their ' +
@@ -630,6 +635,14 @@ export const MANUAL: readonly Chapter[] = [
         steps: [
           { do: 'Open Log Search and look for failed sign-in attempts.', app: 'log-search' } as ManualStep,
           { do: 'Read the audit log from the shell for the last 40 events.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Last 40' },
+          { do: 'Set the domain password policy to the company standard.', cmdlet: 'Set-PasswordPolicy', example: 'Set-PasswordPolicy -MinimumLength 14 -ComplexityEnabled $true -MaximumAge 90' },
+          { do: 'Confirm the password policy is in force.', cmdlet: 'Get-PasswordPolicy' },
+          { do: 'Find any dormant accounts that have not signed in recently.', cmdlet: 'Get-DormantAccount', example: 'Get-DormantAccount -Days 90' },
+          { do: 'List any standing privileged assignments as part of the risk report.', cmdlet: 'Get-PimStandingPrivilege' },
+          { do: 'Export failed sign-in events to CSV for spreadsheet analysis.', cmdlet: 'Export-IamAuditLog', example: 'Export-IamAuditLog -Filter signin.failure -Last 50' },
+          { do: 'Connect to the Entra tenant and verify the synced state.', cmdlet: 'Connect-Entra' },
+          { do: 'Run a directory sync cycle.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider entra' },
+          { do: 'Check a synced account in the cloud tenant.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider entra -Upn ben.okafor@iamlab.com' },
           { do: 'Simulate a privilege-creep finding by adding an IT user to an HR group.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity ben.okafor -Group grp-hr-readers' },
           { do: 'Read the membership of the user and spot the wrong group.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity ben.okafor' },
           { do: 'Remove the group that does not match the user\'s department.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity ben.okafor -Group grp-hr-readers' },
@@ -654,10 +667,12 @@ export const MANUAL: readonly Chapter[] = [
           'The first needs the failures read before the unlock, and the second needs the group ' +
           'membership read before the change.',
         steps: [
+          { do: 'Set the account lockout policy to the company standard.', cmdlet: 'Set-AccountLockoutPolicy', example: 'Set-AccountLockoutPolicy -Threshold 5 -Duration 30' },
+          { do: 'Confirm the lockout policy is in force.', cmdlet: 'Get-AccountLockoutPolicy' },
           { do: 'Find the locked-out account from the Ticket Queue and confirm it in Active Directory.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Identity isabel.martinez' },
           { do: 'Read the sign-in failures in the log before unlocking.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Last 20' },
           { do: 'Unlock the account with the user name from the queue.', cmdlet: 'Unlock-ADAccount' },
-          { do: 'Investigate the access-denied report by checking group membership.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity greta.olsen' },
+          { do: 'Investigate the access-denied report by checking effective access.', cmdlet: 'Get-EffectiveAccess', example: 'Get-EffectiveAccess -Name HR -Identity greta.olsen' },
           { do: 'Add the missing group or remove the one that is blocking access.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity greta.olsen -Group grp-hr-readers' },
         ],
         verify:
@@ -681,6 +696,7 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Open Writer and start the IAM Analyst offboarding SOP.', app: 'writer' } as ManualStep,
           { do: 'Complete each section with the steps, evidence checks and escalation path.' },
           { do: 'Create the new-hire password training guide in the same way.' },
+          { do: 'Start the Auditor evidence review template and document the privilege-creep finding, the log evidence and the remediation.' },
           { do: 'Save both documents to the Documents folder.' },
         ],
         verify:

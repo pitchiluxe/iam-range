@@ -116,9 +116,9 @@ export class LoginSession {
    * Windows does. Without this, an admin reset would lock the account out of
    * the workstation entirely with no way back.
    */
-  changePassword(username: string, currentPassword: string, newPassword: string): boolean {
+  changePassword(username: string, currentPassword: string, newPassword: string): { ok: boolean; reason?: string } {
     const u = this.services.dir.getUserByUsername(username);
-    if (!u) return false;
+    if (!u) return { ok: false, reason: 'User not found.' };
     return this.services.idp.changeOwnPassword(u.id, currentPassword, newPassword);
   }
 

@@ -19,6 +19,21 @@ import type {
 import { mkUserId, mkGroupId, mkRoleId, mkOuId, SYSTEM_ACTOR } from '@/domain';
 import type { MockAuditLog } from './mockAuditLog';
 
+export type ShareAccess = 'Read' | 'Modify' | 'Full';
+
+export interface SharePermission {
+  type: 'Allow' | 'Deny';
+  /** Group or user name. */
+  trusteeName: string;
+  access: ShareAccess;
+}
+
+export interface ShareRecord {
+  name: string;
+  path: string;
+  permissions: SharePermission[];
+}
+
 export class MockDirectory {
   private users = new Map<UserId, User>();
   private groups = new Map<GroupId, Group>();
@@ -26,6 +41,8 @@ export class MockDirectory {
   private appIndex = new Map<string, Application>();
   /** Empty on a fresh domain: the administrator builds the OU structure. */
   private ous = new Map<OuId, OrganizationalUnit>();
+  /** File shares used for the NTFS-style permission lab. */
+  private shares = new Map<string, ShareRecord>();
 
   constructor(private readonly audit: MockAuditLog) {}
 
@@ -538,6 +555,80 @@ export class MockDirectory {
     return this.appIndex.get(id);
   }
 
+  // --- SHARES ---------------------------------------------------------------
+
+  listShares(): ShareRecord[] {
+    return Array.from(this.shares.values());
+  }
+
+  getShare(name: string): ShareRecord | undefined {
+    return this.shares.get(name);
+  }
+
+  createShare(name: string, path: string, actor: UserId = SYSTEM_ACTOR): ShareRecord {
+    if (this.shares.has(name)) throw new Error(`[directory] createShare: a share named '${name}' already exists.`);
+    const s: ShareRecord = { name, path, permissions: [] };
+    this.shares.set(name, s);
+    this.audit.record({ actorId: actor, action: 'share.created', targetId: name });
+    return s;
+  }
+
+  deleteShare(name: string, actor: UserId = SYSTEM_ACTOR): void {
+    if (!this.shares.has(name)) throw new Error(`[directory] deleteShare: cannot find a share named '${name}'.`);
+    this.shares.delete(name);
+    this.audit.record({ actorId: actor, action: 'share.deleted', targetId: name });
+  }
+
+  grantSharePermission(
+    name: string,
+    trusteeName: string,
+    access: ShareAccess,
+    permissionType: 'Allow' | 'Deny' = 'Allow',
+    actor: UserId = SYSTEM_ACTOR,
+  ): void {
+    const s = this.shares.get(name);
+    if (!s) throw new Error(`[directory] grantSharePermission: cannot find a share named '${name}'.`);
+    s.permissions = s.permissions.filter((p) => !(p.trusteeName === trusteeName && p.type === permissionType));
+    s.permissions.push({ type: permissionType, trusteeName, access });
+    this.audit.record({
+      actorId: actor,
+      action: 'share.permission',
+      targetId: name,
+      note: `${permissionType} ${access} for ${trusteeName}`,
+    });
+  }
+
+  revokeSharePermission(name: string, trusteeName: string, actor: UserId = SYSTEM_ACTOR): void {
+    const s = this.shares.get(name);
+    if (!s) throw new Error(`[directory] revokeSharePermission: cannot find a share named '${name}'.`);
+    const before = s.permissions.length;
+    s.permissions = s.permissions.filter((p) => p.trusteeName !== trusteeName);
+    if (s.permissions.length === before) throw new Error(`[directory] revokeSharePermission: no permissions for ${trusteeName} on ${name}.`);
+    this.audit.record({ actorId: actor, action: 'share.permission', targetId: name, note: `Revoked ${trusteeName}` });
+  }
+
+  getEffectiveAccess(shareName: string, username: string): 'Deny' | ShareAccess | 'None' {
+    const s = this.shares.get(shareName);
+    if (!s) throw new Error(`[directory] getEffectiveAccess: cannot find a share named '${shareName}'.`);
+    const u = this.getUserByUsername(username);
+    if (!u) throw new Error(`[directory] getEffectiveAccess: cannot find a user named '${username}'.`);
+    const trustees = new Set<string>([u.username]);
+    for (const gid of u.groupIds) {
+      const g = this.groups.get(gid);
+      if (g) trustees.add(g.name);
+    }
+    const rank: Record<string, number> = { Deny: 4, Full: 3, Modify: 2, Read: 1, None: 0 };
+    let effective = 'None';
+    for (const p of s.permissions) {
+      if (!trustees.has(p.trusteeName)) continue;
+      if (p.type === 'Deny') return 'Deny';
+      const pRank = rank[p.access] ?? 0;
+      const eRank = rank[effective] ?? 0;
+      if (pRank > eRank) effective = p.access;
+    }
+    return effective as 'Deny' | ShareAccess | 'None';
+  }
+
   // --- RESET ----------------------------------------------------------------
 
   reset(): void {
@@ -546,5 +637,6 @@ export class MockDirectory {
     this.roles.clear();
     this.appIndex.clear();
     this.ous.clear();
+    this.shares.clear();
   }
 }

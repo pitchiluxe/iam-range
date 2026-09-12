@@ -233,6 +233,30 @@ export const DOCUMENT_TEMPLATES: readonly DocumentTemplate[] = [
       p('<br>'),
     ].join(''),
   },
+  {
+    id: 'auditor-evidence',
+    title: 'Auditor evidence review',
+    description: 'A template for explaining a finding to an auditor with evidence and remediation.',
+    body: [
+      '<h1>Auditor evidence review</h1>',
+      p('This document explains a finding, the evidence that proves it, and the action taken.'),
+      h('Finding'),
+      hint('One sentence: what was wrong.'),
+      p('<br>'),
+      h('Evidence'),
+      hint('Timestamped log entries, group membership, or audit actions. Name the exact account, group or object.'),
+      p('<br>'),
+      h('Timeline'),
+      hint('When it was seen and when it was fixed.'),
+      p('<br>'),
+      h('Remediation'),
+      hint('What changed, and which cmdlet or console was used.'),
+      p('<br>'),
+      h('Who reviewed it'),
+      hint('The name of the person who checked the evidence.'),
+      p('<br>'),
+    ].join(''),
+  },
 ];
 
 export const TEMPLATE_BY_ID: Record<string, DocumentTemplate> = Object.fromEntries(
