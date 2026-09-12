@@ -356,6 +356,64 @@ const RULES: Record<string, Rule> = {
     outstanding: 'Resolve the duplicate identities so each person has one object.',
     actions: ['cloud.synced', 'cloud.user.created'],
   },
+
+  // --- 6. IAM Analyst lab ---
+  'analyst-env': {
+    done: (s) => s.dir.listOus().length >= 5,
+    started: (s) => s.dir.listOus().length >= 1,
+    evidence: (s) =>
+      `${s.dir.listOus().length} OU(s): ${s.dir.listOus().map((o) => o.name).join(', ') || 'none'}.`,
+    outstanding:
+      'Build the department OUs and a Groups OU before accounts are created, otherwise the new ' +
+      'accounts have nowhere to live.',
+    actions: ['ou.created'],
+  },
+  'analyst-provision': {
+    done: (s) => staff(s).length >= 10,
+    started: (s) => staff(s).length >= 1,
+    evidence: (s) =>
+      `${staff(s).length} staff account(s) exist${staff(s).length >= 10 ? ', the bulk batch is complete' : ''}.`,
+    outstanding:
+      'Run the bulk onboarding script and verify the accounts are in their department groups.',
+    actions: ['user.created', 'group.add'],
+  },
+  'analyst-rbac': {
+    done: (s) => s.dir.listGroups().length >= 4 && has(s, 'group.add') && has(s, 'group.remove'),
+    started: (s) => s.dir.listGroups().length >= 1,
+    evidence: (s) =>
+      `${s.dir.listGroups().length} group(s), ${count(s, 'group.add')} add(s), ${count(s, 'group.remove')} removal(s).`,
+    outstanding:
+      'Create role groups, place people in the right ones, and remove old groups so privilege does ' +
+      'not accumulate.',
+    actions: ['group.created', 'group.add', 'group.remove'],
+  },
+  'analyst-audit': {
+    done: (s) => has(s, 'group.remove') && s.dir.listGroups().length >= 4,
+    started: (s) => has(s, 'iam.audit.viewed') || has(s, 'group.remove'),
+    evidence: (s) =>
+      `${count(s, 'group.remove')} privilege-removal(s) recorded; the audit was reviewed.`,
+    outstanding:
+      'Query the audit log for the unexpected group membership, then remove the access that does ' +
+      'not belong.',
+    actions: ['iam.audit.viewed', 'group.remove'],
+  },
+  'analyst-helpdesk': {
+    done: (s) => has(s, 'account.unlock') && has(s, 'group.add'),
+    started: (s) => has(s, 'account.unlock') || staff(s).some((u) => u.status === 'locked'),
+    evidence: (s) =>
+      `${count(s, 'account.unlock')} unlock(s), ${count(s, 'group.add')} group grant(s).`,
+    outstanding:
+      'Unlock the locked account and fix the access-denied issue by adjusting group membership.',
+    actions: ['account.unlock', 'group.add'],
+  },
+  'analyst-docs': {
+    done: () => false,
+    evidence: () => 'The offboarding SOP and password guide have not been saved yet.',
+    outstanding:
+      'Use Writer to complete the offboarding SOP and the new-hire password guide, then save them ' +
+      'to the Documents app.',
+    actions: ['document.saved'],
+  },
 };
 
 /** Every lesson id the manual defines, in order. */

@@ -152,7 +152,7 @@ export const MANUAL: readonly Chapter[] = [
         steps: [
           { do: 'Create the account.', cmdlet: 'New-ADUser', example: 'New-ADUser -SamAccountName jdoe -Name "John Doe" -Department "Help Desk" -Title "Service Desk Analyst"' },
           { do: 'Put it in the right OU.', cmdlet: 'Move-ADObject', example: 'Move-ADObject -Identity jdoe -TargetPath Users' },
-          { do: 'Add the groups the role needs.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity grp-helpdesk-tier1 -Members jdoe' },
+          { do: 'Add the groups the role needs.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity jdoe -Group grp-helpdesk-tier1' },
           { do: 'Set a password the person will change at first sign-in.', cmdlet: 'Set-ADAccountPassword' },
           { do: 'Sign out, and sign in as them from the login screen.' },
         ],
@@ -176,7 +176,7 @@ export const MANUAL: readonly Chapter[] = [
           'why a salesperson can approve payroll, this is the answer.',
         steps: [
           { do: 'Add the access the new role needs.', cmdlet: 'Add-ADGroupMember' },
-          { do: 'Remove the access the old role needed.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity grp-helpdesk-tier1 -Members jdoe' },
+          { do: 'Remove the access the old role needed.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity jdoe -Group grp-helpdesk-tier1' },
           { do: 'Move the account to the OU that matches its new place.', cmdlet: 'Move-ADObject' },
           { do: 'Read back their membership and check nothing is left over.', cmdlet: 'Get-ADPrincipalGroupMembership' },
         ],
@@ -201,6 +201,7 @@ export const MANUAL: readonly Chapter[] = [
         steps: [
           { do: 'Disable the account on premises.', cmdlet: 'Disable-ADAccount', example: 'Disable-ADAccount -Identity jdoe' },
           { do: 'Check what the cloud tenant currently believes.', cmdlet: 'Get-DirectorySyncStatus', example: 'Get-DirectorySyncStatus -Provider okta' },
+          { do: 'Connect to the cloud tenant before changing it.', cmdlet: 'Connect-Okta', example: 'Connect-Okta' },
           { do: 'Run a sync cycle rather than waiting for the schedule.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider okta' },
           { do: 'Revoke live sessions.', cmdlet: 'Revoke-CloudSession', example: 'Revoke-CloudSession -Provider okta -Upn jdoe@iamlab.com' },
           { do: 'Look for application accounts the tenant could not reach.', cmdlet: 'Get-OrphanedAppAccount', example: 'Get-OrphanedAppAccount -Provider okta' },
@@ -227,7 +228,7 @@ export const MANUAL: readonly Chapter[] = [
         steps: [
           { do: 'Read the sign-in failures before touching anything.', cmdlet: 'Get-SignInLog' },
           { do: 'Look at the account state.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Identity jdoe' },
-          { do: 'If it is locked and the failures look like a forgotten password, unlock it.', cmdlet: 'Unlock-ADAccount', example: 'Unlock-ADAccount -Identity jdoe' },
+          { do: 'If it is locked and the failures look like a forgotten password, unlock it with the user name from the queue.', cmdlet: 'Unlock-ADAccount' },
           { do: 'If it is disabled, find out why before re-enabling anything.', cmdlet: 'Enable-ADAccount' },
         ],
         verify:
@@ -282,6 +283,7 @@ export const MANUAL: readonly Chapter[] = [
           'them catches an ordinary user. Taking the role up becomes an act with a reason ' +
           'attached and an expiry on it.',
         steps: [
+          { do: 'Create the privileged role that will be eligible.', cmdlet: 'New-IamRole', example: 'New-IamRole -Name role-domain-admins -Description "Domain Administrators" -Permissions domain:*' },
           { do: 'Create the eligible assignment.', cmdlet: 'New-PimEligibility', example: 'New-PimEligibility -Identity jdoe -Role role-domain-admins' },
           { do: 'Remove the permanent assignment it replaces.', cmdlet: 'Remove-PimAssignment' },
           { do: 'Confirm no standing privilege remains.', cmdlet: 'Get-PimStandingPrivilege' },
@@ -329,7 +331,7 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Require approval on the role.', cmdlet: 'Get-PimAssignment' },
           { do: 'Request activation as the person who needs it.', cmdlet: 'Enable-PimRole' },
           { do: 'Try to approve your own request, and read the refusal.', cmdlet: 'Approve-PimRequest' },
-          { do: 'Approve it as somebody else.', cmdlet: 'Approve-PimRequest', example: 'Approve-PimRequest -Identity jdoe -Role role-domain-admins' },
+          { do: 'Approve it as somebody else.', cmdlet: 'Approve-PimRequest' },
         ],
         verify:
           'The assignment moves from pending-approval to active, and the record names who ' +
@@ -533,6 +535,162 @@ export const MANUAL: readonly Chapter[] = [
           + 'filter on, and the fact that you would redact other people\u2019s data before '
           + 'attaching anything. Then say you would keep the raw export alongside the summary.',
         app: 'log-search',
+      },
+    ],
+  },
+  {
+    id: 'analyst-lab',
+    title: '6 \u00b7 IAM Analyst lab',
+    summary:
+      'A capstone that walks through an IAM analyst job description using the simulated ' +
+      'workstation: build the structure, bulk-provision users, enforce RBAC, audit access, ' +
+      'resolve helpdesk issues, and document the work.',
+    lessons: [
+      {
+        id: 'analyst-env',
+        title: 'Prepare the domain for the analyst lab',
+        objective: 'Confirm the directory structure exists before users are created.',
+        why:
+          'Analyst work starts on a directory somebody else built. Before creating or moving ' +
+          'accounts, verify the structure is there: OUs for each department and an OU for groups. ' +
+          'Creating users into a structure that does not exist is the commonest first-day error.',
+        steps: [
+          { do: 'Open Active Directory Users and Computers and read the current tree.', app: 'active-directory' } as ManualStep,
+          { do: 'List the organisational units.', cmdlet: 'Get-ADOrganizationalUnit' },
+          { do: 'Create the top-level Corp OU if it is missing.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name Corp' },
+          { do: 'Create the department OUs if they are missing.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name HR -Path Corp' },
+          { do: 'Create an OU to hold user accounts if it is missing.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name Users -Path Corp' },
+          { do: 'Create an OU to hold security groups if it is missing.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name Groups -Path Corp' },
+          { do: 'List the OUs and groups so you know what is already in place.', cmdlet: 'Get-ADOrganizationalUnit' },
+        ],
+        verify:
+          'The tree shows Corp with the department, Users and Groups OUs. Get-ADGroup lists the ' +
+          'role groups the later lessons will use.',
+        interview:
+          '"What do you check before bulk-creating accounts?" The OU and group structure. Say ' +
+          'that creating accounts into missing containers is the first failure.',
+        reading: 'ou-design',
+        app: 'active-directory',
+      },
+      {
+        id: 'analyst-provision',
+        title: 'Bulk-provision from a CSV-style list',
+        objective: 'Create ten accounts in one script and place each in the right OU and group.',
+        why:
+          'A real HR system hands over a CSV. The analyst script reads it, generates usernames, ' +
+          'creates accounts, sets temporary passwords, places them in OUs and adds the role ' +
+          'groups. Doing this by hand for ten people is a mistake waiting to happen.',
+        steps: [
+          { do: 'Open the PowerShell ISE and load the "Bulk onboarding from a CSV list" template.', app: 'script-editor' } as ManualStep,
+          { do: 'Read the list of employees and the department groups it will use.' },
+          { do: 'Run the script and watch for any failures or duplicate-name errors.' },
+          { do: 'List the new accounts.', cmdlet: 'Get-ADUser' },
+          { do: 'Check that a sample account is in its role group.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity ana.smith' },
+        ],
+        verify:
+          'Get-ADUser shows ten new accounts, one per department. Get-ADPrincipalGroupMembership ' +
+          'on a sample shows the role group matching their department.',
+        interview:
+          '"How do you bulk-provision accounts?" From a CSV or HR feed, generating usernames, ' +
+          'placing the account in the right OU and group, and verifying a sample.',
+        reading: 'jml',
+        app: 'script-editor',
+      },
+      {
+        id: 'analyst-rbac',
+        title: 'Design and enforce RBAC',
+        objective: 'Create role groups and make sure people are in the right ones.',
+        why:
+          'Access goes to groups, people go in groups, and a role is a job that needs a set of ' +
+          'entitlements. If a person has a group from a previous team, that is privilege creep ' +
+          'and the next access review will find it.',
+        steps: [
+          { do: 'Create the manager role group for HR.', cmdlet: 'New-ADGroup', example: 'New-ADGroup -Name grp-hr-managers -Description "HR managers with write access" -Path Groups' },
+          { do: 'Promote an HR staff member into the manager group.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity cara.reid -Group grp-hr-managers' },
+          { do: 'Remove the old group that no longer matches the promoted role.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity cara.reid -Group grp-hr-readers' },
+          { do: 'Read back the membership to confirm the move is clean.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity cara.reid' },
+        ],
+        verify:
+          'Get-ADPrincipalGroupMembership for each sample user shows only the groups for their ' +
+          'current department and role. Old group membership is gone.',
+        interview:
+          '"What is privilege creep and how do you stop it?" Old access that never got removed. ' +
+          'Stop it by removing the old groups on a mover and reviewing periodically.',
+        reading: 'groups-not-people',
+        app: 'active-directory',
+      },
+      {
+        id: 'analyst-audit',
+        title: 'Audit access and report the risk',
+        objective: 'Read the audit log and group membership, then document a finding.',
+        why:
+          'An IAM analyst is expected to find the risks the directory hides: failed logins, ' +
+          'dormant accounts, and people whose groups do not match their department. The evidence ' +
+          'goes in a report that another person can check.',
+        steps: [
+          { do: 'Open Log Search and look for failed sign-in attempts.', app: 'log-search' } as ManualStep,
+          { do: 'Read the audit log from the shell for the last 40 events.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Last 40' },
+          { do: 'Simulate a privilege-creep finding by adding an IT user to an HR group.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity ben.okafor -Group grp-hr-readers' },
+          { do: 'Read the membership of the user and spot the wrong group.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity ben.okafor' },
+          { do: 'Remove the group that does not match the user\'s department.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity ben.okafor -Group grp-hr-readers' },
+          { do: 'Open the Writer and start an Access Review summary.', app: 'writer' } as ManualStep,
+          { do: 'Document the finding, the evidence, and the remedial action.' },
+        ],
+        verify:
+          'The report names the user, the unexpected group, and the audit event that proved it. ' +
+          'The evidence is a timestamped log entry, not a statement.',
+        interview:
+          '"How do you prove a privilege-creep finding?" With an audit event and the current ' +
+          'group membership, both timestamped, plus the action that removed it.',
+        reading: 'access-reviews',
+        app: 'log-search',
+      },
+      {
+        id: 'analyst-helpdesk',
+        title: 'Resolve common helpdesk issues',
+        objective: 'Unlock an account and investigate an access-denied report.',
+        why:
+          'The two most common helpdesk calls are "I cannot sign in" and "I cannot reach this". ' +
+          'The first needs the failures read before the unlock, and the second needs the group ' +
+          'membership read before the change.',
+        steps: [
+          { do: 'Find the locked-out account from the Ticket Queue and confirm it in Active Directory.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Identity isabel.martinez' },
+          { do: 'Read the sign-in failures in the log before unlocking.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Last 20' },
+          { do: 'Unlock the account with the user name from the queue.', cmdlet: 'Unlock-ADAccount' },
+          { do: 'Investigate the access-denied report by checking group membership.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity greta.olsen' },
+          { do: 'Add the missing group or remove the one that is blocking access.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity greta.olsen -Group grp-hr-readers' },
+        ],
+        verify:
+          'The account is unlocked and signs in again, and the user in the access-denied report ' +
+          'now has the correct groups for their task.',
+        interview:
+          '"A user cannot access a share. What do you check?" The group membership, not the ' +
+          'account status, and whether the group has the right share permission.',
+        reading: 'lockouts',
+        app: 'active-directory',
+      },
+      {
+        id: 'analyst-docs',
+        title: 'Document the work for an auditor',
+        objective: 'Write a one-page offboarding SOP and a new-hire password guide.',
+        why:
+          'The job is not only doing the work; it is producing something another person can ' +
+          'follow and audit. A runbook written in the first person and missing the rollback is ' +
+          'not a control.',
+        steps: [
+          { do: 'Open Writer and start the IAM Analyst offboarding SOP.', app: 'writer' } as ManualStep,
+          { do: 'Complete each section with the steps, evidence checks and escalation path.' },
+          { do: 'Create the new-hire password training guide in the same way.' },
+          { do: 'Save both documents to the Documents folder.' },
+        ],
+        verify:
+          'Both documents are saved in the Documents app. The SOP contains the exact order of ' +
+          'offboarding and the password guide lists the policy requirements in plain language.',
+        interview:
+          '"Why does an IAM analyst write procedures?" Because access work is reviewed by ' +
+          'auditors, and evidence is what makes a claim believable.',
+        reading: 'jml',
+        app: 'writer',
       },
     ],
   },

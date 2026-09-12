@@ -425,6 +425,7 @@ export type ValidatorKind =
   | 'group-created'
   | 'group-added'
   | 'group-removed'
+  | 'role-created'
   | 'role-granted'
   | 'role-revoked'
   | 'app-config-fixed'

@@ -157,6 +157,7 @@ const P = {
   upn: { name: 'Upn', label: 'User principal name', kind: 'text', required: true },
   group: { name: 'Group', label: 'Group', kind: 'group', required: true },
   role: { name: 'Role', label: 'Role', kind: 'role', required: true },
+  name: { name: 'Name', label: 'Name', kind: 'text', required: true },
 } satisfies Record<string, CapabilityParam>;
 
 // ---------------------------------------------------------------------------
@@ -780,6 +781,25 @@ export const CAPABILITIES: readonly IamCapability[] = [
   },
 
   // ── Access ───────────────────────────────────────────────────────────────
+  {
+    id: 'role.create',
+    label: 'Create Role',
+    synopsis: 'Create a privileged role that can be assigned or made eligible.',
+    consoleSection: 'access',
+    cmdlet: 'New-IamRole',
+    validator: 'role-created',
+    params: [P.name, { name: 'Description', label: 'Description', kind: 'text', required: true }, { name: 'Permissions', label: 'Permissions (comma or space separated)', kind: 'text', required: false }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const name = a.Name?.trim();
+      if (!name) return err('Name is required.');
+      if (ctx.dir.getRoleByName(name)) return err(`A role named '${name}' already exists.`);
+      const permissions = (a.Permissions?.split(/[,\s]+/) ?? ['*']).filter((p) => p.length > 0);
+      const description = a.Description?.trim() || name;
+      const r = ctx.dir.createRole(name, description, permissions, undefined, ctx.actor);
+      return ok(`Created role ${r.name}.`);
+    },
+  },
   {
     id: 'role.grant',
     label: 'Grant Role',

@@ -97,6 +97,9 @@ describe('manual integrity', () => {
       // already done: you cannot certify access you have not granted, and an
       // evidence pack of an empty domain proves nothing.
       'operations',
+      // The IAM analyst lab is the capstone: it uses the structure, groups,
+      // accounts and evidence already built in the earlier chapters.
+      'analyst-lab',
     ]);
   });
 });

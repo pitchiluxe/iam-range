@@ -200,6 +200,78 @@ Get-ADGroup
 Get-UserSession
 `,
   },
+  {
+    id: 'bulk-onboarding-csv',
+    name: 'Bulk onboarding from a CSV list',
+    purpose: 'Create 10 fictional employees from a list and place them in department OUs and groups.',
+    category: 'provisioning',
+    body: `# Bulk onboarding from a CSV-style list.
+# In production this data would come from Import-Csv. Here it is split by
+# department so the simulated shell can create the accounts in the right
+# OU and assign the right role group. Add or remove names as needed.
+
+$hrUsers = @(
+  'ana.smith'
+  'cara.reid'
+)
+
+$itUsers = @(
+  'ben.okafor'
+  'dan.rivera'
+)
+
+$financeUsers = @(
+  'elena.voss'
+  'finn.muller'
+)
+
+$salesUsers = @(
+  'greta.olsen'
+  'henry.tan'
+)
+
+$helpdeskUsers = @(
+  'isabel.martinez'
+  'james.nguyen'
+)
+
+# Create the role groups in the Groups OU. Run the analyst-env lesson first
+# so the Groups OU exists.
+New-ADGroup -Name grp-hr-readers -Description "HR read access" -Path Groups
+New-ADGroup -Name grp-iam-admins -Description "IT admin access" -Path Groups
+New-ADGroup -Name grp-finance-payroll -Description "Finance payroll access" -Path Groups
+New-ADGroup -Name grp-sales-readers -Description "Sales read access" -Path Groups
+New-ADGroup -Name grp-helpdesk-tier1 -Description "Help Desk tier 1" -Path Groups
+
+foreach ($n in $hrUsers) {
+  New-ADUser -SamAccountName $n -Name $n -Department HR -Title "HR Staff" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  Add-ADGroupMember -Identity $n -Group grp-hr-readers
+}
+
+foreach ($n in $itUsers) {
+  New-ADUser -SamAccountName $n -Name $n -Department IT -Title "IT Admin" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  Add-ADGroupMember -Identity $n -Group grp-iam-admins
+}
+
+foreach ($n in $financeUsers) {
+  New-ADUser -SamAccountName $n -Name $n -Department Finance -Title "Finance Analyst" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  Add-ADGroupMember -Identity $n -Group grp-finance-payroll
+}
+
+foreach ($n in $salesUsers) {
+  New-ADUser -SamAccountName $n -Name $n -Department Sales -Title "Sales Rep" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  Add-ADGroupMember -Identity $n -Group grp-sales-readers
+}
+
+foreach ($n in $helpdeskUsers) {
+  New-ADUser -SamAccountName $n -Name $n -Department "Help Desk" -Title "Service Desk Analyst" -Path Users -AccountPassword "TempPass!2026" -ChangePasswordAtLogon
+  Add-ADGroupMember -Identity $n -Group grp-helpdesk-tier1
+}
+
+Get-ADUser
+Get-ADGroup
+`,
+  },
 ];
 
 /** Templates the learner saved themselves, kept in the browser. */
