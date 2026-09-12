@@ -27,7 +27,7 @@ import type {
   CloudVendor,
 } from '@/services';
 import type { Ticket, TicketKind, UserId } from '@/domain';
-import { COMPANY } from '@/config';
+import { COMPANY, DEPARTMENTS, GROUP_NAMES } from '@/config';
 import { OLLAMA_GENERATE_URL, OLLAMA_MODEL, ollamaAvailable } from '@/config/ollama';
 import { readEnvironment, type EnvironmentState, type Stage } from './environmentStage';
 import { describeForPrompt } from './environmentStage';
@@ -76,6 +76,17 @@ const PEOPLE = [
   { logon: 'nhaddad', display: 'Nadia Haddad', dept: 'Security', title: 'Security Analyst' },
 ];
 
+/** Groups a department typically needs, used to make transfer tickets concrete. */
+const DEPT_TO_GROUPS: Record<string, (typeof GROUP_NAMES)[number][]> = {
+  'Help Desk': ['grp-helpdesk-tier1'],
+  HR: ['grp-hr-readers'],
+  Finance: ['grp-finance-payroll', 'grp-finance-analysts'],
+  Engineering: ['grp-engineering-dev'],
+  Security: ['grp-sec-ops', 'grp-iam-admins'],
+  IT: ['grp-iam-admins', 'grp-server-admins', 'grp-domain-admins'],
+  Sales: ['grp-vpn-users'],
+};
+
 function bareStageScenarios(): Scenario[] {
   return [
     {
@@ -122,17 +133,19 @@ function staffingScenarios(env: EnvironmentState): Scenario[] {
   }));
 }
 
-function operatingScenarios(env: EnvironmentState): Scenario[] {
+function operatingScenarios(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
   const out: Scenario[] = [];
-  const pick = (exclude: string[] = []): string | undefined =>
-    env.staffLogons.filter((l) => !exclude.includes(l))[
-      Math.floor(Math.random() * Math.max(1, env.staffLogons.filter((l) => !exclude.includes(l)).length))
-    ];
+  const used: string[] = [];
+  const pick = (exclude: string[] = []): string | undefined => {
+    const pool = env.staffLogons.filter((l) => !exclude.includes(l) && !used.includes(l));
+    return pool[Math.floor(Math.random() * pool.length)];
+  };
 
   // Lockout — only offered when there is somebody to lock, and the lock is
   // applied for real before the ticket is raised.
   const lockTarget = pick(env.lockedLogons);
   if (lockTarget) {
+    used.push(lockTarget);
     out.push({
       id: `lockout-${lockTarget}`,
       kind: 'password-reset',
@@ -161,38 +174,86 @@ function operatingScenarios(env: EnvironmentState): Scenario[] {
 
   const disableTarget = pick([...env.lockedLogons, ...env.disabledLogons]);
   if (disableTarget) {
+    used.push(disableTarget);
+    const disableUser = deps.dir.getUserByUsername(disableTarget);
+    const leaverGroups = disableUser
+      ? disableUser.groupIds.map((id) => deps.dir.getGroup(id)?.name).filter(Boolean) as string[]
+      : [];
     out.push({
       id: `leaver-${disableTarget}`,
       kind: 'leaver',
       priority: 'high',
       subject: `Offboarding: ${disableTarget} leaves today`,
       body:
-        `${disableTarget} leaves the company today. Disable the account and revoke any live ` +
-        'sessions. Order matters: a disabled account with a live session can still be used ' +
-        'until that session is killed. Then confirm they can no longer sign in.',
-      prepare: ({ dir }) => {
-        const u = dir.getUserByUsername(disableTarget);
-        return u ? [u.id] : [];
-      },
+        `${disableTarget} leaves the company today. Disable the account ${disableTarget}, ` +
+        (leaverGroups.length
+          ? `revoke any live sessions, and remove these group memberships: ${leaverGroups.join(', ')}. `
+          : 'revoke any live sessions. ') +
+        'Order matters: a disabled account with a live session can still be used until that ' +
+        'session is killed. Then confirm they can no longer sign in.',
+      prepare: () => (disableUser ? [disableUser.id] : []),
     });
   }
 
   const moveTarget = pick(env.disabledLogons);
   if (moveTarget && env.ouCount > 1) {
-    out.push({
-      id: `mover-${moveTarget}`,
-      kind: 'transfer',
-      priority: 'normal',
-      subject: `Transfer: ${moveTarget} moves department`,
-      body:
-        `${moveTarget} is changing team. Move the account to the correct OU, add the groups ` +
-        'the new role needs and remove the ones it does not. Removing the old access is the ' +
-        'half people forget — that is how privilege creeps.',
-      prepare: ({ dir }) => {
-        const u = dir.getUserByUsername(moveTarget);
-        return u ? [u.id] : [];
-      },
-    });
+    const u = deps.dir.getUserByUsername(moveTarget);
+    if (u && u.groupIds.length > 0) {
+      const currentGroups = u.groupIds
+        .map((id) => deps.dir.getGroup(id)?.name)
+        .filter(Boolean) as string[];
+      const otherDepts = DEPARTMENTS.filter((d) => d !== u.department);
+      const targetDept = otherDepts.find((d) => {
+        const targetGroups = (DEPT_TO_GROUPS[d] ?? []).filter(
+          (g) => env.groupNames.includes(g) && !currentGroups.includes(g),
+        );
+        return targetGroups.length > 0;
+      });
+
+      if (targetDept) {
+        const newGroups = (DEPT_TO_GROUPS[targetDept] ?? []).filter(
+          (g) => env.groupNames.includes(g) && !currentGroups.includes(g),
+        );
+        const sourceOu = u.ouId ? deps.dir.getOu(u.ouId)?.name ?? 'domain root' : 'domain root';
+        const targetOu = env.ouNames.find((o) => o !== sourceOu) ?? env.ouNames[0] ?? 'OU';
+        used.push(moveTarget);
+        out.push({
+          id: `mover-${moveTarget}`,
+          kind: 'transfer',
+          priority: 'normal',
+          subject: `Transfer: ${moveTarget} to ${targetDept}`,
+          body:
+            `${u.displayName} is moving from the ${u.department} team to the ${targetDept} team. ` +
+            `Move the account from the ${sourceOu} OU to the ${targetOu} OU. ` +
+            `Change the department to ${targetDept}. ` +
+            `Remove them from these groups they no longer need: ${currentGroups.join(', ')}. ` +
+            `Add them to the groups the ${targetDept} role needs: ${newGroups.join(', ')}. ` +
+            'Removing the old access is the half people forget — that is how privilege creeps.',
+          prepare: () => [u.id],
+        });
+      }
+    }
+  }
+
+  // MFA — (re)enrolment. This is a two-step resolution: clear, then enrol.
+  const mfaTarget = pick();
+  if (mfaTarget) {
+    const mfaUser = deps.dir.getUserByUsername(mfaTarget);
+    if (mfaUser && mfaUser.status === 'active') {
+      used.push(mfaTarget);
+      out.push({
+        id: `mfa-${mfaTarget}`,
+        kind: 'mfa-issue',
+        priority: 'normal',
+        subject: `MFA reset: ${mfaTarget} needs a new factor`,
+        body:
+          `${mfaUser.displayName} (${mfaTarget}) needs a working second factor. ` +
+          'Clear any existing MFA registration with Reset-MfaRegistration, then enrol a new ' +
+          'factor with Set-MfaMethod (totp, fido2, sms, or push). Confirm the new method is ' +
+          'active with Get-UserDetails before closing the ticket.',
+        prepare: () => [mfaUser.id],
+      });
+    }
   }
 
   // Keep provisioning work flowing alongside operations.
@@ -364,7 +425,7 @@ function scenariosFor(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
     // Privileged-access work joins the ordinary queue once the domain is
     // staffed: PIM is a day-to-day discipline, not a separate mode.
     operating: () => [
-      ...operatingScenarios(env),
+      ...operatingScenarios(env, deps),
       ...pimScenarios(env, deps),
       ...cloudScenarios(env, deps),
     ],
@@ -428,8 +489,10 @@ async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Sce
     `Task: ${scenario.body}`,
     '',
     'Rewrite it as a short ticket from a colleague. Keep every account name, group name and',
-    'OU name exactly as given. Do not invent people, systems or accounts that are not listed',
-    'above. Do not add steps that were not in the task. Two or three sentences.',
+    'OU name exactly as given. Use the same account name in the subject and the body; do not',
+    'rename, swap, or replace any named person, group or OU. Do not invent people, systems or',
+    'accounts that are not listed above. Do not add steps that were not in the task. Two or',
+    'three sentences.',
     '',
     'Reply with JSON only: {"subject": "...", "body": "..."}',
   ].join('\n');
@@ -444,13 +507,16 @@ async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Sce
     const data = (await res.json()) as { response?: string };
     const parsed = JSON.parse(data.response ?? '{}') as { subject?: string; body?: string };
 
-    // Guard against a model that drops something it was told to name. The
-    // rewrite supplies wording; it does not get to change what the ticket is
-    // about, and a ticket that says "create the groups we agreed on" instead
-    // of naming them is one nobody can action and the reviewer will fail.
+    // Guard against a model that drops something it was told to name, renames it,
+    // or swaps in a different real name from the environment. The rewrite supplies
+    // wording; it does not get to change what the ticket is about.
     const required = namesToKeep(scenario, env);
-    const kept = required.every((n) => `${parsed.subject ?? ''} ${parsed.body ?? ''}`.includes(n));
-    if (!parsed.subject || !parsed.body || !kept) return scenario;
+    const outputText = `${parsed.subject} ${parsed.body}`;
+    const kept = required.every((n) => outputText.includes(n));
+    const noExtraNames = [...env.staffLogons, ...env.groupNames, ...env.ouNames].every(
+      (n) => !outputText.includes(n) || `${scenario.subject} ${scenario.body}`.includes(n),
+    );
+    if (!parsed.subject || !parsed.body || !kept || !noExtraNames) return scenario;
 
     return { ...scenario, subject: parsed.subject, body: parsed.body };
   } catch {
@@ -533,7 +599,7 @@ export async function generateTickets(
   options: { useOllama?: boolean; max?: number } = {},
 ): Promise<GenerateResult> {
   const env = readEnvironment(deps.dir);
-  const candidates = notAlreadyOpen(scenariosFor(env, deps), deps).slice(0, options.max ?? 3);
+  const candidates = notAlreadyOpen(scenariosFor(env, deps), deps).slice(0, options.max ?? 4);
 
   if (candidates.length === 0) {
     return { raised: 0, usedOllama: false, stage: env.stage };
