@@ -362,7 +362,16 @@ export interface AuditEvent {
     | 'review.opened'
     | 'review.approved'
     | 'review.revoked'
-    | 'review.completed';
+    | 'review.completed'
+    | 'computer.info.viewed'
+    | 'process.listed'
+    | 'service.listed'
+    | 'event.log.viewed'
+    | 'windows.update.listed'
+    | 'network.ping'
+    | 'dns.resolve'
+    | 'gpo.report.viewed'
+    | 'command.listed';
   /** Polysemous target: UserId | GroupId | RoleId | AppId | TicketId | SessionId */
   targetId?: string;
   /** For events that involve a subject distinct from the actor/target (group/role grants). */
@@ -484,7 +493,16 @@ export type ValidatorKind =
   | 'pim-activated'
   | 'pim-approved'
   | 'pim-deactivated'
-  | 'pim-removed';
+  | 'pim-removed'
+  | 'computer-info-viewed'
+  | 'process-listed'
+  | 'service-listed'
+  | 'event-log-viewed'
+  | 'windows-update-listed'
+  | 'network-ping'
+  | 'dns-resolve'
+  | 'gpo-report-viewed'
+  | 'command-listed';
 
 export interface LabStep {
   id: string;

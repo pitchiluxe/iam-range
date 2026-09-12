@@ -804,6 +804,166 @@ export const MANUAL: readonly Chapter[] = [
       },
     ],
   },
+  {
+    id: 'year-1',
+    title: 'Year 1 · Help Desk and Workstation Foundations',
+    summary:
+      'Workstation, network, Windows administration, Group Policy, PowerShell discovery and ' +
+      'help-desk tickets — the foundation for every later IAM lab.',
+    lessons: [
+      {
+        id: 'y1-host',
+        title: 'Host and Hyper-V readiness',
+        objective: 'Review the OMARI lab prerequisites before building the real Hyper-V VMs.',
+        why:
+          'A simulated desktop is not a substitute for a real domain. The help-desk and IAM work ' +
+          'that follows depends on a host that can run Hyper-V, a private switch, and a domain ' +
+          'controller. Knowing how to check those prerequisites is the first step.',
+        steps: [
+          { do: 'Open the Career Lab and read the Year 1 overview.', app: 'career-lab' } as ManualStep,
+          { do: 'Open the omari-lab README and note the host requirements.' },
+          { do: 'Review the Test-HostReadiness script in File Explorer.' },
+          { do: 'Sign in to the simulated workstation to begin the lab.', cmdlet: 'Get-ComputerInfo', example: 'Get-ComputerInfo' },
+        ],
+        verify:
+          'The Career Lab is open, the README is located, and Get-ComputerInfo reports the ' +
+          'simulated OMARI-WS01 identity.',
+        interview:
+          '"What would stop you from building a Hyper-V lab on a workstation?" Virtualisation must ' +
+          'be enabled in BIOS, Hyper-V must be installed, and there must be enough RAM and disk for ' +
+          'a domain controller and a client.',
+        app: 'career-lab',
+      },
+      {
+        id: 'y1-network',
+        title: 'Network connectivity and name resolution',
+        objective: 'Test basic network reachability and DNS resolution for OMARI hosts.',
+        why:
+          'Most "cannot sign in" and "drive is not available" tickets are network or DNS problems ' +
+          'before they are identity problems. Ping, nslookup and the network mindset come first.',
+        steps: [
+          { do: 'Ping the simulated default gateway to confirm the switch is up.', cmdlet: 'Test-Connection', example: 'Test-Connection -Target 10.10.10.1' },
+          { do: 'Resolve the domain controller by name.', cmdlet: 'Resolve-DnsName', example: 'Resolve-DnsName -Name dc01.omari.test' },
+          { do: 'Compare the result to the IP address shown in the network diagram.' },
+        ],
+        verify:
+          'The ping succeeds and Resolve-DnsName returns 10.10.10.10 for the domain controller.',
+        interview:
+          '"A user cannot reach an internal host by name but can reach it by IP. What is the most ' +
+          'likely cause?" DNS resolution. The client is not using the domain controller as a DNS ' +
+          'server, or the record is missing.',
+        app: 'terminal',
+      },
+      {
+        id: 'y1-windows',
+        title: 'Windows administration basics',
+        objective: 'Inspect the simulated workstation, its services, processes and security log.',
+        why:
+          'An IAM analyst is often asked to explain why an account is failing, why a service will ' +
+          'not start, or whether an event log shows an attack. Windows admin literacy is the ' +
+          'foundation of that explanation.',
+        steps: [
+          { do: 'Review the computer identity and operating system.', cmdlet: 'Get-ComputerInfo' },
+          { do: 'List the critical services and check that AD and DNS are running.', cmdlet: 'Get-Service', example: "Get-Service -Name 'AD WS'" },
+          { do: 'Look at recent processes to spot anything unusual.', cmdlet: 'Get-Process', example: 'Get-Process -Name svchost' },
+          { do: 'Read the security log for sign-in and group-change events.', cmdlet: 'Get-EventLog', example: 'Get-EventLog -LogName Security' },
+        ],
+        verify:
+          'Get-Service shows AD WS and DNS running, Get-Process returns a filtered list, and the ' +
+          'security log shows recent sign-in and group-change events.',
+        interview:
+          '"Where would you look first if an account keeps locking out?" The security log for ' +
+          'event 4625, and then the services that handle authentication.',
+        app: 'terminal',
+      },
+      {
+        id: 'y1-gpo',
+        title: 'Group Policy overview',
+        objective: 'Review the baseline group policies that apply to OMARI users and computers.',
+        why:
+          'Group Policy is how AD enforces password, lockout, drive maps and many security ' +
+          'settings. An IAM analyst who cannot read a GPO cannot explain why access behaves the way ' +
+          'it does.',
+        steps: [
+          { do: 'List the baseline group policy objects.', cmdlet: 'Get-GpoReport', example: 'Get-GpoReport' },
+          { do: 'Filter to the password and lockout baseline.', cmdlet: 'Get-GpoReport', example: 'Get-GpoReport -Name Baseline' },
+          { do: 'Compare the simulated policy to the values set in the IAM Range manual.' },
+        ],
+        verify:
+          'Get-GpoReport lists Baseline, Drive Maps and AppLocker, and the Baseline policy shows ' +
+          'password and lockout settings.',
+        interview:
+          '"How does Group Policy affect an IAM analyst?" It enforces the password and lockout ' +
+          'policy that the analyst sees in the password-reset and account-unlock tickets.',
+        app: 'terminal',
+      },
+      {
+        id: 'y1-powershell',
+        title: 'PowerShell help and discovery',
+        objective: 'Learn how to discover cmdlets and read their syntax in the terminal.',
+        why:
+          'The terminal in this lab has a fixed set of cmdlets, but a real Windows admin must be ' +
+          'able to discover commands. Get-Help and Get-Command are the two discovery tools to start ' +
+          'with.',
+        steps: [
+          { do: 'Open the terminal and get help for New-ADUser.', cmdlet: 'Get-Help', example: 'Get-Help -Name New-ADUser' },
+          { do: 'List every available command and search for one that works with groups.', cmdlet: 'Get-Command', example: 'Get-Command -Name *Group*' },
+        ],
+        verify:
+          'Get-Help returns the synopsis for New-ADUser, and Get-Command returns the AD group ' +
+          'cmdlets in the registry.',
+        interview:
+          '"You do not know the exact cmdlet to add a user to a group. What do you do first?" Use ' +
+          'Get-Help or Get-Command to find Add-ADGroupMember and read its parameters.',
+        app: 'terminal',
+      },
+      {
+        id: 'y1-helpdesk',
+        title: 'Help-desk ticket practice',
+        objective: 'Resolve common help-desk tickets using the simulated queue.',
+        why:
+          'Many IAM analysts start on a help desk. The tickets they see — lockouts, password ' +
+          'resets, group membership, disabled accounts — are the same symptoms that later become ' +
+          'identity-governance findings.',
+        steps: [
+          { do: 'Open the Ticket Queue and review the open help-desk tickets.', app: 'ticket-console' } as ManualStep,
+          { do: 'Find a locked-out account and check the audit log for failures.', cmdlet: 'Get-ADUser' },
+          { do: 'Unlock the account and clear the failure count.', cmdlet: 'Unlock-ADAccount' },
+          { do: 'Resolve a wrong-group ticket by adding or removing the right group.', cmdlet: 'Add-ADGroupMember' },
+        ],
+        verify:
+          'Two help-desk tickets are resolved, one lockout is cleared, and one group membership is ' +
+          'corrected.',
+        interview:
+          '"What is the difference between a disabled account and a locked account?" Disabled is ' +
+          'administrative; locked is the result of too many bad passwords and usually clears ' +
+          'automatically or with an unlock.',
+        app: 'ticket-console',
+      },
+      {
+        id: 'y1-capstone',
+        title: 'Year 1 capstone: document and escalate',
+        objective: 'Write an incident report and export an evidence pack from the Lab Plan.',
+        why:
+          'The help-desk stage teaches the habit of evidence. Before moving to Year 2, the learner ' +
+          'produces an incident report and a Lab Plan evidence pack that an interviewer or auditor ' +
+          'could review.',
+        steps: [
+          { do: 'Open Writer and write a short incident report for one of the help-desk tickets.', app: 'writer' } as ManualStep,
+          { do: 'Include the symptoms, the evidence, the fix, and the verification.' },
+          { do: 'Open the Lab Plan and export the evidence pack for the course.', app: 'lab-plan' } as ManualStep,
+          { do: 'Save the pack to the Documents folder and check that the Year 1 capstone is marked done.' },
+        ],
+        verify:
+          'Writer contains an incident report and the Lab Plan evidence pack is exported to ' +
+          'Documents.',
+        interview:
+          '"Why does an IAM analyst keep evidence of a help-desk fix?" Because the same account ' +
+          'might be involved in a later access review, audit or security incident.',
+        app: 'lab-plan',
+      },
+    ],
+  },
 ];
 
 export const ALL_LESSONS: readonly Lesson[] = MANUAL.flatMap((c) => c.lessons);

@@ -1600,6 +1600,237 @@ export const CAPABILITIES: readonly IamCapability[] = [
       return ok(`${events.length} event(s) exported. Copy the CSV below and open it in Sheets.`, [{ CSV: csv }]);
     },
   },
+
+  // -- Year 1 Workstation / Help Desk diagnostics --------------------------------
+  {
+    id: 'computer.info',
+    label: 'Computer Information',
+    synopsis: 'Show the simulated workstation identity and operating system.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-ComputerInfo',
+    readOnly: true,
+    validator: 'computer-info-viewed',
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'computer.info.viewed',
+        note: 'Reviewed workstation information.',
+      });
+      return ok('Workstation information.', [
+        { Property: 'Name', Value: 'OMARI-WS01' },
+        { Property: 'Domain', Value: COMPANY.domain.toUpperCase().split('.')[0] },
+        { Property: 'OS', Value: 'Windows 11 Enterprise' },
+        { Property: 'Version', Value: '10.0.26100' },
+        { Property: 'DomainJoined', Value: 'True' },
+      ]);
+    },
+  },
+  {
+    id: 'process.list',
+    label: 'Processes',
+    synopsis: 'List a small set of running processes for troubleshooting.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-Process',
+    readOnly: true,
+    validator: 'process-listed',
+    params: [{ name: 'Name', label: 'Process name', kind: 'text', required: false }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const all = [
+        { Name: 'lsass', Id: 512, WorkingSet: 14200 },
+        { Name: 'svchost', Id: 1024, WorkingSet: 9600 },
+        { Name: 'explorer', Id: 2048, WorkingSet: 58000 },
+        { Name: 'powershell', Id: 4096, WorkingSet: 32000 },
+        { Name: 'mstsc', Id: 8192, WorkingSet: 21000 },
+      ];
+      const filter = a.Name?.toLowerCase() ?? '';
+      const rows = filter ? all.filter((r) => r.Name.toLowerCase().includes(filter)) : all;
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'process.listed',
+        note: `Listed ${rows.length} process(es).`,
+      });
+      return ok(`${rows.length} process(es).`, rows);
+    },
+  },
+  {
+    id: 'service.list',
+    label: 'Services',
+    synopsis: 'List critical Windows services and their status.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-Service',
+    readOnly: true,
+    validator: 'service-listed',
+    params: [{ name: 'Name', label: 'Service name', kind: 'text', required: false }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const all = [
+        { Name: 'AD WS', Status: 'Running' },
+        { Name: 'DNS Server', Status: 'Running' },
+        { Name: 'DHCP Client', Status: 'Running' },
+        { Name: 'Spooler', Status: 'Stopped' },
+        { Name: 'Windows Update', Status: 'Running' },
+      ];
+      const filter = a.Name?.toLowerCase() ?? '';
+      const rows = filter ? all.filter((r) => r.Name.toLowerCase().includes(filter)) : all;
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'service.listed',
+        note: `Listed ${rows.length} service(s).`,
+      });
+      return ok(`${rows.length} service(s).`, rows);
+    },
+  },
+  {
+    id: 'eventlog.list',
+    label: 'Event Log',
+    synopsis: 'Show recent security or system events for investigation.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-EventLog',
+    readOnly: true,
+    validator: 'event-log-viewed',
+    params: [{ name: 'LogName', label: 'Log name', kind: 'text', required: true }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const log = a.LogName?.trim().toLowerCase() ?? '';
+      if (!log) return err('LogName is required.');
+      const rows = [
+        { Time: '2026-06-01 08:14', Id: 4625, Level: 'Warning', Message: 'An account failed to log on.' },
+        { Time: '2026-06-01 08:15', Id: 4740, Level: 'Information', Message: 'A user account was unlocked.' },
+        { Time: '2026-06-01 09:03', Id: 4728, Level: 'Information', Message: 'A member was added to a security-enabled global group.' },
+      ];
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'event.log.viewed',
+        note: `Read the ${log} log.`,
+      });
+      return ok(`${rows.length} ${log} event(s).`, rows);
+    },
+  },
+  {
+    id: 'windowsupdate.list',
+    label: 'Windows Updates',
+    synopsis: 'List pending or installed updates for patch review.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-WindowsUpdate',
+    readOnly: true,
+    validator: 'windows-update-listed',
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'windows.update.listed',
+        note: 'Reviewed Windows update status.',
+      });
+      return ok('3 update(s) pending.', [
+        { KB: 'KB5034441', Title: 'Windows 11 Cumulative Update', Status: 'Pending' },
+        { KB: 'KB5034440', Title: '.NET 6.0.32 Security Update', Status: 'Pending' },
+        { KB: 'KB5034439', Title: 'Defender Antivirus Definition', Status: 'Installed' },
+      ]);
+    },
+  },
+  {
+    id: 'network.ping',
+    label: 'Ping',
+    synopsis: 'Send a simulated ICMP request to a target host.',
+    consoleSection: 'audit',
+    cmdlet: 'Test-Connection',
+    readOnly: true,
+    validator: 'network-ping',
+    params: [{ name: 'Target', label: 'Target host', kind: 'text', required: true }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const target = a.Target?.trim() ?? '';
+      if (!target) return err('Target is required.');
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'network.ping',
+        note: `Pinged ${target}.`,
+      });
+      return ok('Ping succeeded.', [
+        { Source: 'OMARI-WS01', Target: target, Time: '<1ms', TTL: 128, Status: 'Success' },
+      ]);
+    },
+  },
+  {
+    id: 'dns.resolve',
+    label: 'Resolve DNS',
+    synopsis: 'Resolve a host name to an IP address.',
+    consoleSection: 'audit',
+    cmdlet: 'Resolve-DnsName',
+    readOnly: true,
+    validator: 'dns-resolve',
+    params: [{ name: 'Name', label: 'Host name', kind: 'text', required: true }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const name = a.Name?.trim().toLowerCase() ?? '';
+      if (!name) return err('Name is required.');
+      const ip = name.includes('omari.test')
+        ? '10.10.10.10'
+        : name.includes('google')
+          ? '142.250.80.46'
+          : '1.1.1.1';
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'dns.resolve',
+        note: `Resolved ${name} to ${ip}.`,
+      });
+      return ok('DNS query succeeded.', [{ Name: name, Type: 'A', IP: ip }]);
+    },
+  },
+  {
+    id: 'gpo.report',
+    label: 'Group Policy Report',
+    synopsis: 'Show the baseline group policy objects that apply to the estate.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-GpoReport',
+    readOnly: true,
+    validator: 'gpo-report-viewed',
+    params: [{ name: 'Name', label: 'GPO name', kind: 'text', required: false }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const filter = a.Name?.toLowerCase() ?? '';
+      const all = [
+        { Name: 'Baseline', Status: 'Linked', Settings: 'Password and lockout' },
+        { Name: 'Drive Maps', Status: 'Linked', Settings: 'H: \\\_fs01\\shares' },
+        { Name: 'AppLocker', Status: 'Linked', Settings: 'Deny by default' },
+      ];
+      const rows = filter ? all.filter((r) => r.Name.toLowerCase().includes(filter)) : all;
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'gpo.report.viewed',
+        note: `Reviewed ${rows.length} GPO(s).`,
+      });
+      return ok(`${rows.length} group policy object(s).`, rows);
+    },
+  },
+  {
+    id: 'command.list',
+    label: 'List Commands',
+    synopsis: 'List the cmdlets and commands available in the IAM Range terminal.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-Command',
+    readOnly: true,
+    validator: 'command-listed',
+    params: [{ name: 'Name', label: 'Command name', kind: 'text', required: false }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const all = Object.keys(CAPABILITY_BY_CMDLET).sort();
+      const filter = a.Name?.toLowerCase() ?? '';
+      const rows = (filter ? all.filter((c) => c.toLowerCase().includes(filter)) : all).map(
+        (c) => ({ Command: c }),
+      );
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'command.listed',
+        note: `Listed ${rows.length} command(s).`,
+      });
+      return ok(`${rows.length} command(s).`, rows);
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------

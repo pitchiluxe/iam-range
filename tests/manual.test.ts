@@ -100,6 +100,8 @@ describe('manual integrity', () => {
       // The IAM analyst lab is the capstone: it uses the structure, groups,
       // accounts and evidence already built in the earlier chapters.
       'analyst-lab',
+      // Year 1 is the foundation: help-desk, workstation and network skills.
+      'year-1',
     ]);
   });
 });

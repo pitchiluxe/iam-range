@@ -491,6 +491,87 @@ const RULES: Record<string, Rule> = {
       'evidence pack, then save each one.',
     actions: ['document.saved'],
   },
+
+  // --- 7. Year 1 Help Desk and Workstation Foundations ---
+  'y1-host': {
+    done: (s) => has(s, 'signin.success') && has(s, 'computer.info.viewed'),
+    started: (s) => has(s, 'signin.success'),
+    evidence: (s) =>
+      has(s, 'computer.info.viewed')
+        ? 'Workstation information reviewed after sign-in.'
+        : 'Signed in but workstation details have not been inspected.',
+    outstanding:
+      'Sign in to the workstation, open the Career Lab, and run Get-ComputerInfo to confirm the ' +
+      'simulated OMARI-WS01 identity.',
+    actions: ['signin.success', 'computer.info.viewed'],
+  },
+  'y1-network': {
+    done: (s) => has(s, 'network.ping') && has(s, 'dns.resolve'),
+    started: (s) => has(s, 'network.ping') || has(s, 'dns.resolve'),
+    evidence: (s) =>
+      `${count(s, 'network.ping')} ping(s), ${count(s, 'dns.resolve')} DNS lookup(s).`,
+    outstanding:
+      'Test connectivity with Test-Connection and resolve the domain controller with ' +
+      'Resolve-DnsName.',
+    actions: ['network.ping', 'dns.resolve'],
+  },
+  'y1-windows': {
+    done: (s) => has(s, 'computer.info.viewed') && has(s, 'service.listed') && has(s, 'event.log.viewed'),
+    started: (s) => has(s, 'computer.info.viewed'),
+    evidence: (s) =>
+      `Computer: ${count(s, 'computer.info.viewed')}, services: ${count(s, 'service.listed')}, ` +
+      `security log: ${count(s, 'event.log.viewed')}.`,
+    outstanding:
+      'Run Get-ComputerInfo, Get-Service, Get-Process and Get-EventLog to inspect the workstation.',
+    actions: ['computer.info.viewed', 'service.listed', 'process.listed', 'event.log.viewed'],
+  },
+  'y1-gpo': {
+    done: (s) => has(s, 'gpo.report.viewed'),
+    started: (s) => has(s, 'gpo.report.viewed'),
+    evidence: (s) =>
+      has(s, 'gpo.report.viewed')
+        ? `${count(s, 'gpo.report.viewed')} GPO report(s) reviewed.`
+        : 'No group policy report has been viewed.',
+    outstanding: 'Run Get-GpoReport to see the baseline, drive-map and AppLocker policies.',
+    actions: ['gpo.report.viewed'],
+  },
+  'y1-powershell': {
+    done: (s) => has(s, 'command.listed'),
+    started: (s) => has(s, 'command.listed'),
+    evidence: (s) =>
+      has(s, 'command.listed')
+        ? `${count(s, 'command.listed')} command listing(s).`
+        : 'The available cmdlets have not been listed.',
+    outstanding:
+      'Use Get-Help to read a cmdlet and Get-Command to list the available commands in the ' +
+      'terminal.',
+    actions: ['command.listed'],
+  },
+  'y1-helpdesk': {
+    done: (s) =>
+      has(s, 'account.unlock') &&
+      has(s, 'group.add') &&
+      count(s, 'ticket.resolved') >= 2,
+    started: (s) => has(s, 'ticket.resolved') || has(s, 'account.unlock'),
+    evidence: (s) =>
+      `${count(s, 'account.unlock')} unlock(s), ${count(s, 'group.add')} group grant(s), ` +
+      `${count(s, 'ticket.resolved')} ticket(s) resolved.`,
+    outstanding:
+      'Resolve at least two help-desk tickets: unlock an account and fix a group-membership ' +
+      'problem.',
+    actions: ['account.unlock', 'group.add', 'ticket.resolved'],
+  },
+  'y1-capstone': {
+    done: (s) => evidencePackExists() && has(s, 'computer.info.viewed'),
+    started: (s) => has(s, 'computer.info.viewed'),
+    evidence: (s) =>
+      evidencePackExists()
+        ? 'Evidence pack exported and workstation information reviewed.'
+        : 'The Year 1 evidence pack has not been exported from Lab Plan.',
+    outstanding:
+      'Write an incident report in Writer and export the Lab Plan evidence pack to Documents.',
+    actions: ['ticket.review.passed'],
+  },
 };
 
 /** Every lesson id the manual defines, in order. */
