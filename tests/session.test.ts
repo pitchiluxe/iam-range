@@ -49,7 +49,7 @@ describe('VmSession boot', () => {
     session.dir.createUser({
       username: 'temp.person',
       displayName: 'Temp',
-      email: 't@iamlab.com',
+      email: 't@omari.test',
       department: 'IT',
       title: 'Temp',
       mfa: 'none',

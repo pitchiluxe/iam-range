@@ -390,8 +390,8 @@ describe('Windows shell built-ins', () => {
 
   it('set reports the domain session, from config', () => {
     const out = dispatch('set', ctx).output;
-    expect(out).toContain('COMPUTERNAME=IAMLAB-WS01');
-    expect(out).toContain('USERDOMAIN=IAMLAB');
+    expect(out).toContain('COMPUTERNAME=OMARI-WS01');
+    expect(out).toContain('USERDOMAIN=OMARI');
   });
 
   it('pushd and popd go somewhere and come back', () => {
@@ -412,11 +412,11 @@ describe('Windows shell built-ins', () => {
 
   it('whoami reports the simulated operator, not the real machine user', () => {
     const out = dispatch('whoami', ctx).output;
-    expect(out).toBe(String.raw`IAMLAB\admin`);
+    expect(out).toBe(String.raw`OMARI\admin`);
   });
 
   it('hostname and ipconfig describe the simulated workstation', () => {
-    expect(dispatch('hostname', ctx).output).toBe('IAMLAB-WS01');
+    expect(dispatch('hostname', ctx).output).toBe('OMARI-WS01');
     const ip = dispatch('ipconfig', ctx).output;
     expect(ip).toContain('IPv4 Address');
     expect(ip).toContain('10.20.4.31');

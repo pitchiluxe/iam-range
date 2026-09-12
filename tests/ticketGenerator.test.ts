@@ -32,7 +32,7 @@ function buildTo(s: VmSession, stage: 'structured' | 'ready-to-staff' | 'operati
   s.dir.createUser({
     username: 'jdoe',
     displayName: 'John Doe',
-    email: 'jdoe@iamlab.com',
+    email: 'jdoe@omari.test',
     department: 'Help Desk',
     title: 'Service Desk Analyst',
     mfa: 'none',
@@ -190,7 +190,7 @@ describe('hybrid-identity scenarios', () => {
     expect(s.dir.getUserByUsername(named!)?.status).toBe('disabled');
 
     const tenant = s.cloud.okta;
-    expect(tenant.find(`${named}@iamlab.com`)?.status).toBe('active');
+    expect(tenant.find(`${named}@omari.test`)?.status).toBe('active');
     expect(tenant.pendingDelta().some((d) => d.change === 'disable')).toBe(true);
   });
 

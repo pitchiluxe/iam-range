@@ -28,7 +28,7 @@ function operatingEnv(): EnvironmentState {
   dir.createUser({
     username: 'jdoe',
     displayName: 'John Doe',
-    email: 'jdoe@iamlab.com',
+    email: 'jdoe@omari.test',
     department: 'Help Desk',
     title: 'Analyst',
     mfa: 'none',

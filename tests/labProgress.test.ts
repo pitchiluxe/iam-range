@@ -106,7 +106,7 @@ describe('doing the work moves the plan', () => {
     const user = s.dir.createUser({
       username: 'jdoe',
       displayName: 'John Doe',
-      email: 'jdoe@iamlab.com',
+      email: 'jdoe@omari.test',
       department: 'Help Desk',
       title: 'Analyst',
       mfa: 'none',
@@ -130,7 +130,7 @@ describe('doing the work moves the plan', () => {
     const user = s.dir.createUser({
       username: 'mchen',
       displayName: 'Maya Chen',
-      email: 'mchen@iamlab.com',
+      email: 'mchen@omari.test',
       department: 'HR',
       title: 'Partner',
       mfa: 'none',

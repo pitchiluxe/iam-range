@@ -28,7 +28,7 @@ function setup() {
     dir.createUser({
       username,
       displayName,
-      email: `${username}@iamlab.com`,
+      email: `${username}@omari.test`,
       department: 'Finance',
       title: 'Analyst',
       mfa: 'none',
@@ -65,23 +65,23 @@ describe('authority has a direction', () => {
   it('refuses to disable a synced account in the cloud', () => {
     // In a real tenant this either fails or is silently reverted at the next
     // cycle. Refusing teaches where the change belongs.
-    const res = ctx.okta.disable('rpatel@iamlab.com', ACTOR);
+    const res = ctx.okta.disable('rpatel@omari.test', ACTOR);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/Active Directory/);
-    expect(ctx.okta.find('rpatel@iamlab.com')?.status).toBe('active');
+    expect(ctx.okta.find('rpatel@omari.test')?.status).toBe('active');
   });
 
   it('allows disabling a cloud-only account, which nothing on premises owns', () => {
-    ctx.okta.createCloudOnly('contractor@iamlab.com', 'Temp Contractor', ACTOR);
-    expect(ctx.okta.disable('contractor@iamlab.com', ACTOR).ok).toBe(true);
-    expect(ctx.okta.find('contractor@iamlab.com')?.status).toBe('disabled');
+    ctx.okta.createCloudOnly('contractor@omari.test', 'Temp Contractor', ACTOR);
+    expect(ctx.okta.disable('contractor@omari.test', ACTOR).ok).toBe(true);
+    expect(ctx.okta.find('contractor@omari.test')?.status).toBe('disabled');
   });
 
   it('a disable on premises reaches the cloud through a sync', () => {
     const u = ctx.dir.getUserByUsername('rpatel')!;
     ctx.dir.disableUser(u.id, ACTOR);
     ctx.okta.sync(ACTOR);
-    expect(ctx.okta.find('rpatel@iamlab.com')?.status).toBe('disabled');
+    expect(ctx.okta.find('rpatel@omari.test')?.status).toBe('disabled');
   });
 });
 
@@ -96,7 +96,7 @@ describe('sync is not instant', () => {
 
     // This is "I disabled them and they can still get in", reproduced: the
     // cloud is not lagging in some abstract sense, it is genuinely enabled.
-    expect(okta.find('rpatel@iamlab.com')?.status).toBe('active');
+    expect(okta.find('rpatel@omari.test')?.status).toBe('active');
   });
 
   it('names the accounts the tenant has not caught up on', () => {
@@ -108,7 +108,7 @@ describe('sync is not instant', () => {
 
     const delta = okta.pendingDelta();
     expect(delta).toHaveLength(1);
-    expect(delta[0]!.upn).toBe('rpatel@iamlab.com');
+    expect(delta[0]!.upn).toBe('rpatel@omari.test');
     expect(delta[0]!.change).toBe('disable');
   });
 
@@ -134,7 +134,7 @@ describe('deprovisioning stops where provisioning stopped', () => {
     mk('rpatel', 'Ravi Patel');
     okta.connect();
     okta.registerApp('Payroll', scim);
-    okta.grantAppAccount('Payroll', 'rpatel@iamlab.com');
+    okta.grantAppAccount('Payroll', 'rpatel@omari.test');
     okta.sync(ACTOR);
 
     dir.disableUser(dir.getUserByUsername('rpatel')!.id, ACTOR);
@@ -144,16 +144,16 @@ describe('deprovisioning stops where provisioning stopped', () => {
 
   it('without SCIM the app account keeps working after the person is disabled', () => {
     const { okta } = leaverWith(false);
-    expect(okta.find('rpatel@iamlab.com')?.status).toBe('disabled');
+    expect(okta.find('rpatel@omari.test')?.status).toBe('disabled');
     // Disabled at the IdP, still live inside the application. This is the
     // leaver gap an auditor asks about, and it is invisible from the tenant.
-    expect(okta.getApp('Payroll')?.accounts.get('rpatel@iamlab.com')).toBe('active');
+    expect(okta.getApp('Payroll')?.accounts.get('rpatel@omari.test')).toBe('active');
     expect(okta.orphanedAppAccounts()).toHaveLength(1);
   });
 
   it('with SCIM the deactivation reaches inside the app', () => {
     const { okta } = leaverWith(true);
-    expect(okta.getApp('Payroll')?.accounts.get('rpatel@iamlab.com')).toBe('deactivated');
+    expect(okta.getApp('Payroll')?.accounts.get('rpatel@omari.test')).toBe('deactivated');
     expect(okta.orphanedAppAccounts()).toHaveLength(0);
   });
 
@@ -172,11 +172,11 @@ describe('soft match fails', () => {
   it('a cloud-only account with the same UPN becomes a duplicate on sync', () => {
     const { okta, mk } = setup();
     okta.connect();
-    okta.createCloudOnly('rpatel@iamlab.com', 'Ravi Patel (cloud)', ACTOR);
+    okta.createCloudOnly('rpatel@omari.test', 'Ravi Patel (cloud)', ACTOR);
     mk('rpatel', 'Ravi Patel');
 
     const res = okta.sync(ACTOR);
-    expect('conflicts' in res && res.conflicts).toContain('rpatel@iamlab.com');
+    expect('conflicts' in res && res.conflicts).toContain('rpatel@omari.test');
     expect(okta.duplicates()).toHaveLength(2);
   });
 
@@ -195,15 +195,15 @@ describe('sessions outlive the account', () => {
     mk('rpatel', 'Ravi Patel');
     okta.connect();
     okta.sync(ACTOR);
-    okta.openSession('rpatel@iamlab.com');
+    okta.openSession('rpatel@omari.test');
 
     dir.disableUser(dir.getUserByUsername('rpatel')!.id, ACTOR);
     okta.sync(ACTOR);
     // The window between disabling and session expiry is exactly this.
-    expect(okta.find('rpatel@iamlab.com')?.sessions).toBe(1);
+    expect(okta.find('rpatel@omari.test')?.sessions).toBe(1);
 
-    expect(okta.revokeSessions('rpatel@iamlab.com', ACTOR).ok).toBe(true);
-    expect(okta.find('rpatel@iamlab.com')?.sessions).toBe(0);
+    expect(okta.revokeSessions('rpatel@omari.test', ACTOR).ok).toBe(true);
+    expect(okta.find('rpatel@omari.test')?.sessions).toBe(0);
   });
 });
 
@@ -261,7 +261,7 @@ describe('cloud cmdlets', () => {
       expect(res.rows).toHaveLength(1);
       expect(res.message).toMatch(/out of date/);
     }
-    expect(okta.find('rpatel@iamlab.com')?.status).toBe('active');
+    expect(okta.find('rpatel@omari.test')?.status).toBe('active');
   });
 
   it('Set-ScimProvisioning defaults to switching it on', () => {
@@ -284,7 +284,7 @@ describe('cloud cmdlets', () => {
     cmd('Start-DirectorySync').run(ctx, { Provider: 'okta' });
     const res = cmd('Disable-CloudUser').run(ctx, {
       Provider: 'okta',
-      Upn: 'rpatel@iamlab.com',
+      Upn: 'rpatel@omari.test',
     });
     expect(res.ok).toBe(false);
   });

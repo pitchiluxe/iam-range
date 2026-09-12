@@ -50,7 +50,7 @@ describe('a user is placed in an OU at creation', () => {
   const person = {
     username: 'jdoe',
     displayName: 'John Doe',
-    email: 'jdoe@iamlab.com',
+    email: 'jdoe@omari.test',
     department: 'Help Desk',
     title: 'Service Desk Analyst',
   };
@@ -69,7 +69,7 @@ describe('a user is placed in an OU at creation', () => {
   it('is listed under its OU and not also under CN=Users', () => {
     const { dir, usersOu } = setup();
     dir.createUser({ ...person, ouId: usersOu.id }, ACTOR);
-    dir.createUser({ ...person, username: 'loose', email: 'loose@iamlab.com' }, ACTOR);
+    dir.createUser({ ...person, username: 'loose', email: 'loose@omari.test' }, ACTOR);
 
     // The console's two branches, expressed as the queries they run.
     const inOu = dir.listUsers().filter((u) => u.ouId === usersOu.id);

@@ -35,6 +35,7 @@ import { renderAnnotateWindow } from './consoles/annotateWindow';
 import { toggleDesktopAnnotator } from './desktopAnnotator';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
+import { renderCareerLabWindow } from './consoles/careerLabWindow';
 import { onAppRequest } from '@/util/appLauncher';
 import { openContextMenu, type MenuItem } from '@/ui/contextMenu';
 import { THEMES, currentThemeId, setTheme } from '@/ui/themes';
@@ -223,6 +224,14 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    id: 'career-lab',
+    title: 'Career Lab',
+    icon: '🎓',
+    width: 980,
+    height: 700,
+    render: (_c, b) => renderCareerLabWindow(b),
   },
   {
     // Not a window: a sheet over the whole desktop with a floating toolbar,

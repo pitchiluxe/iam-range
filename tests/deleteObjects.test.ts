@@ -39,7 +39,7 @@ function setup() {
     dir.createUser({
       username,
       displayName: username,
-      email: `${username}@iamlab.com`,
+      email: `${username}@omari.test`,
       department: 'Finance',
       title: 'Analyst',
       mfa: 'none',

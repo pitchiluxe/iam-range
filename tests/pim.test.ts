@@ -27,7 +27,7 @@ describe('PIM assignments', () => {
       dir.createUser({
         username,
         displayName: username,
-        email: `${username}@iamlab.com`,
+        email: `${username}@omari.test`,
         department: 'IT',
         title: 'Engineer',
         mfa: 'none',
@@ -121,7 +121,7 @@ describe('PIM approvals', () => {
       dir.createUser({
         username: u,
         displayName: u,
-        email: `${u}@iamlab.com`,
+        email: `${u}@omari.test`,
         department: 'IT',
         title: 'Engineer',
         mfa: 'none',
@@ -176,7 +176,7 @@ describe('standing privilege', () => {
     alice = dir.createUser({
       username: 'alice',
       displayName: 'Alice',
-      email: 'alice@iamlab.com',
+      email: 'alice@omari.test',
       department: 'IT',
       title: 'Engineer',
       mfa: 'none',

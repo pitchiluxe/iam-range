@@ -126,7 +126,7 @@ describe('Move-ADObject -TargetPath', () => {
     const u = dir.createUser({
       username: 'jdoe',
       displayName: 'J Doe',
-      email: 'jdoe@iamlab.com',
+      email: 'jdoe@omari.test',
       department: 'Finance',
       title: 'Analyst',
       mfa: 'none',
@@ -141,7 +141,7 @@ describe('Move-ADObject -TargetPath', () => {
     const u = dir.createUser({
       username: 'jdoe',
       displayName: 'J Doe',
-      email: 'jdoe@iamlab.com',
+      email: 'jdoe@omari.test',
       department: 'Finance',
       title: 'Analyst',
       mfa: 'none',
@@ -159,7 +159,7 @@ describe('Move-ADObject -TargetPath', () => {
     dir.createUser({
       username: 'jdoe',
       displayName: 'J Doe',
-      email: 'jdoe@iamlab.com',
+      email: 'jdoe@omari.test',
       department: 'Finance',
       title: 'Analyst',
       mfa: 'none',

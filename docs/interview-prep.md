@@ -94,7 +94,7 @@ and test accounts.
 ```powershell
 Connect-Entra
 Start-DirectorySync -Provider entra
-Get-CloudUser -Provider entra -Upn ben.okafor@iamlab.com
+Get-CloudUser -Provider entra -Upn ben.okafor@omari.test
 ```
 
 A successful sync shows `Origin: synced`. If the user exists only in the cloud

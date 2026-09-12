@@ -47,7 +47,7 @@ function staffed() {
     {
       username: 'jdoe',
       displayName: 'John Doe',
-      email: 'jdoe@iamlab.com',
+      email: 'jdoe@omari.test',
       department: 'Help Desk',
       title: 'Analyst',
       ouId: usersOu.id,
@@ -94,7 +94,7 @@ describe('a review with nothing in it', () => {
       {
         username: 'jdoe',
         displayName: 'John Doe',
-        email: 'jdoe@iamlab.com',
+        email: 'jdoe@omari.test',
         department: 'Security',
         title: 'Analyst',
       },
@@ -285,7 +285,7 @@ describe('which accounts a ticket is about', () => {
       {
         username: 'jdoe2',
         displayName: 'Jane Doe',
-        email: 'jdoe2@iamlab.com',
+        email: 'jdoe2@omari.test',
         department: 'HR',
         title: 'Advisor',
       },

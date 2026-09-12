@@ -3,11 +3,11 @@
  * These are the single source of truth for company identity.
  */
 export const COMPANY = {
-  name: 'IAM Lab',
-  domain: 'iamlab.com',
-  tld: 'com',
-  idpRealm: 'iamlab',
-  idpUrl: 'https://idp.iamlab.com/realms/iamlab',
+  name: 'OMARI Technologies',
+  domain: 'omari.test',
+  tld: 'test',
+  idpRealm: 'omari',
+  idpUrl: 'https://idp.omari.test/realms/omari',
 } as const;
 
 export const OU_NAMES = ['Users', 'Groups', 'Computers', 'Servers', 'ServiceAccounts'] as const;

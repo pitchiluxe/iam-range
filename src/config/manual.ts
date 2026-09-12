@@ -203,7 +203,7 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Check what the cloud tenant currently believes.', cmdlet: 'Get-DirectorySyncStatus', example: 'Get-DirectorySyncStatus -Provider okta' },
           { do: 'Connect to the cloud tenant before changing it.', cmdlet: 'Connect-Okta', example: 'Connect-Okta' },
           { do: 'Run a sync cycle rather than waiting for the schedule.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider okta' },
-          { do: 'Revoke live sessions.', cmdlet: 'Revoke-CloudSession', example: 'Revoke-CloudSession -Provider okta -Upn jdoe@iamlab.com' },
+          { do: 'Revoke live sessions.', cmdlet: 'Revoke-CloudSession', example: 'Revoke-CloudSession -Provider okta -Upn jdoe@omari.test' },
           { do: 'Look for application accounts the tenant could not reach.', cmdlet: 'Get-OrphanedAppAccount', example: 'Get-OrphanedAppAccount -Provider okta' },
         ],
         verify:
@@ -740,10 +740,10 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Open the cloud identity console and connect to Entra.', app: 'cloud-identity' } as ManualStep,
           { do: 'Connect to the Entra tenant.', cmdlet: 'Connect-Entra' },
           { do: 'Run a directory sync cycle.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider entra' },
-          { do: 'Check a synced account in the cloud tenant.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider entra -Upn ben.okafor@iamlab.com' },
+          { do: 'Check a synced account in the cloud tenant.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider entra -Upn ben.okafor@omari.test' },
         ],
         verify:
-          'Get-CloudUser returns ben.okafor@iamlab.com with Origin set to synced. Entra is connected ' +
+          'Get-CloudUser returns ben.okafor@omari.test with Origin set to synced. Entra is connected ' +
           'and the directory has been pushed successfully.',
         interview:
           '"How do you know a directory sync worked?" By connecting to the tenant, running the sync, ' +

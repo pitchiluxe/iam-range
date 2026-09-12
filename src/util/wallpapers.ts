@@ -55,28 +55,28 @@ export const WALLPAPERS: Wallpaper[] = [
   },
   {
     id: 'iamlab-dark',
-    label: 'IAMLab Dark',
-    gradient: wordmarkWallpaper('#0a0c10', 'IAMLab', '#5a6570'),
+    label: 'OMARI Dark',
+    gradient: wordmarkWallpaper('#0a0c10', 'OMARI', '#5a6570'),
   },
   {
     id: 'iamlab-slate',
-    label: 'IAMLab Slate',
-    gradient: wordmarkWallpaper('#10151c', 'IAMLab', '#4a5a6a'),
+    label: 'OMARI Slate',
+    gradient: wordmarkWallpaper('#10151c', 'OMARI', '#4a5a6a'),
   },
   {
     id: 'iamlab-amber',
-    label: 'IAMLab Amber',
-    gradient: wordmarkWallpaper('#1a1208', 'IAMLab', '#8a6a3a'),
+    label: 'OMARI Amber',
+    gradient: wordmarkWallpaper('#1a1208', 'OMARI', '#8a6a3a'),
   },
   {
     id: 'iamlab-purple',
-    label: 'IAMLab Purple',
-    gradient: wordmarkWallpaper('#130a1c', 'IAMLab', '#604080'),
+    label: 'OMARI Purple',
+    gradient: wordmarkWallpaper('#130a1c', 'OMARI', '#604080'),
   },
   {
     id: 'iamlab-forest',
-    label: 'IAMLab Forest',
-    gradient: wordmarkWallpaper('#09140f', 'IAMLab', '#3a6a4a'),
+    label: 'OMARI Forest',
+    gradient: wordmarkWallpaper('#09140f', 'OMARI', '#3a6a4a'),
   },
   {
     id: 'windows-blue',
@@ -138,28 +138,28 @@ export const LOCK_SCREENS: Wallpaper[] = [
   },
   {
     id: 'iamlab',
-    label: 'IAMLab',
-    gradient: wordmarkWallpaper('#0a1420', 'IAMLab', '#4f6b86'),
+    label: 'OMARI',
+    gradient: wordmarkWallpaper('#0a1420', 'OMARI', '#4f6b86'),
   },
   {
     id: 'iamlab-teal',
-    label: 'IAMLab Teal',
-    gradient: wordmarkWallpaper('#07131a', 'IAMLab', '#3a6a6a'),
+    label: 'OMARI Teal',
+    gradient: wordmarkWallpaper('#07131a', 'OMARI', '#3a6a6a'),
   },
   {
     id: 'iamlab-midnight',
-    label: 'IAMLab Midnight',
-    gradient: wordmarkWallpaper('#080c14', 'IAMLab', '#3a4a5a'),
+    label: 'OMARI Midnight',
+    gradient: wordmarkWallpaper('#080c14', 'OMARI', '#3a4a5a'),
   },
   {
     id: 'iamlab-crimson',
-    label: 'IAMLab Crimson',
-    gradient: wordmarkWallpaper('#1a0a0e', 'IAMLab', '#7a3a45'),
+    label: 'OMARI Crimson',
+    gradient: wordmarkWallpaper('#1a0a0e', 'OMARI', '#7a3a45'),
   },
   {
     id: 'iamlab-gold',
-    label: 'IAMLab Gold',
-    gradient: wordmarkWallpaper('#141008', 'IAMLab', '#8a6a2a'),
+    label: 'OMARI Gold',
+    gradient: wordmarkWallpaper('#141008', 'OMARI', '#8a6a2a'),
   },
 ];
 

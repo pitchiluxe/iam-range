@@ -12,14 +12,14 @@
  */
 export const VM_HOST = {
   /** NetBIOS-style machine name. */
-  name: 'IAMLAB-WS01',
-  domain: 'iamlab.com',
+  name: 'OMARI-WS01',
+  domain: 'omari.test',
   /** Short domain name, as Windows shows it in DOMAIN\user. */
-  netbiosDomain: 'IAMLAB',
+  netbiosDomain: 'OMARI',
   /** The operator account the learner is signed in as. */
   user: 'admin',
   displayName: 'Administrator',
-  email: 'admin@iamlab.com',
+  email: 'admin@omari.test',
 
   os: 'Microsoft Windows 11 Enterprise',
   osVersion: '10.0.22631',
@@ -33,7 +33,7 @@ export const VM_HOST = {
   gateway: '10.20.4.1',
   dns: '10.20.1.10',
   mac: '00-15-5D-2A-7C-04',
-  domainController: 'IAMLAB-DC01',
+  domainController: 'OMARI-DC01',
 } as const;
 
 /** `DOMAIN\user`, the form Windows shows for a signed-in account. */

@@ -95,7 +95,7 @@ you can query them puts you ahead of candidates who only know the theory.
 **What to do:** Complete `analyst-cloud`.
 
 **Evidence:** A screenshot of `Get-CloudUser -Provider entra -Upn
-ben.okafor@iamlab.com` showing `Origin: synced`.
+ben.okafor@omari.test` showing `Origin: synced`.
 
 **Why it helps:** Hybrid identity is the normal enterprise shape. Employers want
 analysts who understand on-prem to cloud sync, not just cloud-only administration.

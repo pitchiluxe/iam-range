@@ -32,7 +32,7 @@ describe('MockDirectory.updateUser renaming the logon name', () => {
     dir.createUser({
       username: 'praman',
       displayName: 'Priya Ramanx',
-      email: 'praman@iamlab.com',
+      email: 'praman@omari.test',
       department: 'IT',
       title: 'Analyst',
     });
@@ -58,7 +58,7 @@ describe('MockDirectory.updateUser renaming the logon name', () => {
     dir.createUser({
       username: 'taken',
       displayName: 'Someone Else',
-      email: 'taken@iamlab.com',
+      email: 'taken@omari.test',
       department: 'IT',
       title: 'Analyst',
     });
@@ -90,7 +90,7 @@ describe('MockIdP.renameAccount', () => {
     const u = dir.createUser({
       username: 'praman',
       displayName: 'Priya Raman',
-      email: 'praman@iamlab.com',
+      email: 'praman@omari.test',
       department: 'IT',
       title: 'Analyst',
     });
@@ -110,7 +110,7 @@ describe('MockIdP.renameAccount', () => {
     const u = dir.createUser({
       username: 'praman',
       displayName: 'Priya Raman',
-      email: 'praman@iamlab.com',
+      email: 'praman@omari.test',
       department: 'IT',
       title: 'Analyst',
     });
@@ -133,7 +133,7 @@ describe('the user.update capability', () => {
     dir.createUser({
       username: 'praman',
       displayName: 'Priya Ramanx',
-      email: 'praman@iamlab.com',
+      email: 'praman@omari.test',
       department: 'IT',
       title: 'Analyst',
     });
@@ -174,12 +174,12 @@ describe('the user.update capability', () => {
   });
 
   it('carries the derived e-mail across a rename', () => {
-    // Created as praman@iamlab.com by user.create. Nobody edited it, so it
+    // Created as praman@omari.test by user.create. Nobody edited it, so it
     // should follow the logon name rather than be left pointing at a name
     // that no longer exists.
     const { ctx, dir } = makeCtx();
     cap!.run(ctx, { Identity: 'praman', SamAccountName: 'p.raman' });
-    expect(dir.getUserByUsername('p.raman')?.email).toBe('p.raman@iamlab.com');
+    expect(dir.getUserByUsername('p.raman')?.email).toBe('p.raman@omari.test');
   });
 
   it('carries the derived e-mail even when the console echoes it back', () => {
@@ -194,9 +194,9 @@ describe('the user.update capability', () => {
     cap!.run(ctx, {
       Identity: 'praman',
       SamAccountName: 'p.raman',
-      EmailAddress: 'praman@iamlab.com',
+      EmailAddress: 'praman@omari.test',
     });
-    expect(dir.getUserByUsername('p.raman')?.email).toBe('p.raman@iamlab.com');
+    expect(dir.getUserByUsername('p.raman')?.email).toBe('p.raman@omari.test');
   });
 
   it('keeps a hand-written e-mail when the logon name changes', () => {
@@ -216,7 +216,7 @@ describe('the user.update capability', () => {
     dir.createUser({
       username: 'taken',
       displayName: 'Someone Else',
-      email: 'taken@iamlab.com',
+      email: 'taken@omari.test',
       department: 'IT',
       title: 'Analyst',
     });

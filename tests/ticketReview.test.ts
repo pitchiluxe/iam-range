@@ -48,7 +48,7 @@ describe('onboarding review', () => {
     user = s.dir.createUser({
       username: 'jdoe',
       displayName: 'John Doe',
-      email: 'jdoe@iamlab.com',
+      email: 'jdoe@omari.test',
       department: 'Help Desk',
       title: 'Analyst',
       mfa: 'none',
@@ -88,15 +88,15 @@ describe('termination review', () => {
     user = s.dir.createUser({
       username: 'rpatel',
       displayName: 'Ravi Patel',
-      email: 'rpatel@iamlab.com',
+      email: 'rpatel@omari.test',
       department: 'Finance',
       title: 'Analyst',
       mfa: 'none',
     });
     s.cloud.okta.connect();
-    s.cloud.okta.grantAppAccount('HR Portal', 'rpatel@iamlab.com');
+    s.cloud.okta.grantAppAccount('HR Portal', 'rpatel@omari.test');
     s.cloud.okta.sync(ACTOR);
-    s.cloud.okta.openSession('rpatel@iamlab.com');
+    s.cloud.okta.openSession('rpatel@omari.test');
   });
 
   it('refuses an account that is only disabled on premises', () => {
@@ -115,7 +115,7 @@ describe('termination review', () => {
     // SCIM is off, so the tenant deactivates nobody inside the application.
     s.dir.disableUser(user.id, ACTOR);
     s.cloud.okta.sync(ACTOR);
-    s.cloud.okta.revokeSessions('rpatel@iamlab.com', ACTOR);
+    s.cloud.okta.revokeSessions('rpatel@omari.test', ACTOR);
 
     const review = reviewTicketSync(ticketFor(s, 'termination', user.id, 'Offboard rpatel'), deps(s), ACTOR);
     expect(review.passed).toBe(false);
@@ -128,7 +128,7 @@ describe('termination review', () => {
     s.dir.disableUser(user.id, ACTOR);
     s.cloud.okta.setScim('HR Portal', true, ACTOR);
     s.cloud.okta.sync(ACTOR);
-    s.cloud.okta.revokeSessions('rpatel@iamlab.com', ACTOR);
+    s.cloud.okta.revokeSessions('rpatel@omari.test', ACTOR);
 
     const review = reviewTicketSync(ticketFor(s, 'termination', user.id, 'Offboard rpatel'), deps(s), ACTOR);
     expect(review.passed).toBe(true);
@@ -143,7 +143,7 @@ describe('transfer review', () => {
     const user = s.dir.createUser({
       username: 'mchen',
       displayName: 'Maya Chen',
-      email: 'mchen@iamlab.com',
+      email: 'mchen@omari.test',
       department: 'HR',
       title: 'Partner',
       mfa: 'none',
@@ -167,7 +167,7 @@ describe('transfer review', () => {
     const user = s.dir.createUser({
       username: 'mchen',
       displayName: 'Maya Chen',
-      email: 'mchen@iamlab.com',
+      email: 'mchen@omari.test',
       department: 'HR',
       title: 'Partner',
       mfa: 'none',
@@ -201,7 +201,7 @@ describe('transfer review', () => {
     const user = s.dir.createUser({
       username: 'dpark',
       displayName: 'Dan Park',
-      email: 'dpark@iamlab.com',
+      email: 'dpark@omari.test',
       department: 'Finance',
       title: 'Analyst',
       mfa: 'none',
@@ -225,7 +225,7 @@ describe('mfa-issue review', () => {
     const user = s.dir.createUser({
       username: 'lnguyen',
       displayName: 'Linh Nguyen',
-      email: 'lnguyen@iamlab.com',
+      email: 'lnguyen@omari.test',
       department: 'Sales',
       title: 'Rep',
       mfa: 'totp',
@@ -280,15 +280,15 @@ describe('leaver review', () => {
     const user = s.dir.createUser({
       username: 'rpatel',
       displayName: 'Ravi Patel',
-      email: 'rpatel@iamlab.com',
+      email: 'rpatel@omari.test',
       department: 'Finance',
       title: 'Analyst',
       mfa: 'none',
     });
     s.cloud.okta.connect();
-    s.cloud.okta.grantAppAccount('HR Portal', 'rpatel@iamlab.com');
+    s.cloud.okta.grantAppAccount('HR Portal', 'rpatel@omari.test');
     s.cloud.okta.sync(ACTOR);
-    s.cloud.okta.openSession('rpatel@iamlab.com');
+    s.cloud.okta.openSession('rpatel@omari.test');
     s.dir.disableUser(user.id, ACTOR);
 
     const review = reviewTicketSync(ticketFor(s, 'leaver', user.id, 'Offboard rpatel'), deps(s), ACTOR);
@@ -307,7 +307,7 @@ describe('the reviewer records what it looked at', () => {
     const user = s.dir.createUser({
       username: 'aokafor',
       displayName: 'Ada Okafor',
-      email: 'aokafor@iamlab.com',
+      email: 'aokafor@omari.test',
       department: 'Engineering',
       title: 'Engineer',
       mfa: 'none',
@@ -359,7 +359,7 @@ describe('ticket ids', () => {
     const user = s.dir.createUser({
       username: 'lsilva',
       displayName: 'Luca Silva',
-      email: 'lsilva@iamlab.com',
+      email: 'lsilva@omari.test',
       department: 'Sales',
       title: 'AE',
       mfa: 'none',

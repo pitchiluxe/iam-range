@@ -144,7 +144,7 @@ describe('what the model is allowed to change', () => {
       {
         username: 'jdoe',
         displayName: 'John Doe',
-        email: 'jdoe@iamlab.com',
+        email: 'jdoe@omari.test',
         department: 'Help Desk',
         title: 'Analyst',
         ouId: usersOu.id,

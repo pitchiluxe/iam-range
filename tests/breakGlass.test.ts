@@ -37,7 +37,7 @@ function prepared(): VmSession {
     s.dir.createUser({
       username: name,
       displayName: name,
-      email: `${name}@iamlab.com`,
+      email: `${name}@omari.test`,
       department: 'IT',
       title: 'Emergency access',
       mfa: 'fido2',
@@ -73,7 +73,7 @@ describe('posture on an estate with no emergency access', () => {
     s.dir.createUser({
       username: BREAK_GLASS_NAMES[0],
       displayName: 'only one',
-      email: 'one@iamlab.com',
+      email: 'one@omari.test',
       department: 'IT',
       title: 'Emergency access',
       mfa: 'fido2',
@@ -99,7 +99,7 @@ describe('exclusion is the mechanism', () => {
       s.dir.createUser({
         username: name,
         displayName: name,
-        email: `${name}@iamlab.com`,
+        email: `${name}@omari.test`,
         department: 'IT',
         title: 'Emergency access',
         mfa: 'fido2',
@@ -143,7 +143,7 @@ describe('the drill', () => {
     const ordinary = s.dir.createUser({
       username: 'jdoe',
       displayName: 'John Doe',
-      email: 'jdoe@iamlab.com',
+      email: 'jdoe@omari.test',
       department: 'IT',
       title: 'Administrator',
       mfa: 'totp',
