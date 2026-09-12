@@ -964,6 +964,379 @@ export const MANUAL: readonly Chapter[] = [
       },
     ],
   },
+  {
+    id: 'year-2',
+    title: 'Year 2 · IAM Analyst',
+    summary:
+      'IAM fundamentals, RBAC, SSO, MFA, hybrid identity and the analyst capstone — building on ' +
+      'the help-desk and workstation skills from Year 1.',
+    lessons: [
+      {
+        id: 'y2-fundamentals',
+        title: 'IAM language and fundamentals',
+        objective: 'Use the terminal to discover the IAM vocabulary and review the audit trail.',
+        why:
+          'Before designing access, the analyst has to be fluent in the verbs the directory already ' +
+          'records. The audit log is the dictionary: every creation, move, grant and revocation is ' +
+          'in there.',
+        steps: [
+          { do: 'List the available commands and filter for identity verbs.', cmdlet: 'Get-Command', example: 'Get-Command -Name *AD*' },
+          { do: 'Read the audit log to see the most common actions.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action user.created' },
+        ],
+        verify:
+          'Get-Command returns the AD cmdlets and Get-IamAuditLog shows at least one user.created ' +
+          'or group.add event.',
+        interview:
+          '"What is least privilege?" It means giving a person the smallest set of rights that still ' +
+          'lets them do their job, and removing rights they no longer need.',
+        app: 'terminal',
+      },
+      {
+        id: 'y2-rbac',
+        title: 'RBAC and privilege creep',
+        objective: 'Build role groups, review memberships, and remove an unwanted group.',
+        why:
+          'RBAC is not creating groups; it is proving that membership matches the role. A person ' +
+          'with two role groups for one job has privilege creep, and the analyst has to find and ' +
+          'remove it.',
+        steps: [
+          { do: 'Create four or more department/role groups if they are not already there.', cmdlet: 'Get-ADGroup' },
+          { do: 'List the groups a specific user belongs to.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity jdoe' },
+          { do: 'Add a user to the correct role group.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity jdoe -Group grp-hr-readers' },
+          { do: 'Remove a group the user should no longer have.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity jdoe -Group grp-it-admins' },
+        ],
+        verify:
+          'At least four role groups exist, one user is added to a group, and one old group is ' +
+          'removed.',
+        interview:
+          '"How do you detect privilege creep?" Compare current group membership to the approved ' +
+          'role groups and look for people with more groups than their role needs.',
+        app: 'active-directory',
+      },
+      {
+        id: 'y2-sso',
+        title: 'SSO and the Okta tenant',
+        objective: 'Connect to a cloud tenant and verify the accounts it sees.',
+        why:
+          'SSO is what the user clicks; the IAM analyst has to know what the tenant sees and ' +
+          'whether it matches AD. A disconnected tenant is a second directory nobody is watching.',
+        steps: [
+          { do: 'Open a session to the Okta tenant.', cmdlet: 'Connect-Okta' },
+          { do: 'List the cloud accounts Okta holds.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider okta' },
+          { do: 'Compare the cloud-only users to the on-prem directory.',
+        },
+        ],
+        verify:
+          'Connect-Okta succeeds and Get-CloudUser returns the accounts in the Okta tenant.',
+        interview:
+          '"What makes a user cloud-only?" They were created directly in the cloud tenant and do ' +
+          'not exist in the on-premises directory, which is a common deprovisioning blind spot.',
+        app: 'terminal',
+      },
+      {
+        id: 'y2-mfa',
+        title: 'MFA and strong authentication',
+        objective: 'Enrol a user for MFA and read the MFA events in the audit log.',
+        why:
+          'MFA is the single most effective control against credential theft. An analyst must be ' +
+          'able to enrol factors, reset registrations, and read the logs for fatigue or bypass ' +
+          'attempts.',
+        steps: [
+          { do: 'Enrol a user for a time-based one-time code.', cmdlet: 'Set-MfaMethod', example: 'Set-MfaMethod -Identity jdoe -Method totp' },
+          { do: 'Read the MFA events in the audit log.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action mfa.challenge' },
+          { do: 'Review which users still have no MFA registered.' },
+        ],
+        verify:
+          'The user has an MFA method recorded and the audit log shows the mfa.challenge event.',
+        interview:
+          '"A user says they are getting push notifications they did not request. What do you do?" ' +
+          'Reset the MFA registration, revoke sessions, and investigate sign-in logs for credential ' +
+          'compromise.',
+        app: 'terminal',
+      },
+      {
+        id: 'y2-hybrid',
+        title: 'Hybrid identity and Entra sync',
+        objective: 'Connect Entra ID, run a directory sync, and verify a synced account.',
+        why:
+          'Hybrid identity is the bridge between on-prem AD and the cloud. The analyst has to know ' +
+          'how to trigger a sync, read its status, and prove the cloud copy matches.',
+        steps: [
+          { do: 'Open a session to the Entra ID tenant.', cmdlet: 'Connect-Entra' },
+          { do: 'Run a directory sync cycle.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider entra' },
+          { do: 'Find a synced user in the tenant.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider entra -Upn jdoe@omari.test' },
+        ],
+        verify:
+          'A user from Active Directory appears in the Entra tenant with Origin set to synced.',
+        interview:
+          '"A user was disabled in AD but still signs in to Microsoft 365. Why?" Directory sync ' +
+          'has not run, or the tenant has a cloud-only copy that is not controlled by AD.',
+        app: 'terminal',
+      },
+      {
+        id: 'y2-capstone',
+        title: 'Year 2 capstone: auditor evidence',
+        objective: 'Export audit evidence and write a privilege-creep finding for an auditor.',
+        why:
+          'Year 2 ends with an artifact that proves the analyst can move from investigation to ' +
+          'evidence. The finding ties a log entry to a remediation and explains why it mattered.',
+        steps: [
+          { do: 'Run a dormant-account review.', cmdlet: 'Get-DormantAccount', example: 'Get-DormantAccount -Days 90' },
+          { do: 'Export the audit log for the last month.', cmdlet: 'Export-IamAuditLog', example: 'Export-IamAuditLog -Last 100' },
+          { do: 'Open Writer and create an auditor evidence pack from the template.', app: 'writer' } as ManualStep,
+          { do: 'Include the finding, evidence, timeline, remediation and verification.' },
+        ],
+        verify:
+          'The dormant-account review runs, the CSV is exported, and the Writer evidence pack is ' +
+          'saved.',
+        interview:
+          '"What does an IAM analyst take to an auditor?" A finding, the evidence that proves it, ' +
+          'the date and actor, the remediation, and a way to verify the fix.',
+        app: 'writer',
+      },
+    ],
+  },
+  {
+    id: 'year-3',
+    title: 'Year 3 · IAM Engineer',
+    summary:
+      'Engineering standards, API integrations, identity governance, privileged access management ' +
+      'and incident response at the OMARI scale.',
+    lessons: [
+      {
+        id: 'y3-standards',
+        title: 'Engineering standards and idempotent scripts',
+        objective: 'Use the command list and audit export to review changes before deploying them.',
+        why:
+          'An engineer does not run commands at random. They list the available commands, know what ' +
+          'each does, and keep a trail that a teammate or auditor can follow.',
+        steps: [
+          { do: 'List the AD and group cmdlets available for automation.', cmdlet: 'Get-Command', example: 'Get-Command -Name *AD*,*Group*,*Share*' },
+          { do: 'Export the audit log to review the last changes.', cmdlet: 'Export-IamAuditLog', example: 'Export-IamAuditLog -Last 100 -Action group.*' },
+          { do: 'Inspect the CSV and count the group changes.' },
+        ],
+        verify:
+          'Get-Command lists the identity cmdlets and Export-IamAuditLog returns a CSV with group ' +
+          'changes.',
+        interview:
+          '"What makes an identity script idempotent?" Running it twice does not create duplicate ' +
+          'users or groups; it checks before creating and records what it did.',
+        app: 'terminal',
+      },
+      {
+        id: 'y3-apis',
+        title: 'REST APIs and integrations',
+        objective: 'Read from the Okta and Entra tenants through the simulated cloud connectors.',
+        why:
+          'Modern identity is driven by APIs. Calling them safely — with the right provider, ' +
+          'connection and scope — is what turns a directory into an integration.',
+        steps: [
+          { do: 'Connect to the Okta tenant.', cmdlet: 'Connect-Okta' },
+          { do: 'Check the sync status to see pending changes.', cmdlet: 'Get-DirectorySyncStatus', example: 'Get-DirectorySyncStatus -Provider okta' },
+          { do: 'List the users Okta has and compare to the directory.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider okta' },
+        ],
+        verify:
+          'The Okta tenant is connected, sync status is readable, and the user list is returned.',
+        interview:
+          '"What is the risk of a long-lived API key in an identity integration?" If it is leaked, ' +
+          'an attacker can read or change accounts without needing a password or MFA.',
+        app: 'terminal',
+      },
+      {
+        id: 'y3-iga',
+        title: 'Identity Governance Administration',
+        objective: 'Run an access review campaign and complete it with a clear decision on every row.',
+        why:
+          'A governance campaign nobody completes has removed nothing. IGA is the discipline of ' +
+          'proving that every access is still justified, not just opening a campaign.',
+        steps: [
+          { do: 'Open Access Reviews and start a new certification campaign.', app: 'access-reviews' } as ManualStep,
+          { do: 'Make a decision on every membership row.' },
+          { do: 'Complete the campaign so the revocations apply.' },
+          { do: 'Read the review events from the audit log.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action review' },
+        ],
+        verify:
+          'The access review campaign is completed and the audit log contains review.completed and ' +
+          'review.revoked entries.',
+        interview:
+          '"Why is it dangerous to approve every access review by default?" It turns certification ' +
+          'into a rubber stamp and privilege continues to accumulate unchecked.',
+        app: 'access-reviews',
+      },
+      {
+        id: 'y3-pam',
+        title: 'Privileged Access Management',
+        objective: 'Replace standing privilege with just-in-time eligibility, activation and approval.',
+        why:
+          'Standing admin is a risk; PAM makes privilege something a user asks for, with a reason ' +
+          'and an expiry. The engineer has to build and run that workflow.',
+        steps: [
+          { do: 'List the permanently assigned privileged roles.', cmdlet: 'Get-PimStandingPrivilege' },
+          { do: 'Make a user eligible for a privileged role.', cmdlet: 'New-PimEligibility', example: 'New-PimEligibility -Identity jdoe -Role role-domain-admins' },
+          { do: 'Have the user activate the eligible role.', cmdlet: 'Enable-PimRole', example: 'Enable-PimRole -Identity jdoe -Role role-domain-admins -Minutes 60' },
+          { do: 'Approve the activation request.', cmdlet: 'Approve-PimRequest', example: 'Approve-PimRequest -Identity jdoe -Role role-domain-admins' },
+        ],
+        verify:
+          'A role is made eligible, a request is raised, and an approval is recorded in the PIM ' +
+          'log.',
+        interview:
+          '"What is the difference between PIM and PAM?" PIM is the eligibility and activation; PAM ' +
+          'adds session recording, vaulting and additional controls around the privileged session.',
+        app: 'terminal',
+      },
+      {
+        id: 'y3-incidents',
+        title: 'IAM incidents',
+        objective: 'Investigate anomalous sign-ins, find dormant accounts and contain active sessions.',
+        why:
+          'Incident response is a fast version of everything else: you audit, you identify the ' +
+          'accounts at risk, and you revoke the sessions that could still be used.',
+        steps: [
+          { do: 'List accounts that have not signed in for 90 days.', cmdlet: 'Get-DormantAccount', example: 'Get-DormantAccount -Days 90' },
+          { do: 'Find failed sign-in attempts in the audit log.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action signin.failure' },
+          { do: 'List the active sessions for a suspicious user.', cmdlet: 'Get-UserSession', example: 'Get-UserSession -Identity jdoe' },
+          { do: 'Revoke those sessions to contain the account.', cmdlet: 'Revoke-UserSession', example: 'Revoke-UserSession -Identity jdoe' },
+        ],
+        verify:
+          'Dormant accounts are listed, failed sign-ins are found, and the suspicious sessions are ' +
+          'revoked.',
+        interview:
+          '"A leaked credential is reported. What is the containment sequence?" Disable the ' +
+          'account, revoke all sessions, reset the password, and then review the audit timeline.',
+        app: 'terminal',
+      },
+    ],
+  },
+  {
+    id: 'year-4',
+    title: 'Year 4 · IAM Architect',
+    summary:
+      'Architecture decisions, Zero Trust, governance and risk, IGA/PAM strategy, resilience and ' +
+      'executive communication — the capstone of the OMARI career path.',
+    lessons: [
+      {
+        id: 'y4-architecture',
+        title: 'IAM architecture and design',
+        objective: 'Review the risk and conditional-access landscape, then document an architecture ' +
+          'decision.',
+        why:
+          'An architect does not choose a vendor; they choose the trade-offs and write them down. ' +
+          'The decision record is the deliverable that survives the project.',
+        steps: [
+          { do: 'Review the identity risk dashboard.', cmdlet: 'Get-RiskDashboard' },
+          { do: 'List the conditional access policies.', cmdlet: 'Get-ConditionalAccessPolicy' },
+          { do: 'Open Writer and create an architecture decision record.', app: 'writer' } as ManualStep,
+          { do: 'Record the context, decision, consequences and rollback plan.' },
+        ],
+        verify:
+          'The risk dashboard and conditional access policies are reviewed, and an ADR is saved in ' +
+          'Writer.',
+        interview:
+          '"What goes into an architecture decision record?" Context, the options considered, the ' +
+          'decision, the consequences, and the rollback if the decision proves wrong.',
+        app: 'writer',
+      },
+      {
+        id: 'y4-zerotrust',
+        title: 'Zero Trust and identity perimeters',
+        objective: 'Inspect the conditional-access and MFA controls that replace network perimeters.',
+        why:
+          'Zero Trust means the identity provider is the boundary. The controls that matter are ' +
+          'MFA, device compliance, legacy-auth blocking and location policy.',
+        steps: [
+          { do: 'List the conditional access policies.', cmdlet: 'Get-ConditionalAccessPolicy' },
+          { do: 'Check MFA enrolment for a privileged user.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Filter admin' },
+          { do: 'Read failed sign-in events for legacy clients.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action signin.failure' },
+        ],
+        verify:
+          'Conditional access policies are visible, an MFA user is confirmed, and legacy-auth ' +
+          'failures are in the log.',
+        interview:
+          '"How do you stop a legacy-authentication attack?" Disable basic auth and enforce ' +
+          'conditional access that only allows modern clients with MFA.',
+        app: 'terminal',
+      },
+      {
+        id: 'y4-governance',
+        title: 'Governance, risk and compliance',
+        objective: 'Combine risk, dormant accounts and standing privilege into a governance finding.',
+        why:
+          'Compliance is not a spreadsheet; it is a control story backed by evidence. The architect ' +
+          'connects the risk dashboard, the policy and the remediation.',
+        steps: [
+          { do: 'Run the risk dashboard.', cmdlet: 'Get-RiskDashboard' },
+          { do: 'Review dormant accounts.', cmdlet: 'Get-DormantAccount', example: 'Get-DormantAccount -Days 90' },
+          { do: 'List standing privileged assignments.', cmdlet: 'Get-PimStandingPrivilege' },
+        ],
+        verify:
+          'The risk dashboard, dormant-account report and standing-privilege report all run and ' +
+          'return data.',
+        interview:
+          '"How do you explain privilege creep to a compliance auditor?" Show the group ' +
+          'membership, the last sign-in, the business justification and the removal date.',
+        app: 'terminal',
+      },
+      {
+        id: 'y4-strategy',
+        title: 'IGA/PAM strategy and tool selection',
+        objective: 'Use the portfolio report to build an IAM tool and roadmap readout.',
+        why:
+          'Strategy starts with an honest inventory. The portfolio tells the architect what exists ' +
+          'today so they can choose the tools and sequence that close the gaps.',
+        steps: [
+          { do: 'Generate the portfolio summary.', cmdlet: 'Get-Portfolio' },
+          { do: 'Export the audit log to count reviews and changes.', cmdlet: 'Export-IamAuditLog', example: 'Export-IamAuditLog -Last 100' },
+          { do: 'Identify the gaps: no reviews, too many standing admins, no synced tenant.' },
+        ],
+        verify:
+          'Get-Portfolio returns the estate counts and the exported audit log supports the roadmap.',
+        interview:
+          '"How do you decide between Okta and Entra ID?" Map the existing estate, the integrations, ' +
+          'the budget, and the in-house skills; there is no universal answer.',
+        app: 'terminal',
+      },
+      {
+        id: 'y4-resilience',
+        title: 'Resilience and disaster recovery',
+        objective: 'Test the break-glass workflow by revoking sessions and confirming the emergency path.',
+        why:
+          'When the primary IdP is unavailable, the organisation still needs a controlled way in. ' +
+          'Resilience is not a document; it is a drill that proves the path works.',
+        steps: [
+          { do: 'Review the break-glass accounts and their posture.', app: 'break-glass' } as ManualStep,
+          { do: 'List active privileged sessions.', cmdlet: 'Get-UserSession', example: 'Get-UserSession -Filter admin' },
+          { do: 'Revoke sessions for the drill user.', cmdlet: 'Revoke-UserSession', example: 'Revoke-UserSession -Identity admin' },
+        ],
+        verify:
+          'The break-glass account posture is reviewed and the privileged sessions are revoked.',
+        interview:
+          '"Why are break-glass accounts kept out of MFA policies?" Because they are the route back ' +
+          'in when the MFA system itself is broken, and they must be monitored and drilled.',
+        app: 'break-glass',
+      },
+      {
+        id: 'y4-leadership',
+        title: 'Leadership and executive capstone',
+        objective: 'Write an executive briefing that defends a Year 4 IAM decision.',
+        why:
+          'Architecture is not real until it is communicated. The executive briefing is the ' +
+          'portfolio piece that demonstrates the architect can trade off risk, cost and usability.',
+        steps: [
+          { do: 'Open Writer and start from the architecture decision record.', app: 'writer' } as ManualStep,
+          { do: 'Summarise the problem, the decision, the risk and the recommendation in two pages.' },
+          { do: 'Export the Lab Plan evidence pack to Documents.', app: 'lab-plan' } as ManualStep,
+        ],
+        verify:
+          'An executive briefing and an evidence pack are saved and the Lab Plan capstone is ' +
+          'complete.',
+        interview:
+          '"How do you explain MFA fatigue to a board?" It is a social-engineering risk where ' +
+          'attackers abuse push notifications, and it is fixed by number matching and conditional ' +
+          'access, not by disabling MFA.',
+        app: 'writer',
+      },
+    ],
+  },
 ];
 
 export const ALL_LESSONS: readonly Lesson[] = MANUAL.flatMap((c) => c.lessons);

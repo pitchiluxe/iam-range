@@ -1831,6 +1831,99 @@ export const CAPABILITIES: readonly IamCapability[] = [
       return ok(`${rows.length} command(s).`, rows);
     },
   },
+
+  // -- Year 2-4 Risk, Governance and Architecture --------------------------------
+  {
+    id: 'risk.dashboard',
+    label: 'Risk Dashboard',
+    synopsis: 'Summarise identity risk from dormant accounts, standing privilege and failed sign-ins.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-RiskDashboard',
+    readOnly: true,
+    validator: 'risk-dashboard-viewed',
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      const users = ctx.dir.listUsers();
+      const dormant = users.filter((u) => !u.lastSignInAt).length;
+      const locked = users.filter((u) => u.status === 'locked').length;
+      const standing = ctx.pim ? ctx.pim.standingPrivilege().length : 0;
+      const failures = ctx.audit.byAction('signin.failure').length;
+      const shares = ctx.dir.listShares().length;
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'risk.dashboard.viewed',
+        note: `Risk: ${dormant} dormant, ${locked} locked, ${standing} standing, ${failures} failures.`,
+      });
+      return ok('Identity risk summary.', [
+        { Metric: 'Total accounts', Value: users.length },
+        { Metric: 'Never signed in', Value: dormant },
+        { Metric: 'Locked', Value: locked },
+        { Metric: 'Standing privileged', Value: standing },
+        { Metric: 'Failed sign-ins', Value: failures },
+        { Metric: 'File shares', Value: shares },
+      ]);
+    },
+  },
+  {
+    id: 'conditional.access',
+    label: 'Conditional Access Policies',
+    synopsis: 'List the conditional access and Zero Trust style policies in the simulated tenant.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-ConditionalAccessPolicy',
+    readOnly: true,
+    validator: 'conditional-access-viewed',
+    params: [{ name: 'Name', label: 'Policy name', kind: 'text', required: false }],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const all = [
+        { Name: 'MFA for admins', State: 'Enabled', Controls: 'Require MFA for privileged roles' },
+        { Name: 'Block legacy auth', State: 'Enabled', Controls: 'Block basic auth clients' },
+        { Name: 'Require managed device', State: 'Report-only', Controls: 'Compliant or hybrid joined' },
+        { Name: 'Restrict by location', State: 'Enabled', Controls: 'Block OMARI countries' },
+      ];
+      const filter = a.Name?.toLowerCase() ?? '';
+      const rows = filter ? all.filter((r) => r.Name.toLowerCase().includes(filter)) : all;
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'conditional.access.viewed',
+        note: `Reviewed ${rows.length} conditional access policy(ies).`,
+      });
+      return ok(`${rows.length} conditional access policy(ies).`, rows);
+    },
+  },
+  {
+    id: 'portfolio.view',
+    label: 'Portfolio Report',
+    synopsis: 'Produce a summary of the identity estate for interviews or stakeholder readouts.',
+    consoleSection: 'audit',
+    cmdlet: 'Get-Portfolio',
+    readOnly: true,
+    validator: 'portfolio-viewed',
+    params: [],
+    resolvesTicketKinds: [],
+    run(ctx) {
+      const users = ctx.dir.listUsers().length;
+      const groups = ctx.dir.listGroups().length;
+      const ous = ctx.dir.listOus().length;
+      const shares = ctx.dir.listShares().length;
+      const tenants = [ctx.cloud?.okta, ctx.cloud?.entra].filter(Boolean).length;
+      const reviews = ctx.audit.byAction('review.completed').length;
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'portfolio.viewed',
+        note: `Portfolio: ${users} users, ${groups} groups, ${ous} OUs, ${shares} shares, ${reviews} reviews.`,
+      });
+      return ok('Portfolio summary.', [
+        { Item: 'Directory users', Count: users },
+        { Item: 'Security groups', Count: groups },
+        { Item: 'Organisational units', Count: ous },
+        { Item: 'File shares', Count: shares },
+        { Item: 'Connected tenants', Count: tenants },
+        { Item: 'Completed access reviews', Count: reviews },
+      ]);
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------

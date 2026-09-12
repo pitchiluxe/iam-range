@@ -572,6 +572,208 @@ const RULES: Record<string, Rule> = {
       'Write an incident report in Writer and export the Lab Plan evidence pack to Documents.',
     actions: ['ticket.review.passed'],
   },
+
+  // --- 8. Year 2 IAM Analyst ---
+  'y2-fundamentals': {
+    done: (s) => has(s, 'iam.audit.viewed') && has(s, 'command.listed'),
+    started: (s) => has(s, 'command.listed'),
+    evidence: (s) =>
+      `${count(s, 'iam.audit.viewed')} audit view(s), ${count(s, 'command.listed')} command listing(s).`,
+    outstanding:
+      'Use Get-Command and Get-IamAuditLog to learn the IAM verbs and see the most recent ' +
+      'directory events.',
+    actions: ['iam.audit.viewed', 'command.listed'],
+  },
+  'y2-rbac': {
+    done: (s) => s.dir.listGroups().length >= 4 && has(s, 'group.add') && has(s, 'group.remove'),
+    started: (s) => s.dir.listGroups().length >= 2 || has(s, 'group.add'),
+    evidence: (s) =>
+      `${s.dir.listGroups().length} group(s), ${count(s, 'group.add')} add(s), ${count(s, 'group.remove')} removal(s).`,
+    outstanding:
+      'Create at least four role groups, add a user to the right one, and remove an old group to ' +
+      'fix privilege creep.',
+    actions: ['group.created', 'group.add', 'group.remove'],
+  },
+  'y2-sso': {
+    done: (s) => Boolean(s.cloud?.okta?.isConnected()),
+    started: (s) => Boolean(s.cloud?.okta?.isConnected()),
+    evidence: (s) => {
+      const t = s.cloud?.okta;
+      return t?.isConnected()
+        ? `Connected to Okta; ${t.list().length} account(s) visible.`
+        : 'Okta tenant has not been connected.';
+    },
+    outstanding: 'Connect-Okta and list the cloud accounts in the Okta tenant.',
+    actions: ['cloud.synced'],
+  },
+  'y2-mfa': {
+    done: (s) => has(s, 'mfa.challenge'),
+    started: (s) => has(s, 'mfa.challenge'),
+    evidence: (s) =>
+      has(s, 'mfa.challenge')
+        ? `${count(s, 'mfa.challenge')} MFA enrolment(s).`
+        : 'No MFA enrolment has been recorded.',
+    outstanding: 'Enrol a user for MFA and read the mfa.challenge events.',
+    actions: ['mfa.challenge'],
+  },
+  'y2-hybrid': {
+    done: (s) =>
+      Boolean(s.cloud?.entra?.isConnected()) &&
+      has(s, 'cloud.synced') &&
+      s.cloud.entra.list().some((u) => u.origin === 'synced'),
+    started: (s) => Boolean(s.cloud?.entra?.isConnected()) || has(s, 'cloud.synced'),
+    evidence: (s) => {
+      const synced = s.cloud.entra.list().filter((u) => u.origin === 'synced').length;
+      return s.cloud.entra.isConnected()
+        ? `Entra connected; ${synced} synced account(s).`
+        : 'Entra has not been connected.';
+    },
+    outstanding:
+      'Connect-Entra, run Start-DirectorySync, and verify a synced account in the Entra tenant.',
+    actions: ['cloud.synced'],
+  },
+  'y2-capstone': {
+    done: (s) =>
+      has(s, 'iam.audit.exported') && has(s, 'dormant.reviewed') && writerEvidenceExists(),
+    started: (s) => has(s, 'iam.audit.exported') || has(s, 'dormant.reviewed'),
+    evidence: (s) =>
+      `${count(s, 'iam.audit.exported')} export(s), ${count(s, 'dormant.reviewed')} dormant ' +
+      'review(s), documents: ${writerEvidenceExists() ? 'saved' : 'not saved'}.`,
+    outstanding:
+      'Run Get-DormantAccount, export the audit log, and save an auditor evidence pack in Writer.',
+    actions: ['iam.audit.exported', 'dormant.reviewed'],
+  },
+
+  // --- 9. Year 3 IAM Engineer ---
+  'y3-standards': {
+    done: (s) => has(s, 'iam.audit.exported') && has(s, 'command.listed'),
+    started: (s) => has(s, 'command.listed'),
+    evidence: (s) =>
+      `${count(s, 'iam.audit.exported')} CSV export(s), ${count(s, 'command.listed')} command listing(s).`,
+    outstanding:
+      'Use Get-Command to discover the available cmdlets and Export-IamAuditLog to review the ' +
+      'change trail.',
+    actions: ['iam.audit.exported', 'command.listed'],
+  },
+  'y3-apis': {
+    done: (s) => Boolean(s.cloud?.okta?.isConnected()) && has(s, 'cloud.synced'),
+    started: (s) => Boolean(s.cloud?.okta?.isConnected()),
+    evidence: (s) => {
+      const t = s.cloud?.okta;
+      return t?.isConnected()
+        ? `Okta connected, last sync ${t.minutesSinceSync() ?? 'never'} minute(s) ago.`
+        : 'Okta tenant has not been connected.';
+    },
+    outstanding:
+      'Connect to Okta, review sync status, and list cloud users through the simulated API connector.',
+    actions: ['cloud.synced'],
+  },
+  'y3-iga': {
+    done: (s) => has(s, 'review.completed'),
+    started: (s) => has(s, 'review.opened'),
+    evidence: (s) =>
+      has(s, 'review.completed')
+        ? `${count(s, 'review.completed')} access review(s) completed.`
+        : 'No access review campaign has been completed.',
+    outstanding:
+      'Open Access Reviews, decide every row, and complete the certification campaign.',
+    actions: ['review.opened', 'review.approved', 'review.revoked', 'review.completed'],
+  },
+  'y3-pam': {
+    done: (s) => has(s, 'pim.approved'),
+    started: (s) => has(s, 'pim.requested') || (s.pim?.list().length ?? 0) > 0,
+    evidence: (s) =>
+      has(s, 'pim.approved')
+        ? `${count(s, 'pim.approved')} PIM approval(s); ${count(s, 'pim.activated')} activation(s).`
+        : 'No PIM activation has been approved.',
+    outstanding:
+      'Make a user eligible, request a privileged role activation, and approve the request.',
+    actions: ['pim.eligible', 'pim.requested', 'pim.approved'],
+  },
+  'y3-incidents': {
+    done: (s) => has(s, 'dormant.reviewed') && has(s, 'session.revoked') && has(s, 'signin.failure'),
+    started: (s) => has(s, 'dormant.reviewed') || has(s, 'signin.failure'),
+    evidence: (s) =>
+      `${count(s, 'dormant.reviewed')} dormant review(s), ${count(s, 'session.revoked')} session ' +
+      'revocation(s), ${count(s, 'signin.failure')} failure(s).`,
+    outstanding:
+      'Find dormant accounts, read failed sign-ins, and revoke the suspicious sessions.',
+    actions: ['dormant.reviewed', 'session.revoked', 'signin.failure'],
+  },
+
+  // --- 10. Year 4 IAM Architect ---
+  'y4-architecture': {
+    done: (s) =>
+      has(s, 'risk.dashboard.viewed') &&
+      has(s, 'conditional.access.viewed') &&
+      writerEvidenceExists(),
+    started: (s) => has(s, 'risk.dashboard.viewed'),
+    evidence: (s) =>
+      `${count(s, 'risk.dashboard.viewed')} risk review(s), ${count(s, 'conditional.access.viewed')} ' +
+      'policy review(s); Writer documents ${writerEvidenceExists() ? 'saved' : 'not saved'}.`,
+    outstanding:
+      'Review the risk dashboard and conditional access policies, then write an architecture ' +
+      'decision record.',
+    actions: ['risk.dashboard.viewed', 'conditional.access.viewed'],
+  },
+  'y4-zerotrust': {
+    done: (s) =>
+      has(s, 'conditional.access.viewed') &&
+      has(s, 'mfa.challenge') &&
+      has(s, 'signin.failure'),
+    started: (s) => has(s, 'conditional.access.viewed'),
+    evidence: (s) =>
+      `${count(s, 'conditional.access.viewed')} policy review(s), ${count(s, 'mfa.challenge')} MFA ' +
+      'event(s), ${count(s, 'signin.failure')} sign-in failure(s).`,
+    outstanding:
+      'Inspect conditional access, confirm MFA, and read the failed sign-ins that legacy auth ' +
+      'would leave behind.',
+    actions: ['conditional.access.viewed', 'mfa.challenge', 'signin.failure'],
+  },
+  'y4-governance': {
+    done: (s) =>
+      has(s, 'risk.dashboard.viewed') &&
+      has(s, 'dormant.reviewed') &&
+      has(s, 'pim.permanent'),
+    started: (s) => has(s, 'risk.dashboard.viewed'),
+    evidence: (s) =>
+      `${count(s, 'risk.dashboard.viewed')} risk view(s), ${count(s, 'dormant.reviewed')} dormant ' +
+      'review(s), ${s.pim?.standingPrivilege().length ?? 0} standing privilege(s).`,
+    outstanding:
+      'Run the risk dashboard, review dormant accounts, and list standing privileged assignments.',
+    actions: ['risk.dashboard.viewed', 'dormant.reviewed', 'pim.permanent'],
+  },
+  'y4-strategy': {
+    done: (s) => has(s, 'portfolio.viewed') && has(s, 'iam.audit.exported'),
+    started: (s) => has(s, 'portfolio.viewed'),
+    evidence: (s) =>
+      `${count(s, 'portfolio.viewed')} portfolio view(s), ${count(s, 'iam.audit.exported')} audit ' +
+      'export(s).`,
+    outstanding:
+      'Generate the portfolio report and export the audit log to support an IAM roadmap.',
+    actions: ['portfolio.viewed', 'iam.audit.exported'],
+  },
+  'y4-resilience': {
+    done: (s) => has(s, 'session.revoked') && s.dir.listUsers().some((u) => u.mfa !== 'none'),
+    started: (s) => has(s, 'session.revoked'),
+    evidence: (s) =>
+      `${count(s, 'session.revoked')} session revocation(s), ` +
+      `${s.dir.listUsers().filter((u) => u.mfa !== 'none').length} MFA-enrolled user(s).`,
+    outstanding:
+      'Review the break-glass accounts, list privileged sessions, and revoke them as part of a ' +
+      'resilience drill.',
+    actions: ['session.revoked'],
+  },
+  'y4-leadership': {
+    done: () => writerEvidenceExists(),
+    evidence: () =>
+      writerEvidenceExists()
+        ? 'Writer documents and executive briefing saved.'
+        : 'The executive briefing and evidence pack have not been saved in Writer.',
+    outstanding:
+      'Write an executive briefing in Writer and export the Lab Plan evidence pack to Documents.',
+    actions: ['document.saved'],
+  },
 };
 
 /** Every lesson id the manual defines, in order. */

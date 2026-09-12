@@ -371,7 +371,10 @@ export interface AuditEvent {
     | 'network.ping'
     | 'dns.resolve'
     | 'gpo.report.viewed'
-    | 'command.listed';
+    | 'command.listed'
+    | 'risk.dashboard.viewed'
+    | 'conditional.access.viewed'
+    | 'portfolio.viewed';
   /** Polysemous target: UserId | GroupId | RoleId | AppId | TicketId | SessionId */
   targetId?: string;
   /** For events that involve a subject distinct from the actor/target (group/role grants). */
@@ -502,7 +505,10 @@ export type ValidatorKind =
   | 'network-ping'
   | 'dns-resolve'
   | 'gpo-report-viewed'
-  | 'command-listed';
+  | 'command-listed'
+  | 'risk-dashboard-viewed'
+  | 'conditional-access-viewed'
+  | 'portfolio-viewed';
 
 export interface LabStep {
   id: string;
