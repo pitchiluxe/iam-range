@@ -564,7 +564,7 @@ const RULES: Record<string, Rule> = {
   'y1-capstone': {
     done: (s) => evidencePackExists() && has(s, 'computer.info.viewed'),
     started: (s) => has(s, 'computer.info.viewed'),
-    evidence: (s) =>
+    evidence: () =>
       evidencePackExists()
         ? 'Evidence pack exported and workstation information reviewed.'
         : 'The Year 1 evidence pack has not been exported from Lab Plan.',
