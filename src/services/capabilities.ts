@@ -929,6 +929,13 @@ export const CAPABILITIES: readonly IamCapability[] = [
       if (!u) return err(`Cannot find an object with identity '${identity}'.`);
       try {
         const effective = ctx.dir.getEffectiveAccess(name, u.username);
+        ctx.audit.record({
+          actorId: ctx.actor,
+          action: 'share.effective.checked',
+          targetId: name,
+          subjectId: u.id,
+          note: `${u.username} has ${effective} on ${name}.`,
+        });
         return ok(`${u.username} has ${effective} on ${name}.`);
       } catch (e) {
         return err(String(e));
@@ -1548,6 +1555,11 @@ export const CAPABILITIES: readonly IamCapability[] = [
           'Last sign-in': u.lastSignInAt ? new Date(u.lastSignInAt).toLocaleDateString() : 'Never',
           Created: new Date(u.createdAt).toLocaleDateString(),
         }));
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'dormant.reviewed',
+        note: `Reviewed ${users.length} account(s) older than ${days} days.`,
+      });
       return ok(`${users.length} dormant account(s).`, users);
     },
   },
@@ -1580,6 +1592,11 @@ export const CAPABILITIES: readonly IamCapability[] = [
         ].join(','),
       );
       const csv = [header, ...rows].join('\n');
+      ctx.audit.record({
+        actorId: ctx.actor,
+        action: 'iam.audit.exported',
+        note: `Exported ${events.length} event(s) with filter "${filter}".`,
+      });
       return ok(`${events.length} event(s) exported. Copy the CSV below and open it in Sheets.`, [{ CSV: csv }]);
     },
   },

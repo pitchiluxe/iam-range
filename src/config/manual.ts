@@ -543,8 +543,9 @@ export const MANUAL: readonly Chapter[] = [
     title: '6 \u00b7 IAM Analyst lab',
     summary:
       'A capstone that walks through an IAM analyst job description using the simulated ' +
-      'workstation: build the structure, bulk-provision users, enforce RBAC, audit access, ' +
-      'resolve helpdesk issues, and document the work.',
+      'workstation: build the structure, provision users, enforce RBAC, set password and ' +
+      'lockout policies, secure file shares, audit access, find dormant accounts, verify ' +
+      'Entra sync, resolve helpdesk issues, and document the work.',
     lessons: [
       {
         id: 'analyst-env',
@@ -625,24 +626,70 @@ export const MANUAL: readonly Chapter[] = [
         app: 'active-directory',
       },
       {
+        id: 'analyst-policy',
+        title: 'Enforce password and lockout policies',
+        objective: 'Set the company password and account lockout policy and prove they are active.',
+        why:
+          'Policies only matter if the directory enforces them. A new-hire guide is not enough; ' +
+          'the password length, complexity, age and lockout threshold are checked on every reset.',
+        steps: [
+          { do: 'Open the terminal and review the current password policy.', app: 'terminal' } as ManualStep,
+          { do: 'Set the minimum password length to 14, require complexity and a 90-day age.', cmdlet: 'Set-PasswordPolicy', example: 'Set-PasswordPolicy -MinimumLength 14 -ComplexityEnabled $true -MaximumAge 90' },
+          { do: 'Confirm the policy is in force.', cmdlet: 'Get-PasswordPolicy' },
+          { do: 'Set the lockout threshold to 5 failed attempts for 30 minutes.', cmdlet: 'Set-AccountLockoutPolicy', example: 'Set-AccountLockoutPolicy -Threshold 5 -Duration 30' },
+          { do: 'Confirm the lockout policy is in force.', cmdlet: 'Get-AccountLockoutPolicy' },
+          { do: 'Try creating a test account with a weak password to see the policy reject it.', cmdlet: 'New-ADUser', example: 'New-ADUser -Name test.user -AccountPassword weak' },
+        ],
+        verify:
+          'Get-PasswordPolicy returns min 14, complexity true, max age 90. Get-AccountLockoutPolicy ' +
+          'returns threshold 5 and duration 30. The weak test password was rejected.',
+        interview:
+          '"What is the difference between a password policy and an account lockout policy?" ' +
+          'Password policy controls the password itself; lockout policy controls what happens ' +
+          'after repeated failed sign-ins.',
+        reading: 'jml',
+        app: 'terminal',
+      },
+      {
+        id: 'analyst-shares',
+        title: 'Secure file shares with least privilege',
+        objective: 'Create a share, set Allow and Deny permissions, and verify effective access.',
+        why:
+          'File shares are where least privilege is most often wrong. An analyst must be able to ' +
+          'read the explicit permissions, resolve group membership, and see that Deny wins over ' +
+          'every Allow that would otherwise apply.',
+        steps: [
+          { do: 'Open the terminal and create the HR share.', app: 'terminal' } as ManualStep,
+          { do: 'Create the HR file share.', cmdlet: 'New-Share', example: 'New-Share -Name HR -Path "C:\\CompanyData\\HR"' },
+          { do: 'Grant HR managers Modify access.', cmdlet: 'Grant-SharePermission', example: 'Grant-SharePermission -Name HR -Trustee grp-hr-managers -Access Modify' },
+          { do: 'Grant HR staff Read access.', cmdlet: 'Grant-SharePermission', example: 'Grant-SharePermission -Name HR -Trustee grp-hr-readers -Access Read' },
+          { do: 'Deny the IT admin group access to the HR share.', cmdlet: 'Grant-SharePermission', example: 'Grant-SharePermission -Name HR -Trustee grp-iam-admins -Access Full -Type Deny' },
+          { do: 'Check the effective access for an HR staff member.', cmdlet: 'Get-EffectiveAccess', example: 'Get-EffectiveAccess -Name HR -Identity ana.smith' },
+          { do: 'Check the effective access for a member of the IT admin group.', cmdlet: 'Get-EffectiveAccess', example: 'Get-EffectiveAccess -Name HR -Identity ben.okafor' },
+        ],
+        verify:
+          'Get-EffectiveAccess shows ana.smith has Read, an HR manager has Modify, and an IT admin ' +
+          'is denied. The Deny permission overrides group membership that would otherwise grant access.',
+        interview:
+          '"Why does Deny take precedence over Allow?" Because explicit exclusions must win over ' +
+          'broad group grants, otherwise you cannot block a group from sensitive data.',
+        reading: 'least-privilege',
+        app: 'terminal',
+      },
+      {
         id: 'analyst-audit',
         title: 'Audit access and report the risk',
-        objective: 'Read the audit log and group membership, then document a finding.',
+        objective: 'Read the audit log, export the evidence, and remediate a privilege-creep finding.',
         why:
           'An IAM analyst is expected to find the risks the directory hides: failed logins, ' +
-          'dormant accounts, and people whose groups do not match their department. The evidence ' +
-          'goes in a report that another person can check.',
+          'unexpected group memberships, and people whose groups do not match their department. ' +
+          'The evidence must be exportable and verifiable by another person.',
         steps: [
           { do: 'Open Log Search and look for failed sign-in attempts.', app: 'log-search' } as ManualStep,
           { do: 'Read the audit log from the shell for the last 40 events.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Last 40' },
-          { do: 'Set the domain password policy to the company standard.', cmdlet: 'Set-PasswordPolicy', example: 'Set-PasswordPolicy -MinimumLength 14 -ComplexityEnabled $true -MaximumAge 90' },
-          { do: 'Confirm the password policy is in force.', cmdlet: 'Get-PasswordPolicy' },
-          { do: 'Find any dormant accounts that have not signed in recently.', cmdlet: 'Get-DormantAccount', example: 'Get-DormantAccount -Days 90' },
           { do: 'List any standing privileged assignments as part of the risk report.', cmdlet: 'Get-PimStandingPrivilege' },
-          { do: 'Export failed sign-in events to CSV for spreadsheet analysis.', cmdlet: 'Export-IamAuditLog', example: 'Export-IamAuditLog -Filter signin.failure -Last 50' },
-          { do: 'Connect to the Entra tenant and verify the synced state.', cmdlet: 'Connect-Entra' },
-          { do: 'Run a directory sync cycle.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider entra' },
-          { do: 'Check a synced account in the cloud tenant.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider entra -Upn ben.okafor@iamlab.com' },
+          { do: 'Export failed sign-in and group-change events to CSV for spreadsheet analysis.', cmdlet: 'Export-IamAuditLog', example: 'Export-IamAuditLog -Filter signin.failure -Last 50' },
+          { do: 'Open the exported CSV in Sheets and count failures with a formula.', app: 'sheets' } as ManualStep,
           { do: 'Simulate a privilege-creep finding by adding an IT user to an HR group.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity ben.okafor -Group grp-hr-readers' },
           { do: 'Read the membership of the user and spot the wrong group.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity ben.okafor' },
           { do: 'Remove the group that does not match the user\'s department.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity ben.okafor -Group grp-hr-readers' },
@@ -650,13 +697,59 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Document the finding, the evidence, and the remedial action.' },
         ],
         verify:
-          'The report names the user, the unexpected group, and the audit event that proved it. ' +
-          'The evidence is a timestamped log entry, not a statement.',
+          'The report names the user, the unexpected group, the exported CSV, and the action that ' +
+          'removed it. Every claim is tied to a timestamped log entry.',
         interview:
-          '"How do you prove a privilege-creep finding?" With an audit event and the current ' +
-          'group membership, both timestamped, plus the action that removed it.',
+          '"How do you prove a privilege-creep finding?" With an audit event, an exported log, the ' +
+          'current group membership, and the action that removed the access.',
         reading: 'access-reviews',
         app: 'log-search',
+      },
+      {
+        id: 'analyst-dormant',
+        title: 'Find dormant accounts',
+        objective: 'Identify accounts that have never signed in or have been inactive for a set period.',
+        why:
+          'Dormant accounts are a common access-review finding. An analyst must be able to query ' +
+          'the last sign-in, distinguish never-used from stale, and document the risk for the ' +
+          'auditor or the access-review campaign.',
+        steps: [
+          { do: 'Open the terminal and review the account list.', app: 'terminal' } as ManualStep,
+          { do: 'List accounts that have not signed in for the last 90 days.', cmdlet: 'Get-DormantAccount', example: 'Get-DormantAccount -Days 90' },
+          { do: 'Identify any accounts that have never signed in since they were created.' },
+          { do: 'Document one dormant account and the recommended action in the Auditor evidence pack.' },
+        ],
+        verify:
+          'Get-DormantAccount returns at least one account with no recent sign-in. The finding is ' +
+          'noted with the username, department and last sign-in date.',
+        interview:
+          '"How do you decide whether a dormant account is a risk?" By its privilege, department, ' +
+          'and whether it was ever used. Never-used and privileged accounts are the highest risk.',
+        reading: 'audit-evidence',
+        app: 'terminal',
+      },
+      {
+        id: 'analyst-cloud',
+        title: 'Verify cloud sync to Entra',
+        objective: 'Connect to the Entra tenant, run a sync, and verify the result.',
+        why:
+          'Most enterprises are hybrid. An IAM analyst must be able to prove that on-prem changes ' +
+          'reach the cloud, and that a disabled or deleted on-prem account is reflected in the ' +
+          'tenant after the sync cycle.',
+        steps: [
+          { do: 'Open the cloud identity console and connect to Entra.', app: 'cloud-identity' } as ManualStep,
+          { do: 'Connect to the Entra tenant.', cmdlet: 'Connect-Entra' },
+          { do: 'Run a directory sync cycle.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider entra' },
+          { do: 'Check a synced account in the cloud tenant.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider entra -Upn ben.okafor@iamlab.com' },
+        ],
+        verify:
+          'Get-CloudUser returns ben.okafor@iamlab.com with Origin set to synced. Entra is connected ' +
+          'and the directory has been pushed successfully.',
+        interview:
+          '"How do you know a directory sync worked?" By connecting to the tenant, running the sync, ' +
+          'and then reading a user whose Origin shows it came from on-prem.',
+        reading: 'okta-entra',
+        app: 'cloud-identity',
       },
       {
         id: 'analyst-helpdesk',
@@ -667,9 +760,8 @@ export const MANUAL: readonly Chapter[] = [
           'The first needs the failures read before the unlock, and the second needs the group ' +
           'membership read before the change.',
         steps: [
-          { do: 'Set the account lockout policy to the company standard.', cmdlet: 'Set-AccountLockoutPolicy', example: 'Set-AccountLockoutPolicy -Threshold 5 -Duration 30' },
-          { do: 'Confirm the lockout policy is in force.', cmdlet: 'Get-AccountLockoutPolicy' },
-          { do: 'Find the locked-out account from the Ticket Queue and confirm it in Active Directory.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Identity isabel.martinez' },
+          { do: 'Open the Ticket Queue and find the locked-out account.', app: 'ticket-console' } as ManualStep,
+          { do: 'Confirm the locked-out account in Active Directory.', cmdlet: 'Get-ADUser' },
           { do: 'Read the sign-in failures in the log before unlocking.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Last 20' },
           { do: 'Unlock the account with the user name from the queue.', cmdlet: 'Unlock-ADAccount' },
           { do: 'Investigate the access-denied report by checking effective access.', cmdlet: 'Get-EffectiveAccess', example: 'Get-EffectiveAccess -Name HR -Identity greta.olsen' },
@@ -687,21 +779,23 @@ export const MANUAL: readonly Chapter[] = [
       {
         id: 'analyst-docs',
         title: 'Document the work for an auditor',
-        objective: 'Write a one-page offboarding SOP and a new-hire password guide.',
+        objective: 'Write an offboarding SOP, a password guide and an auditor evidence pack.',
         why:
           'The job is not only doing the work; it is producing something another person can ' +
           'follow and audit. A runbook written in the first person and missing the rollback is ' +
-          'not a control.',
+          'not a control. Each document is a portfolio artifact that proves the analyst can ' +
+          'communicate risk and evidence.',
         steps: [
           { do: 'Open Writer and start the IAM Analyst offboarding SOP.', app: 'writer' } as ManualStep,
           { do: 'Complete each section with the steps, evidence checks and escalation path.' },
           { do: 'Create the new-hire password training guide in the same way.' },
-          { do: 'Start the Auditor evidence review template and document the privilege-creep finding, the log evidence and the remediation.' },
-          { do: 'Save both documents to the Documents folder.' },
+          { do: 'Start the Auditor evidence review template and document a privilege-creep or dormant-account finding, the log evidence and the remediation.' },
+          { do: 'Save all three documents in Writer and check the Lab Plan for completion.' },
         ],
         verify:
-          'Both documents are saved in the Documents app. The SOP contains the exact order of ' +
-          'offboarding and the password guide lists the policy requirements in plain language.',
+          'All three documents are saved in Writer and the Lab Plan shows the documentation ' +
+          'lesson complete. The SOP contains the exact offboarding order, the guide lists the ' +
+          'policy requirements, and the evidence pack ties a finding to a timestamped log.',
         interview:
           '"Why does an IAM analyst write procedures?" Because access work is reviewed by ' +
           'auditors, and evidence is what makes a claim believable.',

@@ -47,6 +47,18 @@ function evidencePackExists(): boolean {
   }
 }
 
+function writerEvidenceExists(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    const raw = localStorage.getItem('writer_documents');
+    if (!raw) return false;
+    const docs = JSON.parse(raw) as { title: string; html: string }[];
+    return Array.isArray(docs) && docs.length >= 3;
+  } catch {
+    return false;
+  }
+}
+
 export type LessonState = 'not-started' | 'in-progress' | 'done';
 
 export interface LessonProgress {
@@ -387,15 +399,77 @@ const RULES: Record<string, Rule> = {
       'not accumulate.',
     actions: ['group.created', 'group.add', 'group.remove'],
   },
-  'analyst-audit': {
-    done: (s) => has(s, 'group.remove') && s.dir.listGroups().length >= 4,
-    started: (s) => has(s, 'iam.audit.viewed') || has(s, 'group.remove'),
-    evidence: (s) =>
-      `${count(s, 'group.remove')} privilege-removal(s) recorded; the audit was reviewed.`,
+  'analyst-policy': {
+    done: (s) => {
+      const pwd = s.idp.getPasswordPolicy();
+      const lock = s.idp.getLockoutPolicy();
+      return (
+        pwd.minimumLength >= 14 &&
+        pwd.complexityEnabled &&
+        pwd.maximumAge === 90 &&
+        lock.threshold === 5 &&
+        lock.duration === 30 &&
+        has(s, 'policy.updated')
+      );
+    },
+    started: (s) => has(s, 'policy.updated'),
+    evidence: (s) => {
+      const pwd = s.idp.getPasswordPolicy();
+      const lock = s.idp.getLockoutPolicy();
+      return `Password: min ${pwd.minimumLength}, complexity ${pwd.complexityEnabled}, max age ${pwd.maximumAge}; ` +
+        `lockout: ${lock.threshold} attempts, ${lock.duration} minutes.`;
+    },
     outstanding:
-      'Query the audit log for the unexpected group membership, then remove the access that does ' +
-      'not belong.',
-    actions: ['iam.audit.viewed', 'group.remove'],
+      'Set the password policy to 14 characters, complex, 90 days and the lockout to 5 attempts ' +
+      'for 30 minutes.',
+    actions: ['policy.updated'],
+  },
+  'analyst-shares': {
+    done: (s) =>
+      s.dir.listShares().length >= 1 &&
+      has(s, 'share.created') &&
+      has(s, 'share.permission') &&
+      has(s, 'share.effective.checked'),
+    started: (s) => s.dir.listShares().length >= 1,
+    evidence: (s) =>
+      `${s.dir.listShares().length} share(s), ${count(s, 'share.permission')} permission change(s), ` +
+      `${count(s, 'share.effective.checked')} effective-access check(s).`,
+    outstanding:
+      'Create a share, grant Allow and Deny permissions, and verify the effective access for a user.',
+    actions: ['share.created', 'share.permission', 'share.effective.checked'],
+  },
+  'analyst-audit': {
+    done: (s) => has(s, 'group.remove') && has(s, 'iam.audit.exported'),
+    started: (s) => has(s, 'iam.audit.exported') || has(s, 'group.remove'),
+    evidence: (s) =>
+      `${count(s, 'group.remove')} privilege-removal(s); ${count(s, 'iam.audit.exported')} CSV export(s).`,
+    outstanding:
+      'Query the audit log, export it to CSV, and remove the unexpected group membership.',
+    actions: ['iam.audit.exported', 'group.remove'],
+  },
+  'analyst-dormant': {
+    done: (s) => has(s, 'dormant.reviewed'),
+    started: (s) => staff(s).some((u) => !u.lastSignInAt),
+    evidence: (s) =>
+      has(s, 'dormant.reviewed')
+        ? `${count(s, 'dormant.reviewed')} dormant-account review(s).`
+        : 'No dormant-account review has been run.',
+    outstanding:
+      'Run Get-DormantAccount and document any accounts that have never signed in or are stale.',
+    actions: ['dormant.reviewed'],
+  },
+  'analyst-cloud': {
+    done: (s) =>
+      s.cloud.entra.isConnected() && s.cloud.entra.list().some((u) => u.origin === 'synced'),
+    started: (s) => s.cloud.entra.isConnected() || has(s, 'cloud.synced'),
+    evidence: (s) => {
+      const synced = s.cloud.entra.list().filter((u) => u.origin === 'synced').length;
+      return s.cloud.entra.isConnected()
+        ? `Entra connected; ${synced} synced account(s).`
+        : 'Entra tenant has not been connected.';
+    },
+    outstanding: 'Connect to Entra, run Start-DirectorySync, and verify a synced user.',
+    actions: ['cloud.synced'],
   },
   'analyst-helpdesk': {
     done: (s) => has(s, 'account.unlock') && has(s, 'group.add'),
@@ -407,11 +481,14 @@ const RULES: Record<string, Rule> = {
     actions: ['account.unlock', 'group.add'],
   },
   'analyst-docs': {
-    done: () => false,
-    evidence: () => 'The offboarding SOP and password guide have not been saved yet.',
+    done: () => writerEvidenceExists(),
+    evidence: () =>
+      writerEvidenceExists()
+        ? 'Writer documents have been saved.'
+        : 'The offboarding SOP, password guide and auditor evidence pack have not been saved yet.',
     outstanding:
-      'Use Writer to complete the offboarding SOP and the new-hire password guide, then save them ' +
-      'to the Documents app.',
+      'Use Writer to complete the offboarding SOP, the new-hire password guide and the auditor ' +
+      'evidence pack, then save each one.',
     actions: ['document.saved'],
   },
 };
