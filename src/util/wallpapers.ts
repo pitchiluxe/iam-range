@@ -83,6 +83,36 @@ export const WALLPAPERS: Wallpaper[] = [
     label: 'Windows Blue',
     gradient: 'linear-gradient(135deg, #0b3d91 0%, #1e5fbf 35%, #5b8def 70%, #a7c7f2 100%)',
   },
+  {
+    id: 'iamlab-wm-navy',
+    label: 'IAMLab Navy',
+    gradient: wordmarkWallpaper('#08101a', 'IAMLab', '#3a5a7a'),
+  },
+  {
+    id: 'iamlab-wm-teal',
+    label: 'IAMLab Teal',
+    gradient: wordmarkWallpaper('#07151a', 'IAMLab', '#3a8a8a'),
+  },
+  {
+    id: 'iamlab-wm-forest',
+    label: 'IAMLab Forest',
+    gradient: wordmarkWallpaper('#09180f', 'IAMLab', '#3a7a4a'),
+  },
+  {
+    id: 'iamlab-wm-purple',
+    label: 'IAMLab Purple',
+    gradient: wordmarkWallpaper('#120a1c', 'IAMLab', '#6a4a8a'),
+  },
+  {
+    id: 'iamlab-wm-crimson',
+    label: 'IAMLab Crimson',
+    gradient: wordmarkWallpaper('#1a0a0e', 'IAMLab', '#8a3a45'),
+  },
+  {
+    id: 'iamlab-wm-gold',
+    label: 'IAMLab Gold',
+    gradient: wordmarkWallpaper('#141008', 'IAMLab', '#8a6a2a'),
+  },
 ];
 
 export const WALLPAPER_BY_ID: Record<string, string> = Object.fromEntries(
@@ -160,6 +190,36 @@ export const LOCK_SCREENS: Wallpaper[] = [
     id: 'iamlab-gold',
     label: 'OMARI Gold',
     gradient: wordmarkWallpaper('#141008', 'OMARI', '#8a6a2a'),
+  },
+  {
+    id: 'iamlab-lock-navy',
+    label: 'IAMLab Navy',
+    gradient: wordmarkWallpaper('#08101a', 'IAMLab', '#3a5a7a'),
+  },
+  {
+    id: 'iamlab-lock-teal',
+    label: 'IAMLab Teal',
+    gradient: wordmarkWallpaper('#07131a', 'IAMLab', '#3a6a6a'),
+  },
+  {
+    id: 'iamlab-lock-midnight',
+    label: 'IAMLab Midnight',
+    gradient: wordmarkWallpaper('#080c14', 'IAMLab', '#3a4a5a'),
+  },
+  {
+    id: 'iamlab-lock-crimson',
+    label: 'IAMLab Crimson',
+    gradient: wordmarkWallpaper('#1a0a0e', 'IAMLab', '#7a3a45'),
+  },
+  {
+    id: 'iamlab-lock-gold',
+    label: 'IAMLab Gold',
+    gradient: wordmarkWallpaper('#141008', 'IAMLab', '#8a6a2a'),
+  },
+  {
+    id: 'iamlab-lock-forest',
+    label: 'IAMLab Forest',
+    gradient: wordmarkWallpaper('#09140f', 'IAMLab', '#3a6a4a'),
   },
 ];
 
