@@ -263,6 +263,60 @@ export const THEME_STORAGE_KEY = 'app_theme';
 const CHANGE_EVENT = 'apex-theme-changed';
 const STYLE_ID = 'vm-theme';
 
+/**
+ * The one slot for an AI-generated theme (aiThemeGenerator.ts). A single
+ * slot, not a gallery — generating a new one replaces the last, matching how
+ * the picker presents it as "your current AI theme" rather than a growing list.
+ */
+export const CUSTOM_THEME_ID = 'ai-custom';
+const CUSTOM_THEME_STORAGE_KEY = 'app_theme_custom';
+
+/** Reads and validates the stored custom theme. Corrupted or hand-edited
+ *  localStorage should degrade to "no custom theme", not throw. */
+export function getCustomTheme(): Theme | null {
+  try {
+    const raw = localStorage.getItem(CUSTOM_THEME_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      (parsed as Theme).id !== CUSTOM_THEME_ID ||
+      typeof (parsed as Theme).tokens !== 'object'
+    ) {
+      return null;
+    }
+    return parsed as Theme;
+  } catch {
+    return null;
+  }
+}
+
+/** Store a generated theme and switch to it immediately. */
+export function setCustomTheme(theme: Theme): void {
+  try {
+    localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, JSON.stringify({ ...theme, id: CUSTOM_THEME_ID }));
+  } catch {
+    /* private mode — theme still applies for this session */
+  }
+  setTheme(CUSTOM_THEME_ID);
+}
+
+/** Remove the AI theme and fall back to the default preset if it was active. */
+export function clearCustomTheme(): void {
+  try {
+    localStorage.removeItem(CUSTOM_THEME_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+  if (currentThemeId() === CUSTOM_THEME_ID) setTheme(DEFAULT_THEME_ID);
+}
+
+function resolveTheme(id: string): Theme {
+  if (id === CUSTOM_THEME_ID) return getCustomTheme() ?? THEME_BY_ID[DEFAULT_THEME_ID]!;
+  return THEME_BY_ID[id] ?? THEME_BY_ID[DEFAULT_THEME_ID]!;
+}
+
 export function currentThemeId(): string {
   let id = DEFAULT_THEME_ID;
   try {
@@ -270,11 +324,12 @@ export function currentThemeId(): string {
   } catch {
     /* private mode — the default is correct */
   }
+  if (id === CUSTOM_THEME_ID) return getCustomTheme() ? id : DEFAULT_THEME_ID;
   return THEME_BY_ID[id] ? id : DEFAULT_THEME_ID;
 }
 
 export function currentTheme(): Theme {
-  return THEME_BY_ID[currentThemeId()]!;
+  return resolveTheme(currentThemeId());
 }
 
 /**
@@ -286,7 +341,7 @@ export function currentTheme(): Theme {
  * otherwise stay dark on a light theme and look like a rendering fault.
  */
 export function applyTheme(id: string = currentThemeId()): void {
-  const theme = THEME_BY_ID[id] ?? THEME_BY_ID[DEFAULT_THEME_ID]!;
+  const theme = resolveTheme(id);
   const t = theme.tokens;
 
   let style = document.getElementById(STYLE_ID);

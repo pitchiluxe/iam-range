@@ -33,7 +33,16 @@ import {
   clearProfilePicture,
   readImageAsAvatar,
 } from '@/util/profilePictures';
-import { THEMES, currentThemeId, setTheme } from '@/ui/themes';
+import {
+  THEMES,
+  CUSTOM_THEME_ID,
+  currentThemeId,
+  setTheme,
+  getCustomTheme,
+  setCustomTheme,
+  clearCustomTheme,
+} from '@/ui/themes';
+import { generateThemeWithAI } from '@/util/aiThemeGenerator';
 
 const DENSITY_KEY = 'settings_density';
 
@@ -346,21 +355,21 @@ export function renderSettingsWindow(body: HTMLElement): void {
       const themeGrid = document.createElement('div');
       themeGrid.style.cssText =
         'display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;' +
-        'margin-bottom:24px;';
+        'margin-bottom:10px;';
       const activeTheme = currentThemeId();
 
-      for (const theme of THEMES) {
+      // Shared by every preset card and the one AI-generated card — a swatch
+      // built from the theme's own colours (previews the scheme rather than
+      // describing it), plus an optional badge/remove control for the AI slot.
+      function themeCard(theme: (typeof THEMES)[number], isSel: boolean, badge?: string): HTMLElement {
         const card = document.createElement('button');
-        const isSel = theme.id === activeTheme;
         card.style.cssText =
           'display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:7px;' +
-          'cursor:pointer;text-align:left;font-family:inherit;' +
+          'cursor:pointer;text-align:left;font-family:inherit;position:relative;' +
           `background:${theme.tokens.panelAlt};` +
           `border:2px solid ${isSel ? theme.tokens.accent : 'transparent'};` +
           `color:${theme.tokens.fg};`;
 
-        // A swatch built from the theme's own colours, so the card previews
-        // the scheme rather than describing it.
         const swatch = document.createElement('span');
         swatch.style.cssText =
           'width:30px;height:30px;border-radius:5px;flex-shrink:0;display:grid;' +
@@ -387,13 +396,92 @@ export function renderSettingsWindow(body: HTMLElement): void {
         text.append(name, note);
 
         card.append(swatch, text);
+
+        if (badge) {
+          const tag = document.createElement('span');
+          tag.textContent = badge;
+          tag.style.cssText =
+            'position:absolute;top:6px;right:6px;font-size:9px;font-weight:700;' +
+            'letter-spacing:0.04em;padding:1px 5px;border-radius:3px;' +
+            `background:${theme.tokens.accent};color:${theme.tokens.onAccent};`;
+          card.appendChild(tag);
+        }
+        return card;
+      }
+
+      for (const theme of THEMES) {
+        const card = themeCard(theme, theme.id === activeTheme);
         card.addEventListener('click', () => {
           setTheme(theme.id);
           renderContent();
         });
         themeGrid.appendChild(card);
       }
+
+      const customTheme = getCustomTheme();
+      if (customTheme) {
+        const card = themeCard(customTheme, activeTheme === CUSTOM_THEME_ID, 'AI');
+        card.addEventListener('click', () => {
+          setTheme(CUSTOM_THEME_ID);
+          renderContent();
+        });
+        themeGrid.appendChild(card);
+      }
       content.appendChild(themeGrid);
+
+      // AI theme generator. Ollama is text-only — this asks it for the same
+      // fifteen colour tokens every preset above already has, not an image.
+      const aiRow = document.createElement('div');
+      aiRow.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;';
+
+      const aiButton = document.createElement('button');
+      aiButton.textContent = '✨ Generate Random Theme';
+      aiButton.style.cssText =
+        'padding:6px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-family:inherit;' +
+        'background:var(--accent);color:var(--on-accent);border:1px solid var(--accent);' +
+        'white-space:nowrap;';
+
+      const aiNote = document.createElement('span');
+      aiNote.textContent = 'Ollama invents a one-off colour scheme, no description needed.';
+      aiNote.style.cssText = 'font-size:11.5px;color:var(--muted);';
+
+      aiRow.append(aiButton, aiNote);
+      content.appendChild(aiRow);
+
+      const aiStatus = document.createElement('div');
+      aiStatus.style.cssText = 'font-size:11.5px;margin-bottom:20px;min-height:14px;';
+      content.appendChild(aiStatus);
+
+      if (customTheme) {
+        const removeAi = document.createElement('button');
+        removeAi.textContent = 'Remove AI theme';
+        removeAi.style.cssText =
+          'padding:6px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-family:inherit;' +
+          'background:transparent;color:var(--muted);border:1px solid var(--border);margin-bottom:24px;';
+        removeAi.addEventListener('click', () => {
+          clearCustomTheme();
+          renderContent();
+        });
+        content.appendChild(removeAi);
+      }
+
+      aiButton.addEventListener('click', () => {
+        aiButton.disabled = true;
+        aiButton.textContent = 'Generating…';
+        aiStatus.style.color = 'var(--muted)';
+        aiStatus.textContent = 'Asking the local model…';
+        void generateThemeWithAI().then((result) => {
+          if (result.ok) {
+            setCustomTheme(result.theme);
+            renderContent();
+            return;
+          }
+          aiButton.disabled = false;
+          aiButton.textContent = '✨ Generate Random Theme';
+          aiStatus.style.color = 'var(--err)';
+          aiStatus.textContent = result.error;
+        });
+      });
 
       const label = document.createElement('div');
       label.textContent = 'Background';
