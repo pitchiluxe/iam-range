@@ -732,6 +732,18 @@ export class MockEndpoints {
     return this.done(e, actor, `${e.name} connected to ${e.network.ssid} with address ${e.network.ipv4}.`);
   }
 
+  /** Leave the current wireless network, leaving the radio on. */
+  disconnectWifi(name: string, actor: UserId): EndpointResult {
+    const e = this.need(name);
+    if (!e) return { ok: false, error: `Cannot find a computer named ${name}.` };
+    if (!e.network.ssid) return this.refused(e, actor, 'Not connected to a wireless network.');
+    const was = e.network.ssid;
+    e.network.ssid = null;
+    e.network.ipv4 = '0.0.0.0';
+    e.network.gateway = '';
+    return this.done(e, actor, `${e.name} disconnected from ${was}.`);
+  }
+
   private join(e: Endpoint, ssid: string): void {
     e.network.ssid = ssid;
     if (ssid === CORP_WIFI) {

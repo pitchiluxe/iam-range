@@ -138,7 +138,7 @@ export function renderCloudIdentityWindow(body: HTMLElement, conductor: VmServic
       tab.textContent = VENDORS[id].label;
       tab.style.cssText =
         'padding:7px 14px;border:none;cursor:pointer;font-size:12px;border-radius:4px 4px 0 0;' +
-        (on ? 'background:var(--panel);color:#fff;' : 'background:transparent;color:var(--muted);');
+        (on ? 'background:var(--panel);color:var(--fg);' : 'background:transparent;color:var(--muted);');
       tab.addEventListener('click', () => {
         vendor = id;
         render();

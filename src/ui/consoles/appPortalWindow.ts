@@ -105,7 +105,7 @@ export function renderAppPortalWindow(body: HTMLElement, conductor: VmServices):
   body.innerHTML = '';
   Object.assign(body.style, {
     overflow: 'hidden',
-    background: '#1a1d22',
+    background: 'var(--panel)',
     flex: '1',
     minHeight: '0',
   });

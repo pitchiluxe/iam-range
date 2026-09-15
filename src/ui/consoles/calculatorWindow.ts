@@ -30,7 +30,7 @@ export function renderCalculatorWindow(body: HTMLElement): void {
   // Additive, so the window manager's flex sizing survives.
   Object.assign(body.style, {
     overflow: 'hidden',
-    background: '#1a1d22',
+    background: 'var(--panel)',
     flex: '1',
     minHeight: '0',
   });
@@ -143,13 +143,13 @@ export function renderCalculatorWindow(body: HTMLElement): void {
       const isOp = key in OP_FOR || key === '=';
       b.style.cssText =
         `border:none;cursor:pointer;font-size:16px;color:${key === '=' ? '#06231d' : 'var(--fg)'};` +
-        `background:${key === '=' ? 'var(--accent)' : isOp ? '#242a32' : '#1f242b'};` +
+        `background:${key === '=' ? 'var(--accent)' : isOp ? 'var(--border)' : 'var(--panel-alt)'};` +
         'transition:background .1s;';
       b.addEventListener('mouseenter', () => {
         if (key !== '=') b.style.background = 'var(--border)';
       });
       b.addEventListener('mouseleave', () => {
-        b.style.background = key === '=' ? 'var(--accent)' : isOp ? '#242a32' : '#1f242b';
+        b.style.background = key === '=' ? 'var(--accent)' : isOp ? 'var(--border)' : 'var(--panel-alt)';
       });
       b.addEventListener('click', () => press(key));
       pad.appendChild(b);

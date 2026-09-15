@@ -327,3 +327,13 @@ export function currentLockScreen(): string {
   }
   return resolve(id, LOCK_SCREEN_BY_ID, DEFAULT_LOCK_SCREEN_ID);
 }
+
+/** Resolve a desktop wallpaper id (built-in or generated) to its CSS background. */
+export function wallpaperGradient(id: string): string {
+  return resolve(id, WALLPAPER_BY_ID, DEFAULT_WALLPAPER_ID);
+}
+
+/** Resolve a lock screen id (built-in or generated) to its CSS background. */
+export function lockScreenGradient(id: string): string {
+  return resolve(id, LOCK_SCREEN_BY_ID, DEFAULT_LOCK_SCREEN_ID);
+}

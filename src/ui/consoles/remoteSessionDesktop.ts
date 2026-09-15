@@ -25,6 +25,19 @@ import { ticketStore } from '@/stores';
 import { login } from '@/vm/loginSession';
 import { onEndpointChanged } from '@/util/endpointEvents';
 import { renderDrivesPanel } from './endpointApps';
+import { notifyEndpointChanged } from '@/util/endpointEvents';
+import { wallpaperGradient } from '@/util/wallpapers';
+import { CORP_WIFI, GUEST_WIFI } from '@/services/mockEndpoints';
+import {
+  SESSION_DEFAULT_WALLPAPER_ID,
+  WINDOWS_BLOOM,
+  onSessionLookChanged,
+  sessionPersonalization,
+  sessionTheme,
+  sessionWallpaperId,
+  themeVariables,
+  type PersonalizationStore,
+} from '@/ui/personalization';
 import { appsForDepartment } from '@/config/desktopProfiles';
 import { VM_HOST } from '@/config/vmHost';
 import { paintAvatar } from '@/util/profilePictures';
@@ -37,6 +50,8 @@ export interface RemoteAppContext {
   host: string;
   /** Set when that computer is a managed end-user computer (help-desk work). */
   endpoint?: string;
+  /** Theme, wallpaper and lock screen for this computer only. */
+  personalization: PersonalizationStore;
   /** Close this app's window inside the session. */
   close(): void;
   /** Minimize this app's window inside the session. */
@@ -135,13 +150,6 @@ const SVG_RESTORE =
 const SVG_CLOSE =
   '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor"/></svg>';
 
-/** Windows 11's "Bloom", approximated in gradients so nothing is fetched. */
-const WALLPAPER =
-  'radial-gradient(30% 42% at 56% 56%, rgba(255,255,255,0.9) 0%, rgba(175,215,255,0.6) 35%, rgba(60,140,235,0) 75%),' +
-  'radial-gradient(48% 62% at 52% 60%, #3d8ff0 0%, #1d66d9 38%, rgba(18,80,200,0) 76%),' +
-  'radial-gradient(60% 80% at 26% 96%, rgba(10,58,168,0.7) 0%, rgba(10,58,168,0) 70%),' +
-  'radial-gradient(50% 70% at 86% 20%, rgba(120,180,245,0.7) 0%, rgba(120,180,245,0) 70%),' +
-  'linear-gradient(160deg, #d3e6f8 0%, #a8cbf0 34%, #78ade8 62%, #4a8adb 100%)';
 
 const STYLE = `
 .rds-root { position:relative; flex:1; min-height:0; overflow:hidden; user-select:none;
@@ -232,6 +240,10 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
   // ── What this account's desktop contains ──────────────────────────────────
   const byId = new Map(opts.catalog.map((a) => [a.id, a]));
   const allowed = appsForDepartment(user.department)
+    // No Remote Desktop inside a Remote Desktop session: a connection from
+    // the user's computer onwards is not a help-desk step, and a session
+    // inside a session is only a way to lose track of which machine you are on.
+    .filter((id) => id !== 'remote-desktop')
     .map((id) => byId.get(id))
     .filter((a): a is RemoteAppEntry => a !== undefined);
 
@@ -276,9 +288,25 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
 
   const shell = el(
     'div',
-    `background:${WALLPAPER};position:absolute;left:0;top:0;flex:none;transform-origin:0 0;`,
+    'position:absolute;left:0;top:0;flex:none;transform-origin:0 0;',
   );
   shell.className = 'rds-root';
+
+  // This computer's own look: Windows' light theme and Bloom until someone
+  // changes it in the session's Settings, and never the workstation's theme.
+  // The variables are set on the session, so every app hosted in it inherits
+  // them instead of the operator's dark theme on :root.
+  const look: PersonalizationStore = sessionPersonalization(host);
+  const paintLook = (): void => {
+    const theme = sessionTheme(host);
+    for (const [name, value] of Object.entries(themeVariables(theme))) shell.style.setProperty(name, value);
+    shell.style.colorScheme = theme.mode;
+    const wallpaper = sessionWallpaperId(host);
+    shell.style.background =
+      wallpaper === SESSION_DEFAULT_WALLPAPER_ID ? WINDOWS_BLOOM : wallpaperGradient(wallpaper);
+  };
+  paintLook();
+  onSessionLookChanged(shell, host, paintLook);
   shell.tabIndex = 0;
   root.style.position = 'relative';
   root.style.overflow = 'hidden';
@@ -656,8 +684,7 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
   if (endpointName) onEndpointChanged(quick, endpointName, paintNetwork);
   quick.addEventListener('click', (e) => {
     e.stopPropagation();
-    const settings = lookup.get('settings');
-    if (settings) openApp(settings);
+    toggleFlyout('quick');
   });
 
   // The ticket this session is for, beside the work rather than a window away.
@@ -683,6 +710,10 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
     );
     clock.title = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   };
+  clock.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleFlyout('calendar');
+  });
   tickClock();
   const clockTimer = window.setInterval(() => {
     if (!shell.isConnected) window.clearInterval(clockTimer);
@@ -937,6 +968,326 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
     search.focus();
   }
 
+  // ── Tray flyouts: calendar and quick settings ─────────────────────────────
+  // Windows 11 opens a panel above the tray for each: the clock gives the
+  // calendar, the network/volume icons give quick settings with the Wi-Fi
+  // list. On a managed computer the Wi-Fi controls change that computer, so a
+  // user on the guest network can be moved to the corporate one from here.
+  type FlyoutKind = 'calendar' | 'quick' | 'wifi';
+  let flyout: HTMLElement | null = null;
+  let flyoutKind: FlyoutKind | null = null;
+  let calendarMonth = new Date();
+  calendarMonth.setDate(1);
+  // Cosmetic quick-settings state, kept for the length of the session.
+  const tiles = { bluetooth: true, airplane: false, saver: false, nearby: false };
+  let brightness = 80;
+  let volume = 60;
+  let wifiMessage = '';
+
+  function closeFlyout(): void {
+    flyout?.remove();
+    flyout = null;
+    flyoutKind = null;
+  }
+
+  function toggleFlyout(kind: FlyoutKind): void {
+    const wasOpen = flyoutKind === kind || (kind === 'quick' && flyoutKind === 'wifi');
+    closePopups();
+    if (wasOpen) return;
+    if (kind === 'calendar') {
+      calendarMonth = new Date();
+      calendarMonth.setDate(1);
+    }
+    flyoutKind = kind;
+    paintFlyout();
+  }
+
+  function paintFlyout(): void {
+    flyout?.remove();
+    if (!flyoutKind) return;
+    const panel = el(
+      'div',
+      `position:absolute;right:12px;bottom:${TASKBAR_H + 12}px;width:min(360px,calc(100% - 24px));z-index:21000;` +
+        'background:rgba(243,243,243,0.96);backdrop-filter:blur(40px) saturate(170%);-webkit-backdrop-filter:blur(40px) saturate(170%);' +
+        'border:1px solid rgba(0,0,0,0.1);border-radius:8px;box-shadow:0 16px 48px rgba(0,0,0,0.28);' +
+        'color:#1b1b1b;color-scheme:light;overflow:hidden;',
+    );
+    panel.addEventListener('click', (e) => e.stopPropagation());
+    if (flyoutKind === 'calendar') paintCalendar(panel);
+    else if (flyoutKind === 'quick') paintQuickSettings(panel);
+    else paintWifiList(panel);
+    shell.appendChild(panel);
+    flyout = panel;
+  }
+
+  function paintCalendar(panel: HTMLElement): void {
+    const today = new Date();
+    const head = el('div', 'padding:14px 16px 10px;border-bottom:1px solid rgba(0,0,0,0.08);font-size:14px;font-weight:600;');
+    head.textContent = today.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    panel.appendChild(head);
+
+    const body = el('div', 'padding:12px 16px 16px;');
+    const nav = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;');
+    nav.appendChild(el('div', 'font-weight:600;font-size:13px;', calendarMonth.toLocaleDateString([], { month: 'long', year: 'numeric' })));
+    const arrows = el('div', 'display:flex;gap:2px;');
+    const step = (label: string, title: string, delta: number): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.className = 'rds-winctl';
+      b.style.cssText = 'width:32px;height:28px;border-radius:4px;font-size:12px;';
+      b.textContent = label;
+      b.title = title;
+      b.addEventListener('click', () => {
+        calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + delta, 1);
+        paintFlyout();
+      });
+      return b;
+    };
+    arrows.append(step('▲', 'Previous month', -1), step('▼', 'Next month', 1));
+    nav.appendChild(arrows);
+    body.appendChild(nav);
+
+    const grid = el('div', 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;');
+    for (const d of ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']) {
+      grid.appendChild(el('div', 'font-size:11px;color:#5f5f5f;padding:4px 0;', d));
+    }
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const first = new Date(year, month, 1).getDay();
+    // Six full weeks, spilling into the months either side, as Windows draws it.
+    for (let i = 0; i < 42; i++) {
+      const date = new Date(year, month, 1 - first + i);
+      const inMonth = date.getMonth() === month;
+      const isToday = date.toDateString() === today.toDateString();
+      const cell = el(
+        'div',
+        'width:34px;height:34px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;' +
+          `font-size:12px;${isToday ? 'background:#005fb8;color:#fff;font-weight:600;' : inMonth ? 'color:#1b1b1b;' : 'color:#9a9a9a;'}`,
+        String(date.getDate()),
+      );
+      grid.appendChild(cell);
+    }
+    body.appendChild(grid);
+    panel.appendChild(body);
+
+    const focus = el('div', 'display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,0.035);border-top:1px solid rgba(0,0,0,0.07);font-size:12px;');
+    focus.append(el('span', '', 'Focus'), el('span', 'color:#5f5f5f;', '30 mins'));
+    panel.appendChild(focus);
+  }
+
+  const network = (): { enabled: boolean; ssid: string | null; corp: boolean } => {
+    const e = endpointName ? services.endpoints.get(endpointName) : undefined;
+    if (!e) return { enabled: !tiles.airplane, ssid: tiles.airplane ? null : CORP_WIFI, corp: !tiles.airplane };
+    return {
+      enabled: e.network.adapterEnabled,
+      ssid: e.network.ssid,
+      corp: services.endpoints.onCorpNetwork(e),
+    };
+  };
+
+  /** A Wi-Fi change on this computer, then every window showing it repaints. */
+  function wifiAction(run: () => { ok: boolean; message?: string; error?: string }): void {
+    const r = run();
+    wifiMessage = r.ok ? '' : (r.error ?? '');
+    if (endpointName) notifyEndpointChanged(endpointName);
+    paintFlyout();
+  }
+
+  const operatorId = (): UserId => (login.user?.id ?? 'system') as UserId;
+
+  function paintQuickSettings(panel: HTMLElement): void {
+    const net = network();
+    const grid = el('div', 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:16px 16px 6px;');
+    const tile = (icon: string, label: string, on: boolean, onToggle: () => void, onMore?: () => void): HTMLElement => {
+      const wrap = el('div', 'display:flex;flex-direction:column;align-items:center;gap:6px;');
+      const btn = el(
+        'div',
+        `width:100%;height:46px;border-radius:6px;display:flex;overflow:hidden;border:1px solid ${on ? '#005fb8' : 'rgba(0,0,0,0.1)'};` +
+          `background:${on ? '#005fb8' : '#fbfbfb'};color:${on ? '#fff' : '#1b1b1b'};`,
+      );
+      const main = document.createElement('button');
+      main.style.cssText = `flex:1;border:none;background:transparent;color:inherit;font-size:17px;cursor:default;`;
+      main.textContent = icon;
+      main.title = label;
+      main.addEventListener('click', onToggle);
+      btn.appendChild(main);
+      if (onMore) {
+        const more = document.createElement('button');
+        more.style.cssText = `width:26px;border:none;border-left:1px solid ${on ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.1)'};background:transparent;color:inherit;font-size:12px;cursor:default;`;
+        more.textContent = '›';
+        more.title = `Manage ${label} connections`;
+        more.addEventListener('click', onMore);
+        btn.appendChild(more);
+      }
+      wrap.append(btn, el('div', 'font-size:11px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;', label));
+      return wrap;
+    };
+
+    const toggleWifi = (): void => {
+      if (endpointName) {
+        wifiAction(() => services.endpoints.setAdapterEnabled(endpointName, !net.enabled, operatorId()));
+      } else {
+        tiles.airplane = net.enabled;
+        paintFlyout();
+      }
+    };
+    grid.append(
+      tile('📶', net.enabled ? (net.ssid ?? 'Wi-Fi') : 'Wi-Fi', net.enabled, toggleWifi, () => {
+        flyoutKind = 'wifi';
+        paintFlyout();
+      }),
+      tile('🔵', 'Bluetooth', tiles.bluetooth, () => {
+        tiles.bluetooth = !tiles.bluetooth;
+        paintFlyout();
+      }),
+      tile('✈️', 'Airplane mode', tiles.airplane, () => {
+        tiles.airplane = !tiles.airplane;
+        // Airplane mode turns the radio off, which on a managed computer is a
+        // real change to its network — the same one a user makes by accident.
+        if (endpointName && tiles.airplane === net.enabled) {
+          wifiAction(() => services.endpoints.setAdapterEnabled(endpointName, !tiles.airplane, operatorId()));
+        } else paintFlyout();
+      }),
+      tile('🍃', 'Energy saver', tiles.saver, () => {
+        tiles.saver = !tiles.saver;
+        paintFlyout();
+      }),
+      tile('♿', 'Accessibility', false, () => undefined),
+      tile('📡', 'Nearby sharing', tiles.nearby, () => {
+        tiles.nearby = !tiles.nearby;
+        paintFlyout();
+      }),
+    );
+    panel.appendChild(grid);
+
+    const slider = (icon: string, value: number, set: (v: number) => void): HTMLElement => {
+      const row = el('div', 'display:flex;align-items:center;gap:12px;padding:8px 20px;');
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = '0';
+      input.max = '100';
+      input.value = String(value);
+      input.style.cssText = 'flex:1;accent-color:#005fb8;';
+      input.addEventListener('input', () => set(Number(input.value)));
+      row.append(el('span', 'font-size:16px;width:20px;text-align:center;', icon), input);
+      return row;
+    };
+    panel.append(
+      slider('🔆', brightness, (v) => (brightness = v)),
+      slider(volume === 0 ? '🔇' : '🔊', volume, (v) => (volume = v)),
+    );
+
+    const foot = el('div', 'display:flex;align-items:center;justify-content:space-between;padding:10px 16px;margin-top:8px;background:rgba(0,0,0,0.035);border-top:1px solid rgba(0,0,0,0.07);font-size:12px;');
+    foot.appendChild(el('span', '', '🔋 86%'));
+    const gear = document.createElement('button');
+    gear.className = 'rds-winctl';
+    gear.style.cssText = 'width:32px;height:28px;border-radius:4px;font-size:15px;';
+    gear.textContent = '⚙️';
+    gear.title = 'All settings';
+    gear.addEventListener('click', () => {
+      const settings = lookup.get('settings');
+      closePopups();
+      if (settings) openApp(settings);
+    });
+    foot.appendChild(gear);
+    panel.appendChild(foot);
+  }
+
+  function paintWifiList(panel: HTMLElement): void {
+    const net = network();
+    const head = el('div', 'display:flex;align-items:center;gap:8px;padding:12px 12px 8px;');
+    const back = document.createElement('button');
+    back.className = 'rds-winctl';
+    back.style.cssText = 'width:32px;height:28px;border-radius:4px;font-size:14px;';
+    back.textContent = '‹';
+    back.title = 'Back';
+    back.addEventListener('click', () => {
+      flyoutKind = 'quick';
+      wifiMessage = '';
+      paintFlyout();
+    });
+    head.append(back, el('div', 'flex:1;font-size:14px;font-weight:600;', 'Wi-Fi'));
+    const sw = document.createElement('input');
+    sw.type = 'checkbox';
+    sw.checked = net.enabled;
+    sw.title = net.enabled ? 'Turn Wi-Fi off' : 'Turn Wi-Fi on';
+    sw.style.cssText = 'width:18px;height:18px;accent-color:#005fb8;';
+    sw.addEventListener('change', () => {
+      if (endpointName) {
+        wifiAction(() => services.endpoints.setAdapterEnabled(endpointName, sw.checked, operatorId()));
+      } else {
+        tiles.airplane = !sw.checked;
+        paintFlyout();
+      }
+    });
+    head.appendChild(sw);
+    panel.appendChild(head);
+
+    const list = el('div', 'padding:0 8px 8px;display:flex;flex-direction:column;gap:2px;max-height:300px;overflow:auto;');
+    if (!net.enabled) {
+      list.appendChild(el('div', 'padding:14px 10px;color:#5f5f5f;', 'Wi-Fi is turned off.'));
+    } else {
+      const networks = [
+        { ssid: CORP_WIFI, secured: true, bars: '▂▄▆█' },
+        { ssid: GUEST_WIFI, secured: false, bars: '▂▄▆' },
+        { ssid: 'DIRECT-HQ-Floor2-MFP', secured: true, bars: '▂▄' },
+      ];
+      for (const n of networks) {
+        const connected = net.ssid === n.ssid;
+        const item = el(
+          'div',
+          `display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;${connected ? 'background:rgba(0,0,0,0.05);' : ''}`,
+        );
+        const text = el('div', 'flex:1;min-width:0;');
+        const status = connected
+          ? n.ssid === CORP_WIFI && net.corp
+            ? 'Connected, secured'
+            : 'Connected, no internet'
+          : n.secured
+            ? 'Secured'
+            : 'Open';
+        text.append(el('div', 'font-weight:600;font-size:12.5px;', n.ssid), el('div', 'font-size:11px;color:#5f5f5f;', status));
+        item.append(el('span', 'font-size:11px;letter-spacing:-1px;color:#005fb8;width:30px;', n.bars), text);
+        const action = document.createElement('button');
+        action.className = connected ? 'rds-pill' : 'rds-primary';
+        action.textContent = connected ? 'Disconnect' : 'Connect';
+        action.addEventListener('click', () => {
+          if (!endpointName) {
+            wifiMessage = 'This workstation stays on the corporate network.';
+            paintFlyout();
+            return;
+          }
+          const eps = services.endpoints;
+          if (connected) wifiAction(() => eps.disconnectWifi(endpointName, operatorId()));
+          else if (n.ssid === 'DIRECT-HQ-Floor2-MFP') {
+            wifiMessage = "Can't connect to this network. It is the printer's direct Wi-Fi, not a network.";
+            paintFlyout();
+          } else wifiAction(() => eps.connectWifi(endpointName, n.ssid, operatorId()));
+        });
+        item.appendChild(action);
+        list.appendChild(item);
+      }
+    }
+    panel.appendChild(list);
+    if (wifiMessage) panel.appendChild(el('div', 'padding:0 18px 10px;color:#a4262c;font-size:11.5px;', wifiMessage));
+
+    const more = document.createElement('button');
+    more.className = 'rds-link';
+    more.style.cssText = 'display:block;padding:10px 18px 14px;';
+    more.textContent = 'More Wi-Fi settings';
+    more.addEventListener('click', () => {
+      const settings = lookup.get('settings');
+      closePopups();
+      if (settings) openApp(settings);
+    });
+    panel.appendChild(more);
+  }
+
+  if (endpointName) {
+    onEndpointChanged(shell, endpointName, () => {
+      if (flyoutKind === 'quick' || flyoutKind === 'wifi') paintFlyout();
+    });
+  }
+
   // ── Ticket panel ──────────────────────────────────────────────────────────
   // The tickets for this computer and its user, with work notes, docked beside
   // the desktop so the technician is not flipping back to the queue. Resolving
@@ -1093,6 +1444,7 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
   }
 
   function closePopups(): void {
+    closeFlyout();
     start.style.display = 'none';
     startBtn.classList.remove('open');
     menuEl?.remove();
@@ -1119,6 +1471,7 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
         user: liveUser(),
         host,
         ...(endpointName ? { endpoint: endpointName } : {}),
+        personalization: look,
         close: () => closeWin(entry.id),
         minimize: () => minimizeWin(entry.id),
         setMaximized: (on) => {

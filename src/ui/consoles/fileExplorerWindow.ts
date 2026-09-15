@@ -334,7 +334,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
     const header = document.createElement('div');
     header.style.cssText = `
       display:grid;grid-template-columns:${FE_COLS};gap:8px;min-width:${FE_ROW_MIN_WIDTH};
-      padding:6px 12px;border-bottom:1px solid var(--border);background:#181c21;
+      padding:6px 12px;border-bottom:1px solid var(--border);background:var(--panel-alt);
       font-size:11px;color:var(--muted);font-weight:600;flex-shrink:0;
     `;
     header.innerHTML = `<span>Name</span><span>Date modified</span><span>Type</span><span style="text-align:right;">Size</span>`;

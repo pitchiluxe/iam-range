@@ -393,9 +393,9 @@ const APP_BY_ID: Record<string, WindowDef> = Object.fromEntries(DESKTOP_APPS.map
  * This desktop's apps, bound to `c`, for a Remote Desktop session to host.
  *
  * The session runs the very same renderers, so every app works there as it
- * does here; it filters them by the remote account's department. Two need the
- * session's context: Settings shows the remote account, and a Remote Desktop
- * opened inside the session closes its own window rather than this one.
+ * does here; it filters them by the remote account's department (and never
+ * offers Remote Desktop itself). Settings is given the session's account and
+ * its own personalization, so choices there never reach this workstation.
  */
 export function remoteCatalog(c: VmServices): RemoteAppEntry[] {
   return DESKTOP_APPS.map(
@@ -413,6 +413,7 @@ export function remoteCatalog(c: VmServices): RemoteAppEntry[] {
           renderSettingsWindow(body, {
             user: ctx.user,
             deviceName: ctx.host,
+            personalization: ctx.personalization,
             ...(onEndpoint ? { endpoint: onEndpoint } : {}),
           });
         else if (a.id === 'terminal')
@@ -420,13 +421,6 @@ export function remoteCatalog(c: VmServices): RemoteAppEntry[] {
         else if (a.id === 'outlook') renderOutlookWindow(body, c, ctx.endpoint);
         else if (a.id === 'vpn-client') renderVpnClientWindow(body, c, ctx.endpoint);
         else if (a.id === 'software-center') renderSoftwareCenterWindow(body, c, ctx.endpoint);
-        else if (a.id === 'remote-desktop')
-          renderRemoteDesktopWindow(body, c, remoteCatalog(c), {
-            close: ctx.close,
-            minimize: ctx.minimize,
-            // Inside a session, "full screen" is that session's desktop.
-            setFullscreen: ctx.setMaximized,
-          });
         else a.render(c, body);
       },
     }),

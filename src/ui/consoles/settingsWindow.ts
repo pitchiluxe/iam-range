@@ -15,10 +15,13 @@ import { isMuted, setMuted, blip } from '@/ui/audio';
 import { generateBatch } from '@/util/wallpaperGenerator';
 import { allWallpapers, allLockScreens, generatedIds, saveGeneratedIds,
   GENERATED_LIMIT,
-  WALLPAPER_STORAGE_KEY, DEFAULT_WALLPAPER_ID,
-  LOCK_SCREEN_STORAGE_KEY,
-  DEFAULT_LOCK_SCREEN_ID,
 } from '@/util/wallpapers';
+import {
+  WORKSTATION_PERSONALIZATION,
+  SESSION_DEFAULT_WALLPAPER_ID,
+  WINDOWS_BLOOM,
+  type PersonalizationStore,
+} from '@/ui/personalization';
 import { updateManager, type UpdateStatus } from '@/util/updateManager';
 import { tutorAvailable } from '@/vm/tutor';
 import { openExternal, OLLAMA_DOWNLOAD_URL, OLLAMA_MODEL } from '@/util/externalLink';
@@ -44,11 +47,6 @@ import {
 import {
   THEMES,
   CUSTOM_THEME_ID,
-  currentThemeId,
-  setTheme,
-  getCustomTheme,
-  setCustomTheme,
-  clearCustomTheme,
 } from '@/ui/themes';
 import { generateThemeWithAI } from '@/util/aiThemeGenerator';
 
@@ -166,18 +164,26 @@ function infoRow(label: string, value: string): string {
  */
 export function renderSettingsWindow(
   body: HTMLElement,
-  remote?: { user: User; deviceName: string; endpoint?: EndpointUi },
+  remote?: {
+    user: User;
+    deviceName: string;
+    endpoint?: EndpointUi;
+    /** Where theme, wallpaper and lock screen choices go. In a Remote Desktop
+     *  session they belong to that computer, never to this workstation. */
+    personalization?: PersonalizationStore;
+  },
 ): void {
   const endpoint = remote?.endpoint;
+  const look = remote?.personalization ?? WORKSTATION_PERSONALIZATION;
   const ENDPOINT_ONLY: CategoryId[] = ['printers', 'network', 'storage'];
   const accountUser = remote?.user ?? null;
   const deviceName = remote?.deviceName ?? VM_HOST.name;
   body.style.cssText =
-    'display:flex;height:100%;background:#161a20;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI Variable","Segoe UI",sans-serif;color:var(--fg);';
+    'display:flex;height:100%;background:var(--panel);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI Variable","Segoe UI",sans-serif;color:var(--fg);';
 
   const sidebar = document.createElement('div');
   sidebar.style.cssText =
-    'width:200px;flex-shrink:0;background:#12151a;border-right:1px solid var(--border);padding:12px 0;overflow-y:auto;';
+    'width:200px;flex-shrink:0;background:var(--panel-alt);border-right:1px solid var(--border);padding:12px 0;overflow-y:auto;';
   body.appendChild(sidebar);
 
   const content = document.createElement('div');
@@ -403,7 +409,7 @@ export function renderSettingsWindow(
       themeGrid.style.cssText =
         'display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;' +
         'margin-bottom:10px;';
-      const activeTheme = currentThemeId();
+      const activeTheme = look.themeId();
 
       // Shared by every preset card and the one AI-generated card — a swatch
       // built from the theme's own colours (previews the scheme rather than
@@ -459,17 +465,17 @@ export function renderSettingsWindow(
       for (const theme of THEMES) {
         const card = themeCard(theme, theme.id === activeTheme);
         card.addEventListener('click', () => {
-          setTheme(theme.id);
+          look.setTheme(theme.id);
           renderContent();
         });
         themeGrid.appendChild(card);
       }
 
-      const customTheme = getCustomTheme();
+      const customTheme = look.customTheme();
       if (customTheme) {
         const card = themeCard(customTheme, activeTheme === CUSTOM_THEME_ID, 'AI');
         card.addEventListener('click', () => {
-          setTheme(CUSTOM_THEME_ID);
+          look.setTheme(CUSTOM_THEME_ID);
           renderContent();
         });
         themeGrid.appendChild(card);
@@ -506,7 +512,7 @@ export function renderSettingsWindow(
           'padding:6px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-family:inherit;' +
           'background:transparent;color:var(--muted);border:1px solid var(--border);margin-bottom:24px;';
         removeAi.addEventListener('click', () => {
-          clearCustomTheme();
+          look.clearCustomTheme();
           renderContent();
         });
         content.appendChild(removeAi);
@@ -519,7 +525,7 @@ export function renderSettingsWindow(
         aiStatus.textContent = 'Asking the local model…';
         void generateThemeWithAI().then((result) => {
           if (result.ok) {
-            setCustomTheme(result.theme);
+            look.setCustomTheme(result.theme);
             renderContent();
             return;
           }
@@ -542,8 +548,13 @@ export function renderSettingsWindow(
 
       const grid = document.createElement('div');
       grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:14px;';
-      const current = localStorage.getItem(WALLPAPER_STORAGE_KEY) ?? DEFAULT_WALLPAPER_ID;
-      for (const wp of allWallpapers()) {
+      const current = look.wallpaperId();
+      // A remote computer starts on Windows' own wallpaper, so it is offered
+      // there as a choice to come back to.
+      const wallpapers = remote?.personalization
+        ? [{ id: SESSION_DEFAULT_WALLPAPER_ID, label: 'Windows', gradient: WINDOWS_BLOOM }, ...allWallpapers()]
+        : allWallpapers();
+      for (const wp of wallpapers) {
         const card = document.createElement('button');
         const isSel = wp.id === current;
         card.style.cssText = `
@@ -553,14 +564,7 @@ export function renderSettingsWindow(
         `;
         card.innerHTML = `<span style="font-size:11px;color:var(--fg);text-shadow:0 1px 3px rgba(0,0,0,0.8);">${wp.label}</span>${isSel ? '<span style="position:absolute;top:6px;right:6px;color:var(--accent);font-size:14px;">✓</span>' : ''}`;
         card.addEventListener('click', () => {
-          try {
-            localStorage.setItem(WALLPAPER_STORAGE_KEY, wp.id);
-          } catch {
-            /* ignore */
-          }
-          document.dispatchEvent(
-            new CustomEvent('apex-wallpaper-changed', { detail: wp.gradient }),
-          );
+          look.setWallpaper(wp.id, wp.gradient);
           renderContent();
         });
         grid.appendChild(card);
@@ -581,12 +585,7 @@ export function renderSettingsWindow(
 
       const lockGrid = document.createElement('div');
       lockGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:14px;';
-      let currentLock = DEFAULT_LOCK_SCREEN_ID;
-      try {
-        currentLock = localStorage.getItem(LOCK_SCREEN_STORAGE_KEY) ?? DEFAULT_LOCK_SCREEN_ID;
-      } catch {
-        /* private mode — the default is correct */
-      }
+      const currentLock = look.lockScreenId();
       for (const ls of allLockScreens()) {
         const card = document.createElement('button');
         const isSel = ls.id === currentLock;
@@ -607,12 +606,8 @@ export function renderSettingsWindow(
           card.appendChild(tick);
         }
         card.addEventListener('click', () => {
-          try {
-            localStorage.setItem(LOCK_SCREEN_STORAGE_KEY, ls.id);
-          } catch {
-            /* ignore */
-          }
           // Applied the next time the screen locks, which is when it is seen.
+          look.setLockScreen(ls.id);
           renderContent();
         });
         lockGrid.appendChild(card);
@@ -620,7 +615,7 @@ export function renderSettingsWindow(
       content.appendChild(lockGrid);
 
       const lockNote = document.createElement('div');
-      lockNote.textContent = 'Shown the next time you sign out or lock the workstation.';
+      lockNote.textContent = look.lockScreenNote;
       lockNote.style.cssText = 'font-size:11px;color:var(--muted);margin-top:8px;';
       content.appendChild(lockNote);
 

@@ -1189,7 +1189,7 @@ export function renderActiveDirectoryWindow(body: HTMLElement, conductor: VmServ
             'padding:5px 14px;font-size:12px;cursor:pointer;border:1px solid transparent;' +
             'border-bottom:none;border-radius:3px 3px 0 0;' +
             (t === active
-              ? 'background:var(--panel-alt);border-color:var(--border);color:#fff;margin-bottom:-1px;'
+              ? 'background:var(--panel-alt);border-color:var(--border);color:var(--fg);margin-bottom:-1px;'
               : 'color:var(--muted);');
           tab.addEventListener('click', () => {
             active = t;

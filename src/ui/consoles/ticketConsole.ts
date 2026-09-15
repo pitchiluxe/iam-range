@@ -49,10 +49,10 @@ const priorityColors: Record<
   TicketPriority,
   { bg: string; border: string; badge: string; emoji: string; rank: number }
 > = {
-  urgent: { bg: '#2a1414', border: '#ef4444', badge: '#ef4444', emoji: '🔴', rank: 0 },
-  high: { bg: '#2a1f14', border: '#f97316', badge: '#f97316', emoji: '🟠', rank: 1 },
+  urgent: { bg: 'rgba(239,68,68,0.10)', border: '#ef4444', badge: '#ef4444', emoji: '🔴', rank: 0 },
+  high: { bg: 'rgba(249,115,22,0.10)', border: '#f97316', badge: '#f97316', emoji: '🟠', rank: 1 },
   normal: { bg: 'var(--panel-alt)', border: '#3b82f6', badge: '#3b82f6', emoji: '🔵', rank: 2 },
-  low: { bg: '#18191b', border: '#6b7280', badge: '#6b7280', emoji: '⚪', rank: 3 },
+  low: { bg: 'var(--panel-alt)', border: '#6b7280', badge: '#6b7280', emoji: '⚪', rank: 3 },
 };
 
 /** SLA windows (ms). Urgent = 15m, high = 30m. Normal/low = no SLA. */
@@ -573,7 +573,7 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     if (allOpen.length > 0 || resolved.length > 0) {
       const toolbar = document.createElement('div');
       toolbar.style.cssText =
-        'display:flex;flex-direction:column;gap:8px;margin-bottom:10px;padding:8px 10px;background:#15181d;border:1px solid var(--border);border-radius:4px;';
+        'display:flex;flex-direction:column;gap:8px;margin-bottom:10px;padding:8px 10px;background:var(--panel-alt);border:1px solid var(--border);border-radius:4px;';
 
       // Row 1: search + sort + create
       const row1 = document.createElement('div');

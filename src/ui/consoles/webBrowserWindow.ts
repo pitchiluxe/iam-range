@@ -27,7 +27,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
 
   const root = document.createElement('div');
   root.style.cssText =
-    'display:flex;flex-direction:column;height:100%;background:#1a1d22;' +
+    'display:flex;flex-direction:column;height:100%;background:var(--panel);' +
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;" +
     'font-size:12px;color:var(--fg);';
   body.appendChild(root);
@@ -87,7 +87,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   // ── Bookmarks ─────────────────────────────────────────────────────────────
   const marks = document.createElement('div');
   marks.style.cssText =
-    'display:flex;gap:4px;padding:5px 8px;background:#1f242b;border-bottom:1px solid var(--border);' +
+    'display:flex;gap:4px;padding:5px 8px;background:var(--panel-alt);border-bottom:1px solid var(--border);' +
     'flex-shrink:0;overflow-x:auto;white-space:nowrap;';
   for (const bm of IAM_BOOKMARKS) {
     const b = document.createElement('button');
@@ -107,7 +107,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
 
   const status = document.createElement('div');
   status.style.cssText =
-    'padding:4px 10px;background:#1f242b;border-top:1px solid var(--border);font-size:10.5px;' +
+    'padding:4px 10px;background:var(--panel-alt);border-top:1px solid var(--border);font-size:10.5px;' +
     'color:#6b7280;flex-shrink:0;';
   status.textContent = 'Restricted browser — IAM and identity resources only.';
   root.appendChild(status);

@@ -32,7 +32,7 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
   body.innerHTML = '';
   Object.assign(body.style, {
     overflow: 'hidden',
-    background: '#1a1d22',
+    background: 'var(--panel)',
     flex: '1',
     minHeight: '0',
   });
@@ -67,7 +67,7 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
   // ── Template gallery ──────────────────────────────────────────────────────
   const gallery = document.createElement('div');
   gallery.style.cssText =
-    'width:220px;flex-shrink:0;background:#12151a;border-right:1px solid var(--border);' +
+    'width:220px;flex-shrink:0;background:var(--panel-alt);border-right:1px solid var(--border);' +
     'overflow-y:auto;padding:10px 0;';
   root.appendChild(gallery);
 
@@ -106,7 +106,7 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
   const editor = document.createElement('textarea');
   editor.spellcheck = false;
   editor.style.cssText =
-    'flex:1;min-height:0;background:#0c0c0c;color:var(--fg);border:none;outline:none;resize:none;' +
+    'flex:1;min-height:0;background:var(--panel);color:var(--fg);border:none;outline:none;resize:none;' +
     "padding:12px;font-family:Consolas,'Cascadia Mono',monospace;font-size:12.5px;line-height:1.5;" +
     'tab-size:2;';
   editor.value = SCRIPT_TEMPLATES[0]!.body;
@@ -160,7 +160,7 @@ export function renderScriptEditorWindow(body: HTMLElement, conductor: VmService
       p.textContent = purpose;
       p.style.cssText = 'font-size:10px;color:#6b7280;margin-top:2px;line-height:1.35;';
       b.append(t, p);
-      b.addEventListener('mouseenter', () => (b.style.background = '#1f242b'));
+      b.addEventListener('mouseenter', () => (b.style.background = 'var(--panel-alt)'));
       b.addEventListener('mouseleave', () => (b.style.background = 'transparent'));
       b.addEventListener('click', onOpen);
       row.appendChild(b);

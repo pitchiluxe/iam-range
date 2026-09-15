@@ -38,7 +38,7 @@ export function renderStickyNotesWindow(body: HTMLElement): void {
   Object.assign(body.style, {
     position: 'relative',
     overflow: 'hidden',
-    background: '#1a1a2e',
+    background: 'var(--panel)',
     flex: '1',
     minHeight: '0',
   });
