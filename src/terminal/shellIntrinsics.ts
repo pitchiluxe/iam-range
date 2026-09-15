@@ -17,6 +17,7 @@ import { formatTable } from './format';
 import { MockFileSystem } from '@/services';
 
 import { VM_ACCOUNT, VM_HOST } from '@/config/vmHost';
+import { runEndpointIntrinsic } from './endpointIntrinsics';
 
 /** The simulated workstation. Shared with the Settings app via config/vmHost.ts
  *  so the two cannot describe the same machine differently. */
@@ -168,6 +169,11 @@ export function runIntrinsic(
     names.some((n) =>
       Object.keys(switches).some((key) => key.toLowerCase() === n.toLowerCase()),
     ) || args.some((a) => names.some((n) => a.toLowerCase() === `-${n.toLowerCase()}`));
+
+  // Inside a Remote Desktop session the network and desk-side commands answer
+  // for that user's computer, not for this workstation.
+  const onEndpoint = runEndpointIntrinsic(name, args, ctx);
+  if (onEndpoint) return onEndpoint;
 
   switch (name) {
     case 'cls':

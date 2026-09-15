@@ -20,6 +20,7 @@ import {
   MockTicketQueue,
   MockPim,
   MockCloudTenant,
+  MockEndpoints,
 } from '@/services';
 import type { CloudVendor } from '@/services';
 import { applyBaseline } from '@/seed/baseline';
@@ -44,6 +45,8 @@ export interface VmServices {
   /** The cloud tenants in front of the domain. Both exist from boot: a hybrid
    *  estate is the normal shape, and the sync between them is the lesson. */
   cloud: Record<CloudVendor, MockCloudTenant>;
+  /** The end users' computers, for help-desk work over Remote Desktop. */
+  endpoints: MockEndpoints;
   /** Discard all work and re-seed. The Ticket Queue's reset button calls this. */
   reset(): void;
 }
@@ -58,6 +61,7 @@ export class VmSession implements VmServices {
   incidents!: MockIncidents;
   pim!: MockPim;
   cloud!: Record<CloudVendor, MockCloudTenant>;
+  endpoints!: MockEndpoints;
 
   constructor() {
     this.boot();
@@ -79,6 +83,7 @@ export class VmSession implements VmServices {
     this.reviews = new MockAccessReviews(this.audit);
     this.incidents = new MockIncidents();
     this.pim = new MockPim(this.audit);
+    this.endpoints = new MockEndpoints(this.audit, this.dir);
     this.cloud = {
       okta: new MockCloudTenant('okta', this.dir, this.audit),
       entra: new MockCloudTenant('entra', this.dir, this.audit),
@@ -103,6 +108,7 @@ export class VmSession implements VmServices {
       audit: this.audit,
       pim: this.pim,
       cloud: this.cloud,
+      endpoints: this.endpoints,
     });
 
     // Mirror seeded state into the stores the windows subscribe to.

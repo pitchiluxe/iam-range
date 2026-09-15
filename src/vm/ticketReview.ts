@@ -15,8 +15,14 @@
  * Everything lands in the audit log — the verdict, and every check behind it —
  * so a reviewed ticket can be re-read later the way a real one can.
  */
-import type { Ticket, UserId } from '@/domain';
-import type { MockAuditLog, MockDirectory, MockPim, MockCloudTenant } from '@/services';
+import type { EndpointTicketKind, Ticket, User, UserId } from '@/domain';
+import type {
+  MockAuditLog,
+  MockDirectory,
+  MockEndpoints,
+  MockPim,
+  MockCloudTenant,
+} from '@/services';
 import type { CloudVendor } from '@/services';
 import { OLLAMA_GENERATE_URL, OLLAMA_MODEL, ollamaAvailable } from '@/config/ollama';
 
@@ -25,6 +31,8 @@ export interface ReviewDeps {
   audit: MockAuditLog;
   pim?: MockPim;
   cloud?: Partial<Record<CloudVendor, MockCloudTenant>>;
+  /** End users' computers, for help-desk tickets. */
+  endpoints?: MockEndpoints;
 }
 
 /** One thing that was checked, and what was found. */
@@ -167,6 +175,50 @@ function estateChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] | null {
   }
 
   return null;
+}
+
+/**
+ * Checks for a help-desk ticket: is the computer actually fixed?
+ *
+ * Read from the endpoint's state, not from the audit log. A repair that was
+ * run and then undone, or a fix aimed at the wrong computer, leaves the log
+ * looking busy and the user still unable to print.
+ */
+function endpointChecks(
+  ticket: Extract<Ticket, { kind: EndpointTicketKind }>,
+  user: User,
+  deps: ReviewDeps,
+): ReviewCheck[] {
+  const { computer, issue } = ticket.payload;
+  if (!deps.endpoints) {
+    return [fail('Computer reachable', 'No endpoint inventory is available to check against.')];
+  }
+  const endpoint = deps.endpoints.get(computer);
+  if (!endpoint) {
+    return [fail('Computer exists', `There is no computer named ${computer}.`)];
+  }
+  const checks: ReviewCheck[] = [];
+  checks.push(
+    endpoint.userId === user.id
+      ? pass('Right computer', `${computer} is ${user.username}'s computer.`)
+      : fail('Right computer', `${computer} does not belong to ${user.username}.`),
+  );
+  const result = deps.endpoints.check(computer, issue);
+  checks.push(
+    result.fixed ? pass('Issue fixed on the computer', result.detail) : fail('Issue fixed on the computer', result.detail),
+  );
+  // A work note is what the next person reads. Not having one is a finding,
+  // because a ticket closed with no record of the cause cannot be learned from.
+  const noted = ticket.comments.some((c) => c.body.trim().length >= 10);
+  checks.push(
+    noted
+      ? pass('Work note recorded', 'The ticket has a work note describing the work.')
+      : fail(
+          'Work note recorded',
+          'Add a work note before resolving: the symptom, the cause you found and what you changed.',
+        ),
+  );
+  return checks;
 }
 
 function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
@@ -409,6 +461,16 @@ function runChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] {
         }
         break;
       }
+
+      case 'printer-issue':
+      case 'email-issue':
+      case 'network-issue':
+      case 'drive-mapping':
+      case 'vpn-issue':
+      case 'software-request':
+      case 'performance-issue':
+        checks.push(...endpointChecks(ticket, user, deps));
+        break;
 
       default: {
         /*

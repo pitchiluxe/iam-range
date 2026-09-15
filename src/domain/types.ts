@@ -45,7 +45,57 @@ export type TicketKind =
   | 'mfa-issue'
   | 'transfer'
   | 'termination'
-  | 'incident';
+  | 'incident'
+  // Help-desk work on an end user's computer (docs/help-desk-endpoint-labs.md).
+  | EndpointTicketKind;
+
+/** Ticket kinds fixed on an end user's computer rather than in the directory. */
+export type EndpointTicketKind =
+  | 'printer-issue'
+  | 'email-issue'
+  | 'network-issue'
+  | 'drive-mapping'
+  | 'vpn-issue'
+  | 'software-request'
+  | 'performance-issue';
+
+export const ENDPOINT_TICKET_KINDS = [
+  'printer-issue',
+  'email-issue',
+  'network-issue',
+  'drive-mapping',
+  'vpn-issue',
+  'software-request',
+  'performance-issue',
+] as const satisfies readonly EndpointTicketKind[];
+
+/** One fault that can be staged on a computer, and later checked as fixed. */
+export type EndpointIssueId =
+  | 'printer-spooler-stopped'
+  | 'printer-queue-stuck'
+  | 'printer-wrong-default'
+  | 'printer-offline'
+  | 'outlook-profile-corrupt'
+  | 'outlook-work-offline'
+  | 'outlook-mailbox-full'
+  | 'outlook-password-loop'
+  | 'network-wifi-wrong'
+  | 'network-apipa'
+  | 'network-dns-stale'
+  | 'network-adapter-disabled'
+  | 'drive-missing'
+  | 'drive-access-denied'
+  | 'vpn-cert-expired'
+  | 'software-missing'
+  | 'disk-full';
+
+/** What every endpoint ticket carries: whose computer, which one, and what is wrong. */
+export interface EndpointTicketPayload {
+  userId: UserId;
+  /** Computer name, e.g. WKS-JDOE. */
+  computer: string;
+  issue: EndpointIssueId;
+}
 
 /**
  * Runtime list of every ticket kind. `satisfies` keeps it honest: omit a kind
@@ -63,6 +113,7 @@ export const ALL_TICKET_KINDS = [
   'transfer',
   'termination',
   'incident',
+  ...ENDPOINT_TICKET_KINDS,
 ] as const satisfies readonly TicketKind[];
 
 export type TicketStatus =
@@ -285,7 +336,8 @@ export type Ticket =
   | (TicketBase & {
       kind: 'incident';
       payload: { incidentId: IncidentId; affectedUserId?: UserId; affectedAppId?: AppId };
-    });
+    })
+  | (TicketBase & { kind: EndpointTicketKind; payload: EndpointTicketPayload });
 
 // ---------------------------------------------------------------------------
 // Audit events (tagged-union)
@@ -363,6 +415,16 @@ export interface AuditEvent {
     | 'review.approved'
     | 'review.revoked'
     | 'review.completed'
+    /** A fault staged on an end user's computer by a help-desk scenario. */
+    | 'endpoint.fault'
+    /** A repair made on an end user's computer. targetId is the computer name. */
+    | 'endpoint.repair'
+    /** A repair that was attempted and refused, with the reason in the note. */
+    | 'endpoint.repair.failed'
+    | 'rdp.connected'
+    | 'rdp.disconnected'
+    /** A work note added to a ticket. */
+    | 'ticket.noted'
     | 'computer.info.viewed'
     | 'process.listed'
     | 'service.listed'
@@ -508,7 +570,9 @@ export type ValidatorKind =
   | 'command-listed'
   | 'risk-dashboard-viewed'
   | 'conditional-access-viewed'
-  | 'portfolio-viewed';
+  | 'portfolio-viewed'
+  /** A repair was made on an end user's computer (help-desk labs). */
+  | 'endpoint-repaired';
 
 export interface LabStep {
   id: string;

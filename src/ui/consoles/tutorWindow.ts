@@ -24,6 +24,9 @@ import {
   type TutorMode,
 } from '@/vm/tutor';
 import { openDocumentation } from './documentationWindow';
+import type { EndpointTicketPayload, Ticket } from '@/domain';
+import { ENDPOINT_TICKET_KINDS } from '@/domain';
+import { ENDPOINT_ISSUES } from '@/vm/endpointIssues';
 
 const MODES: TutorMode[] = ['socratic', 'explain', 'walkthrough'];
 
@@ -184,11 +187,13 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
 
     // The ticket is read at ask time, not window-open time: the learner will
     // pick a different one mid-conversation and expect the tutor to notice.
-    const open = vm.tickets.list().find((t) => t.status !== 'resolved');
+    // The one being worked (assigned) first, then the oldest open one.
+    const unresolved = vm.tickets.list().filter((t) => t.status !== 'resolved');
+    const open = unresolved.find((t) => t.status === 'in-progress') ?? unresolved[0];
     const answer = await askTutor(question, {
       env: readEnvironment(vm.dir),
       mode,
-      ...(open ? { ticket: { subject: open.subject, body: open.body } } : {}),
+      ...(open ? { ticket: { subject: open.subject, body: open.body, ...hintsFor(vm, open) } } : {}),
     });
 
     pending.textContent = answer.text;
@@ -205,4 +210,24 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
     if (e.key === 'Enter') void send();
   };
   setTimeout(() => input.focus(), 50);
+}
+
+/** The hint ladder for a help-desk ticket, worded for its user and computer. */
+function hintsFor(vm: VmServices, t: Ticket): { hints?: readonly [string, string, string, string] } {
+  if (!(ENDPOINT_TICKET_KINDS as readonly string[]).includes(t.kind)) return {};
+  const p = t.payload as EndpointTicketPayload;
+  const spec = ENDPOINT_ISSUES[p.issue];
+  const user = vm.dir.getUser(p.userId);
+  const endpoint = vm.endpoints.get(p.computer);
+  if (!spec || !user) return {};
+  return {
+    hints: spec.hints({
+      display: user.displayName,
+      username: user.username,
+      computer: p.computer,
+      department: user.department,
+      share: endpoint?.homeShare ?? '',
+      ...(endpoint?.requestedSoftware ? { software: endpoint.requestedSoftware } : {}),
+    }),
+  };
 }

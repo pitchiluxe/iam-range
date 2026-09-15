@@ -37,6 +37,12 @@ import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { renderCareerLabWindow } from './consoles/careerLabWindow';
 import { renderRemoteDesktopWindow } from './consoles/remoteDesktopWindow';
+import type { RemoteAppEntry } from './consoles/remoteSessionDesktop';
+import {
+  renderOutlookWindow,
+  renderSoftwareCenterWindow,
+  renderVpnClientWindow,
+} from './consoles/endpointApps';
 import { onAppRequest } from '@/util/appLauncher';
 import { openContextMenu, type MenuItem } from '@/ui/contextMenu';
 import { THEMES, currentThemeId, setTheme } from '@/ui/themes';
@@ -346,16 +352,86 @@ const DESKTOP_APPS: WindowDef[] = [
     render: (_c, b) => renderRecycleBinWindow(b),
   },
   {
+    id: 'outlook',
+    title: 'Outlook',
+    icon: '📧',
+    width: 960,
+    height: 620,
+    render: (c, b) => renderOutlookWindow(b, c),
+  },
+  {
+    id: 'vpn-client',
+    title: 'Corp VPN',
+    icon: '🛡️',
+    width: 460,
+    height: 520,
+    render: (c, b) => renderVpnClientWindow(b, c),
+  },
+  {
+    id: 'software-center',
+    title: 'Software Center',
+    icon: '📦',
+    width: 720,
+    height: 520,
+    render: (c, b) => renderSoftwareCenterWindow(b, c),
+  },
+  {
     id: 'remote-desktop',
     title: 'Remote Desktop',
     icon: '🖥️',
-    width: 480,
-    height: 520,
-    render: (c, b) => renderRemoteDesktopWindow(b, c),
+    // Big enough for the signed-in session to be a usable desktop. The session
+    // scales its 1366x768 screen into whatever this ends up as on the display.
+    width: 1180,
+    height: 740,
+    render: (c, b) => renderRemoteDesktopWindow(b, c, remoteCatalog(c)),
   },
 ];
 
 const APP_BY_ID: Record<string, WindowDef> = Object.fromEntries(DESKTOP_APPS.map((a) => [a.id, a]));
+
+/**
+ * This desktop's apps, bound to `c`, for a Remote Desktop session to host.
+ *
+ * The session runs the very same renderers, so every app works there as it
+ * does here; it filters them by the remote account's department. Two need the
+ * session's context: Settings shows the remote account, and a Remote Desktop
+ * opened inside the session closes its own window rather than this one.
+ */
+export function remoteCatalog(c: VmServices): RemoteAppEntry[] {
+  return DESKTOP_APPS.map(
+    (a): RemoteAppEntry => ({
+      id: a.id,
+      title: a.title,
+      icon: a.icon,
+      width: a.width,
+      height: a.height,
+      launch: a.launch,
+      render: (body, ctx) => {
+        // On a managed computer these act on that computer.
+        const onEndpoint = ctx.endpoint ? { services: c, computer: ctx.endpoint } : undefined;
+        if (a.id === 'settings')
+          renderSettingsWindow(body, {
+            user: ctx.user,
+            deviceName: ctx.host,
+            ...(onEndpoint ? { endpoint: onEndpoint } : {}),
+          });
+        else if (a.id === 'terminal')
+          renderTerminalWindow(body, c, ctx.endpoint ? { host: ctx.endpoint } : {});
+        else if (a.id === 'outlook') renderOutlookWindow(body, c, ctx.endpoint);
+        else if (a.id === 'vpn-client') renderVpnClientWindow(body, c, ctx.endpoint);
+        else if (a.id === 'software-center') renderSoftwareCenterWindow(body, c, ctx.endpoint);
+        else if (a.id === 'remote-desktop')
+          renderRemoteDesktopWindow(body, c, remoteCatalog(c), {
+            close: ctx.close,
+            minimize: ctx.minimize,
+            // Inside a session, "full screen" is that session's desktop.
+            setFullscreen: ctx.setMaximized,
+          });
+        else a.render(c, body);
+      },
+    }),
+  );
+}
 
 /** Windows whose render() actually reads conductor state (users/groups/lab
  * progress/audit log) — these need a forced refresh on VM re-entry so they
@@ -396,10 +472,21 @@ interface WinState {
   minimized: boolean;
   maximized: boolean;
   preMax: DOMRect | null;
+  /** Covering the whole screen, taskbar included — full-screen Remote Desktop. */
+  fullscreen?: boolean;
+  preFull?: Pick<CSSStyleDeclaration, 'left' | 'top' | 'width' | 'height' | 'borderRadius' | 'border'>;
 }
 
 /** Base of the window stacking band. The taskbar is at 5000 and must win. */
 const WINDOW_Z_BASE = 100;
+/** A full-screen window is the one thing that sits above the taskbar. */
+const FULLSCREEN_Z = 6000;
+
+/** What a window may ask of the manager about itself. */
+export interface WindowCommand {
+  id: string;
+  action: 'minimize' | 'fullscreen-on' | 'fullscreen-off';
+}
 
 class WindowManager {
   readonly conductor: VmServices;
@@ -415,9 +502,53 @@ class WindowManager {
     // rather than reaching into the DOM, so the manager stays the single owner
     // of window lifecycle.
     document.addEventListener('apex-close-window', (e) => {
+      // A request from an app hosted inside a Remote Desktop session is that
+      // session's to answer (it stops propagation); anything reaching here
+      // from inside one is not about this desktop's window.
+      if (e.target instanceof Element && e.target.closest('.rds-root')) return;
       const id = (e as CustomEvent<{ id: string }>).detail?.id;
       if (id) this.close(id);
     });
+    // Minimize and full screen, asked for from inside a window — Remote
+    // Desktop's connection bar, which is the only control left once the
+    // window covers the screen.
+    document.addEventListener('apex-window-command', (e) => {
+      const cmd = (e as CustomEvent<WindowCommand>).detail;
+      if (!cmd?.id) return;
+      if (cmd.action === 'minimize') this.minimize(cmd.id);
+      else this.setFullscreen(cmd.id, cmd.action === 'fullscreen-on');
+    });
+  }
+
+  setFullscreen(id: string, on: boolean): void {
+    const w = this.windows.get(id);
+    if (!w || Boolean(w.fullscreen) === on) return;
+    const bar = w.el.querySelector<HTMLElement>('.apex-window-titlebar');
+    const s = w.el.style;
+    if (on) {
+      w.preFull = {
+        left: s.left,
+        top: s.top,
+        width: s.width,
+        height: s.height,
+        borderRadius: s.borderRadius,
+        border: s.border,
+      };
+      Object.assign(s, {
+        left: '0',
+        top: '0',
+        width: '100vw',
+        height: '100vh',
+        borderRadius: '0',
+        border: '0',
+      });
+      if (bar) bar.style.display = 'none';
+    } else {
+      if (w.preFull) Object.assign(s, w.preFull);
+      if (bar) bar.style.display = 'flex';
+    }
+    w.fullscreen = on;
+    this.focus(id);
   }
 
   openById(id: string): void {
@@ -504,7 +635,7 @@ class WindowManager {
       .filter((other) => other !== w)
       .sort((a, b) => (Number(a.el.style.zIndex) || 0) - (Number(b.el.style.zIndex) || 0));
     [...rest, w].forEach((win, i) => {
-      win.el.style.zIndex = String(WINDOW_Z_BASE + i);
+      win.el.style.zIndex = String(win.fullscreen ? FULLSCREEN_Z + i : WINDOW_Z_BASE + i);
     });
 
     this.updateTaskbar();
@@ -557,14 +688,21 @@ class WindowManager {
   private createWindowElement(def: WindowDef): WinState {
     const el = document.createElement('div');
     el.className = 'apex-window';
+    // Open fully on screen where it fits. A large window (Remote Desktop is
+    // 1024x680) placed at a random offset could land with its bottom edge and
+    // resize grip under the taskbar on a laptop-sized screen.
+    const width = Math.min(def.width, Math.max(320, window.innerWidth - 16));
+    const height = Math.min(def.height, Math.max(240, window.innerHeight - 48 - 16));
+    const maxLeft = Math.max(0, window.innerWidth - width - 8);
+    const maxTop = Math.max(0, window.innerHeight - 48 - height - 8);
     el.style.cssText = `
       position: fixed;
       display: flex;
       flex-direction: column;
-      width: ${def.width}px;
-      height: ${def.height}px;
-      left: ${80 + Math.random() * 200}px;
-      top: ${60 + Math.random() * 120}px;
+      width: ${width}px;
+      height: ${height}px;
+      left: ${Math.min(80 + Math.random() * 200, maxLeft)}px;
+      top: ${Math.min(60 + Math.random() * 120, maxTop)}px;
       background: var(--panel);
       color: var(--fg);
       border: 1px solid var(--glass-border);

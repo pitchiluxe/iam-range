@@ -21,6 +21,30 @@ export type {
   PrivilegedRoleSettings,
   PimResult,
 } from './mockPim';
+export {
+  MockEndpoints,
+  CORP_WIFI,
+  GUEST_WIFI,
+  OFFICE_PRINTER,
+  PDF_PRINTER,
+  FILE_SERVER,
+  INTRANET_HOST,
+  OFFICE_CREDENTIAL,
+  SHARE_DRIVE,
+  SOFTWARE_CATALOG,
+  computerNameFor,
+  departmentShareName,
+  sharePath,
+} from './mockEndpoints';
+export type {
+  Endpoint,
+  EndpointResult,
+  EndpointPrinter,
+  EndpointService,
+  IssueCheck,
+  PrintJob,
+  StoredCredential,
+} from './mockEndpoints';
 export { MockFileSystem } from './mockFileSystem';
 export type { FsNode, FsResult, NodeKind } from './mockFileSystem';
 export { MockCloudTenant, VENDORS } from './mockCloudTenant';

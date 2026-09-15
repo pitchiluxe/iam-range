@@ -24,6 +24,14 @@ import { tutorAvailable } from '@/vm/tutor';
 import { openExternal, OLLAMA_DOWNLOAD_URL, OLLAMA_MODEL } from '@/util/externalLink';
 import { PRODUCT } from '@/config/product';
 import { login } from '@/vm/loginSession';
+import type { User } from '@/domain';
+import {
+  renderCredentialManager,
+  renderNetworkSettings,
+  renderPrintersSettings,
+  renderStorageSettings,
+  type EndpointUi,
+} from './endpointApps';
 import { COMPANY } from '@/config';
 import { isIdentityAdmin } from '@/config/desktopProfiles';
 import {
@@ -48,6 +56,10 @@ const DENSITY_KEY = 'settings_density';
 
 type CategoryId =
   | 'system'
+  // Only on an end user's computer in a Remote Desktop session.
+  | 'printers'
+  | 'network'
+  | 'storage'
   | 'personalization'
   | 'apps'
   | 'accounts'
@@ -64,6 +76,9 @@ interface Category {
 
 const CATEGORIES: Category[] = [
   { id: 'system', icon: '🖥️', label: 'System' },
+  { id: 'printers', icon: '🖨️', label: 'Printers & scanners' },
+  { id: 'network', icon: '📶', label: 'Network & internet' },
+  { id: 'storage', icon: '💽', label: 'Storage' },
   { id: 'personalization', icon: '🎨', label: 'Personalization' },
   { id: 'apps', icon: '📦', label: 'Apps' },
   { id: 'accounts', icon: '👤', label: 'Accounts' },
@@ -74,7 +89,7 @@ const CATEGORIES: Category[] = [
 ];
 
 /** The Windows 11 System-page hero: device name, edition, and the machine icon. */
-function deviceCard(): HTMLElement {
+function deviceCard(deviceName: string): HTMLElement {
   const card = document.createElement('div');
   card.style.cssText =
     'display:flex;align-items:center;gap:14px;padding:16px;margin-bottom:18px;' +
@@ -84,7 +99,7 @@ function deviceCard(): HTMLElement {
   icon.style.cssText = 'font-size:38px;line-height:1;';
   const text = document.createElement('div');
   const name = document.createElement('div');
-  name.textContent = VM_HOST.name;
+  name.textContent = deviceName;
   name.style.cssText = 'font-size:15px;font-weight:600;color:var(--fg);';
   const sub = document.createElement('div');
   sub.textContent = `${VM_HOST.edition} · joined to ${VM_HOST.domain}`;
@@ -145,7 +160,18 @@ function infoRow(label: string, value: string): string {
   `;
 }
 
-export function renderSettingsWindow(body: HTMLElement): void {
+/**
+ * @param remote Set when Settings runs inside a Remote Desktop session: the
+ *   account and device shown are the remote ones, not this workstation's.
+ */
+export function renderSettingsWindow(
+  body: HTMLElement,
+  remote?: { user: User; deviceName: string; endpoint?: EndpointUi },
+): void {
+  const endpoint = remote?.endpoint;
+  const ENDPOINT_ONLY: CategoryId[] = ['printers', 'network', 'storage'];
+  const accountUser = remote?.user ?? null;
+  const deviceName = remote?.deviceName ?? VM_HOST.name;
   body.style.cssText =
     'display:flex;height:100%;background:#161a20;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI Variable","Segoe UI",sans-serif;color:var(--fg);';
 
@@ -171,6 +197,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
     account.style.cssText = 'display:flex;align-items:center;gap:10px;padding:6px 16px 14px;';
     const avatar = document.createElement('div');
     avatar.textContent = VM_HOST.user.slice(0, 1).toUpperCase();
+    if (accountUser) paintAvatar(avatar, accountUser.username, accountUser.displayName);
     avatar.style.cssText =
       'width:32px;height:32px;border-radius:50%;background:var(--accent);color:#06231d;' +
       'display:flex;align-items:center;justify-content:center;font-size:14px;' +
@@ -178,10 +205,12 @@ export function renderSettingsWindow(body: HTMLElement): void {
     const who = document.createElement('div');
     who.style.cssText = 'min-width:0;';
     const whoName = document.createElement('div');
-    whoName.textContent = VM_HOST.displayName;
+    whoName.textContent = accountUser?.displayName ?? VM_HOST.displayName;
     whoName.style.cssText = 'font-size:12px;color:var(--fg);font-weight:600;';
     const whoMail = document.createElement('div');
-    whoMail.textContent = VM_ACCOUNT;
+    whoMail.textContent = accountUser
+      ? `${VM_HOST.netbiosDomain}\\${accountUser.username}`
+      : VM_ACCOUNT;
     whoMail.style.cssText =
       'font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
     who.append(whoName, whoMail);
@@ -209,8 +238,10 @@ export function renderSettingsWindow(body: HTMLElement): void {
     searchWrap.appendChild(search);
     sidebar.appendChild(searchWrap);
 
-    const shown = CATEGORIES.filter((c) =>
-      c.label.toLowerCase().includes(filter.trim().toLowerCase()),
+    const shown = CATEGORIES.filter(
+      (c) =>
+        (endpoint || !ENDPOINT_ONLY.includes(c.id)) &&
+        c.label.toLowerCase().includes(filter.trim().toLowerCase()),
     );
     if (shown.length === 0) {
       const none = document.createElement('div');
@@ -257,15 +288,31 @@ export function renderSettingsWindow(body: HTMLElement): void {
   function renderContent(): void {
     content.innerHTML = '';
 
+    if (endpoint && active === 'printers') {
+      content.appendChild(sectionTitle('Printers & scanners'));
+      renderPrintersSettings(content, endpoint);
+      return;
+    }
+    if (endpoint && active === 'network') {
+      content.appendChild(sectionTitle('Network & internet'));
+      renderNetworkSettings(content, endpoint);
+      return;
+    }
+    if (endpoint && active === 'storage') {
+      content.appendChild(sectionTitle('Storage'));
+      renderStorageSettings(content, endpoint);
+      return;
+    }
+
     if (active === 'system') {
       content.appendChild(sectionTitle('System'));
       // Windows 11 leads its System page with a device hero card.
-      content.appendChild(deviceCard());
+      content.appendChild(deviceCard(deviceName));
       const box = document.createElement('div');
       // Values come from config/vmHost.ts, the same source the terminal's
       // hostname/systeminfo read, so the two cannot disagree about this machine.
       box.innerHTML =
-        infoRow('Device name', VM_HOST.name) +
+        infoRow('Device name', deviceName) +
         infoRow('Processor', VM_HOST.processor) +
         infoRow('Installed RAM', VM_HOST.ram) +
         infoRow('Edition', VM_HOST.edition) +
@@ -624,7 +671,9 @@ export function renderSettingsWindow(body: HTMLElement): void {
     if (active === 'accounts') {
       content.appendChild(sectionTitle('Accounts'));
 
-      const user = login.user;
+      // A Remote Desktop session passes its own account: Settings opened there
+      // belongs to the person signed in remotely, not to the operator.
+      const user = accountUser ?? login.user;
       const initial = (user?.displayName ?? 'A').charAt(0).toUpperCase();
 
       const card = document.createElement('div');
@@ -781,7 +830,7 @@ export function renderSettingsWindow(body: HTMLElement): void {
           if (next.length < 4) return fail('Use at least four characters.');
 
           const changed = login.changePassword(user.username, current, next);
-          if (!changed) {
+          if (!changed.ok) {
             return fail('That is not your current password.');
           }
 
@@ -795,6 +844,9 @@ export function renderSettingsWindow(body: HTMLElement): void {
         form.append(currentPw, newPw, confirmPw, submit, message);
         content.appendChild(form);
       }
+      // Saved passwords live on the computer, not in the directory. A stale
+      // one here outlives any password reset.
+      if (endpoint) renderCredentialManager(content, endpoint);
       return;
     }
 

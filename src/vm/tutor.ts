@@ -64,7 +64,16 @@ const MODE_INSTRUCTION: Record<TutorMode, string> = {
 export interface TutorContext {
   env: EnvironmentState;
   /** The ticket the learner is on, if any. */
-  ticket?: { subject: string; body: string };
+  ticket?: {
+    subject: string;
+    body: string;
+    /**
+     * For a help-desk ticket: the issue's hint ladder — nudge, question,
+     * approach, solution (vm/endpointIssues.ts). The mode decides how far up
+     * it the tutor may go.
+     */
+    hints?: readonly [string, string, string, string];
+  };
   mode: TutorMode;
 }
 
@@ -139,6 +148,14 @@ export function buildPrompt(question: string, ctx: TutorContext, articles: Artic
       `Subject: ${ctx.ticket.subject}`,
       ctx.ticket.body,
     );
+    const allowed = ladderFor(ctx);
+    if (allowed.length > 0) {
+      parts.push(
+        '',
+        '=== HINTS YOU MAY USE FOR THIS TICKET (use nothing beyond these) ===',
+        ...allowed.map((h, i) => `${i + 1}. ${h}`),
+      );
+    }
   }
 
   parts.push(
@@ -193,6 +210,13 @@ const TOPIC_QUESTION: Record<Article['topic'], string> = {
  * cannot be wrong about IAM, because it is not composing anything about IAM.
  */
 export function offlineAnswer(question: string, ctx: TutorContext): TutorAnswer {
+  // A help-desk ticket carries its own ladder, which is better than any
+  // article match for "I am stuck on this ticket".
+  const ladder = ladderFor(ctx);
+  if (ladder.length > 0) {
+    return { text: ladder.join('\n\n'), citations: searchArticles(question, 1), source: 'offline' };
+  }
+
   const articles = searchArticles(question, 2);
   const top = articles[0];
 
@@ -229,6 +253,20 @@ export function offlineAnswer(question: string, ctx: TutorContext): TutorAnswer 
   }
 
   return { text: lines.join('\n'), citations: articles, source: 'offline' };
+}
+
+/**
+ * How far up a help-desk ticket's hint ladder this mode may go.
+ *
+ * Socratic gets the nudge and the question; explain adds the approach; only
+ * walkthrough, chosen deliberately, names the fix. The tutor never solves the
+ * ticket for someone who has not asked it to.
+ */
+export function ladderFor(ctx: TutorContext): string[] {
+  const hints = ctx.ticket?.hints;
+  if (!hints) return [];
+  const upTo = ctx.mode === 'socratic' ? 2 : ctx.mode === 'explain' ? 3 : 4;
+  return hints.slice(0, upTo);
 }
 
 /** First N paragraphs of an article, for a reply rather than a page. */

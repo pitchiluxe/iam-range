@@ -60,9 +60,11 @@ export function renderNotepadWindow(body: HTMLElement): void {
     const text = ta.value;
     const lines = text.split('\n');
     const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-    const lnEl = document.getElementById('np-linenums');
-    const wcEl = document.getElementById('np-wc');
-    const lcEl = document.getElementById('np-lc');
+    // Looked up inside this window, not the document: Notepad can be open on
+    // the workstation and in a Remote Desktop session at once.
+    const lnEl = lineNums;
+    const wcEl = statusBar.querySelector<HTMLElement>('#np-wc');
+    const lcEl = statusBar.querySelector<HTMLElement>('#np-lc');
     if (lnEl) {
       lnEl.innerHTML = lines.map((_, i) => `${i + 1}`).join('<br>');
     }
@@ -76,7 +78,7 @@ export function renderNotepadWindow(body: HTMLElement): void {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
       localStorage.setItem(NOTEPAD_KEY, ta.value);
-      const el = document.getElementById('np-autosave');
+      const el = statusBar.querySelector<HTMLElement>('#np-autosave');
       if (el) {
         el.style.opacity = '1';
         setTimeout(() => {
@@ -91,8 +93,7 @@ export function renderNotepadWindow(body: HTMLElement): void {
     scheduleSave();
   });
   ta.addEventListener('scroll', () => {
-    const lnEl = document.getElementById('np-linenums');
-    if (lnEl) lnEl.scrollTop = ta.scrollTop;
+    lineNums.scrollTop = ta.scrollTop;
   });
 
   updateMeta();

@@ -24,6 +24,8 @@ import type { MockIdP } from './mockIdP';
 import type { MockTicketQueue } from './mockTicketQueue';
 import type { MockPim } from './mockPim';
 import type { MockCloudTenant, CloudVendor } from './mockCloudTenant';
+import type { MockEndpoints } from './mockEndpoints';
+import { ENDPOINT_CAPABILITIES, targetEndpoint } from './endpointCapabilities';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,6 +43,15 @@ export interface CapabilityContext {
   idp: MockIdP;
   tickets: MockTicketQueue;
   audit: MockAuditLog;
+  /** End users' computers, for help-desk repairs. Optional for the same reason
+   *  as PIM: a host without them refuses cleanly. */
+  endpoints?: MockEndpoints;
+  /**
+   * The computer this shell is running on, when it is an end user's computer
+   * (the terminal inside a Remote Desktop session). Absent on the admin's own
+   * workstation, where endpoint commands need -ComputerName.
+   */
+  host?: string;
   /** Who is performing the action — the learner's operator identity. */
   actor: UserId;
 }
@@ -67,7 +78,9 @@ export type ConsoleSection =
   | 'access'
   /** Okta and Entra, and the sync between them and the domain. */
   | 'cloud'
-  | 'audit';
+  | 'audit'
+  /** Help-desk repairs on end users' computers. */
+  | 'endpoint';
 
 export interface IamCapability {
   id: string;
@@ -863,7 +876,7 @@ export const CAPABILITIES: readonly IamCapability[] = [
         options: ['Allow', 'Deny'],
       },
     ],
-    resolvesTicketKinds: [],
+    resolvesTicketKinds: ['drive-mapping'],
     run(ctx, a) {
       const name = a.Name?.trim();
       const trustee = a.Trustee?.trim();
@@ -1663,9 +1676,29 @@ export const CAPABILITIES: readonly IamCapability[] = [
     cmdlet: 'Get-Service',
     readOnly: true,
     validator: 'service-listed',
-    params: [{ name: 'Name', label: 'Service name', kind: 'text', required: false }],
+    params: [
+      { name: 'Name', label: 'Service name', kind: 'text', required: false },
+      { name: 'ComputerName', label: 'Computer (e.g. WKS-JDOE)', kind: 'text', required: false },
+    ],
     resolvesTicketKinds: [],
     run(ctx, a) {
+      // An end user's computer answers from its real state, so a stopped
+      // spooler shows as stopped until somebody starts it.
+      if (a.ComputerName?.trim() || ctx.host) {
+        const target = targetEndpoint(ctx, a.ComputerName);
+        if ('error' in target) return err(target.error);
+        const f = a.Name?.toLowerCase() ?? '';
+        const rows = target.endpoint.services
+          .filter((s) => !f || s.name.toLowerCase().includes(f) || s.displayName.toLowerCase().includes(f))
+          .map((s) => ({ Status: s.status, Name: s.name, DisplayName: s.displayName }));
+        ctx.audit.record({
+          actorId: ctx.actor,
+          action: 'service.listed',
+          targetId: target.endpoint.name,
+          note: `Listed ${rows.length} service(s) on ${target.endpoint.name}.`,
+        });
+        return ok(`${rows.length} service(s) on ${target.endpoint.name}.`, rows);
+      }
       const all = [
         { Name: 'AD WS', Status: 'Running' },
         { Name: 'DNS Server', Status: 'Running' },
@@ -1740,11 +1773,25 @@ export const CAPABILITIES: readonly IamCapability[] = [
     cmdlet: 'Test-Connection',
     readOnly: true,
     validator: 'network-ping',
-    params: [{ name: 'Target', label: 'Target host', kind: 'text', required: true }],
+    params: [
+      { name: 'Target', label: 'Target host', kind: 'text', required: true },
+      { name: 'ComputerName', label: 'Source computer (e.g. WKS-JDOE)', kind: 'text', required: false },
+    ],
     resolvesTicketKinds: [],
     run(ctx, a) {
       const target = a.Target?.trim() ?? '';
       if (!target) return err('Target is required.');
+      if (a.ComputerName?.trim() || ctx.host) {
+        const src = targetEndpoint(ctx, a.ComputerName);
+        if ('error' in src) return err(src.error);
+        const e = src.endpoint;
+        const ip = /^\d+\.\d+\.\d+\.\d+$/.test(target) ? { ip: target } : ctx.endpoints!.resolveName(e.name, target);
+        ctx.audit.record({ actorId: ctx.actor, action: 'network.ping', targetId: e.name, note: `Pinged ${target} from ${e.name}.` });
+        if ('error' in ip) return err(`Ping request could not find host ${target}. ${ip.error}`);
+        return ctx.endpoints!.reachable(e.name, ip.ip)
+          ? ok('Ping succeeded.', [{ Source: e.name, Target: target, Address: ip.ip, Time: '2ms', Status: 'Success' }])
+          : err(`Ping to ${target} [${ip.ip}] from ${e.name} timed out.`);
+      }
       ctx.audit.record({
         actorId: ctx.actor,
         action: 'network.ping',
@@ -1763,11 +1810,24 @@ export const CAPABILITIES: readonly IamCapability[] = [
     cmdlet: 'Resolve-DnsName',
     readOnly: true,
     validator: 'dns-resolve',
-    params: [{ name: 'Name', label: 'Host name', kind: 'text', required: true }],
+    params: [
+      { name: 'Name', label: 'Host name', kind: 'text', required: true },
+      { name: 'ComputerName', label: 'Resolve from computer (e.g. WKS-JDOE)', kind: 'text', required: false },
+    ],
     resolvesTicketKinds: [],
     run(ctx, a) {
       const name = a.Name?.trim().toLowerCase() ?? '';
       if (!name) return err('Name is required.');
+      if (a.ComputerName?.trim() || ctx.host) {
+        const src = targetEndpoint(ctx, a.ComputerName);
+        if ('error' in src) return err(src.error);
+        const r = ctx.endpoints!.resolveName(src.endpoint.name, name);
+        ctx.audit.record({ actorId: ctx.actor, action: 'dns.resolve', targetId: src.endpoint.name, note: `Resolved ${name} on ${src.endpoint.name}.` });
+        if ('error' in r) return err(`${name} : ${r.error}`);
+        return ok(r.fromCache ? 'Answer from the client DNS cache.' : 'DNS query succeeded.', [
+          { Name: name, Type: 'A', IP: r.ip, Section: r.fromCache ? 'Cache' : 'Answer' },
+        ]);
+      }
       const ip = name.includes('omari.test')
         ? '10.10.10.10'
         : name.includes('google')
@@ -1924,6 +1984,9 @@ export const CAPABILITIES: readonly IamCapability[] = [
       ]);
     },
   },
+
+  // -- Help desk: end users' computers (services/endpointCapabilities.ts) ------
+  ...ENDPOINT_CAPABILITIES,
 ];
 
 // ---------------------------------------------------------------------------

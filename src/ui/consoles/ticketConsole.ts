@@ -22,11 +22,19 @@ import type { VmServices } from '@/vm/session';
 import { ticketStore } from '@/stores';
 // The response target lives with the queue, not with the badge that draws it.
 import { SLA_MS } from '@/services/mockTicketQueue';
-import {mkTicketId} from '@/domain';
-import type { Ticket, TicketId, TicketKind, TicketPriority, UserId } from '@/domain';
+import { mkTicketId, ENDPOINT_TICKET_KINDS } from '@/domain';
+import type {
+  EndpointTicketKind,
+  Ticket,
+  TicketId,
+  TicketKind,
+  TicketPriority,
+  UserId,
+} from '@/domain';
+import { requestRemoteConnection } from '@/util/remoteTarget';
 import { clearToasts, showToast } from '@/ui/toast';
 import { errorTone, fanfare, ticketBlip, ticketResolved, urgentAlert } from '@/ui/audio';
-import { generateTickets } from '@/vm/ticketGenerator';
+import { generateTickets, type GenerateFocus } from '@/vm/ticketGenerator';
 import { reviewTicketSync, explainReview, type TicketReview } from '@/vm/ticketReview';
 // The cards are built with innerHTML, and the subject, body and comments are
 // not this application's strings — the model rewrites the first two and the
@@ -105,21 +113,31 @@ function formatSLA(
   return { text: `⏱️ ${totalMin}m ${String(sec).padStart(2, '0')}s`, color };
 }
 
+const KIND_EMOJI: Record<TicketKind, string> = {
+  onboarding: '🔓',
+  mover: '🔄',
+  leaver: '🚪',
+  transfer: '🔀',
+  termination: '⚰️',
+  'access-request': '🔐',
+  'password-reset': '🔑',
+  'mfa-issue': '📱',
+  incident: '⚠️',
+  'printer-issue': '🖨️',
+  'email-issue': '📧',
+  'network-issue': '📶',
+  'drive-mapping': '🗄️',
+  'vpn-issue': '🛡️',
+  'software-request': '📦',
+  'performance-issue': '🐢',
+};
+
 function kindEmoji(kind: TicketKind): string {
-  return (
-    {
-      onboarding: '🔓',
-      mover: '🔄',
-      leaver: '🚪',
-      transfer: '🔀',
-      termination: '⚰️',
-      'access-request': '🔐',
-      'password-reset': '🔑',
-      'mfa-issue': '📱',
-      incident: '⚠️',
-    }[kind] ?? '🎫'
-  );
+  return KIND_EMOJI[kind] ?? '🎫';
 }
+
+const isEndpointTicket = (t: Ticket): t is Extract<Ticket, { kind: EndpointTicketKind }> =>
+  (ENDPOINT_TICKET_KINDS as readonly string[]).includes(t.kind);
 
 const TICKET_TEMPLATES: Array<{
   kind: TicketKind;
@@ -389,7 +407,13 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
   function attemptResolve(t: Ticket, opts: { quiet?: boolean } = {}): boolean {
     const review = reviewTicketSync(
       t,
-      { dir: conductor.dir, audit: conductor.audit, pim: conductor.pim, cloud: conductor.cloud },
+      {
+        dir: conductor.dir,
+        audit: conductor.audit,
+        pim: conductor.pim,
+        cloud: conductor.cloud,
+        endpoints: conductor.endpoints,
+      },
       'system' as UserId,
     );
     reviews.set(t.id, review);
@@ -615,25 +639,35 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
        * only the synchronous boot-time path ever ran, so the Ollama half of
        * the feature was unreachable from the running workstation.
        */
-      const genBtn = btn('🤖 Generate Work', 'var(--accent)', () => {
-        const original = genBtn.textContent;
-        genBtn.setAttribute('disabled', 'true');
-        genBtn.style.opacity = '0.6';
-        genBtn.style.pointerEvents = 'none';
-        genBtn.textContent = '🤖 Generating…';
-        void generateTickets({
-          dir: conductor.dir,
-          tickets: conductor.tickets,
-          audit: conductor.audit,
-          pim: conductor.pim,
-          cloud: conductor.cloud,
-        })
+      const generate = (button: HTMLElement, focus: GenerateFocus): void => {
+        const original = button.textContent;
+        button.setAttribute('disabled', 'true');
+        button.style.opacity = '0.6';
+        button.style.pointerEvents = 'none';
+        button.textContent = '🤖 Generating…';
+        void generateTickets(
+          {
+            dir: conductor.dir,
+            tickets: conductor.tickets,
+            audit: conductor.audit,
+            pim: conductor.pim,
+            cloud: conductor.cloud,
+            endpoints: conductor.endpoints,
+          },
+          { focus },
+        )
           .then((res) => {
             ticketStore.getState().setTickets(conductor.tickets.list());
             render();
+            const none =
+              focus === 'helpdesk'
+                ? res.stage === 'operating'
+                  ? 'Every staff computer already has an open support ticket — work those first.'
+                  : 'Help-desk tickets need staff with computers. Onboard some people first.'
+                : 'Nothing new to raise — work the open queue first.';
             showToast(
               res.raised === 0
-                ? 'Nothing new to raise — work the open queue first.'
+                ? none
                 : `Raised ${res.raised} ticket(s)${res.usedOllama ? ', written by Ollama' : ''}.`,
               { kind: res.raised === 0 ? 'info' : 'success' },
             );
@@ -641,13 +675,19 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
           })
           .catch(() => showToast('Could not generate work.', { kind: 'error' }))
           .finally(() => {
-            genBtn.removeAttribute('disabled');
-            genBtn.style.opacity = '1';
-            genBtn.style.pointerEvents = 'auto';
-            genBtn.textContent = original;
+            button.removeAttribute('disabled');
+            button.style.opacity = '1';
+            button.style.pointerEvents = 'auto';
+            button.textContent = original;
           });
-      });
+      };
+      const genBtn = btn('🤖 Generate Work', 'var(--accent)', () => generate(genBtn, 'all'));
       row1.appendChild(genBtn);
+      // Desk-side support only: printers, Outlook, Wi-Fi, drives, VPN,
+      // software and slow computers, fixed over Remote Desktop.
+      const deskBtn = btn('🖥️ IT Support Ticket', '#38bdf8', () => generate(deskBtn, 'helpdesk'));
+      deskBtn.title = 'Raise help-desk tickets for staff computers (printer, Outlook, Wi-Fi, drives, VPN…)';
+      row1.appendChild(deskBtn);
 
       // Resets the whole environment, not a lab: the directory is re-seeded
       // and every ticket, session and audit entry is discarded.
@@ -682,6 +722,11 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
         'password-reset',
         'mfa-issue',
         'incident',
+        // Help-desk queues appear once they have work in them, so the row
+        // does not fill with seven empty chips on a fresh domain.
+        ...ENDPOINT_TICKET_KINDS.filter(
+          (k) => k === filterKind || allOpen.some((t) => t.kind === k),
+        ),
       ];
       for (const fk of filterValues) {
         const chip = document.createElement('button');
@@ -810,6 +855,13 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
         'password-reset': '#60a5fa',
         'mfa-issue': '#fb923c',
         incident: 'var(--err)',
+        'printer-issue': '#38bdf8',
+        'email-issue': '#38bdf8',
+        'network-issue': '#38bdf8',
+        'drive-mapping': '#38bdf8',
+        'vpn-issue': '#38bdf8',
+        'software-request': '#38bdf8',
+        'performance-issue': '#38bdf8',
       };
       const color = kindColors[t.kind] ?? 'var(--muted)';
       const elapsed = formatElapsed(Date.now() - t.createdAt);
@@ -837,6 +889,18 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
       `;
       const actions = document.createElement('div');
       actions.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;';
+      if (isEndpointTicket(t)) {
+        // The fix happens on their computer. One click from the ticket to a
+        // Remote Desktop session there, rather than retyping the name.
+        const computer = t.payload.computer;
+        actions.appendChild(
+          btn(`🖥️ Connect to ${computer}`, '#38bdf8', () => {
+            if (t.status === 'open') queue.assign(t.id, 'player' as UserId);
+            requestRemoteConnection(computer);
+            render();
+          }),
+        );
+      }
       actions.appendChild(
         btn('Assign to me', '#60a5fa', () => {
           queue.assign(t.id, 'player' as UserId);
@@ -1095,7 +1159,8 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
     const post = btn('Post', 'var(--accent)', () => {
       const text = input.value.trim();
       if (!text) return;
-      queue.comment(ticket.id, 'player' as UserId, text);
+      // A work note, so it is in the audit log as well as on the ticket.
+      queue.addWorkNote(ticket.id, 'player' as UserId, text);
       commentDrafts.delete(ticket.id);
       // Re-render to pick up the new comment. expandedCommentIds still has
       // this ticket id, so the new block will be rebuilt with the new comment.

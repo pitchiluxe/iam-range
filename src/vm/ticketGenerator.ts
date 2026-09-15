@@ -21,12 +21,16 @@
 import type {
   MockAuditLog,
   MockDirectory,
+  MockEndpoints,
   MockTicketQueue,
   MockPim,
   MockCloudTenant,
   CloudVendor,
 } from '@/services';
-import type { Ticket, TicketKind, UserId } from '@/domain';
+import { SOFTWARE_CATALOG } from '@/services/mockEndpoints';
+import { ENDPOINT_TICKET_KINDS } from '@/domain';
+import type { EndpointIssueId, EndpointTicketKind, Ticket, TicketKind, UserId } from '@/domain';
+import { ENDPOINT_ISSUES, ENDPOINT_ISSUE_IDS } from './endpointIssues';
 import { COMPANY, DEPARTMENTS, GROUP_NAMES } from '@/config';
 import { OLLAMA_GENERATE_URL, OLLAMA_MODEL, ollamaAvailable } from '@/config/ollama';
 import { readEnvironment, type EnvironmentState, type Stage } from './environmentStage';
@@ -40,6 +44,8 @@ export interface GeneratorDeps {
   pim?: MockPim;
   /** Optional: hybrid scenarios are not offered without a tenant. */
   cloud?: Partial<Record<CloudVendor, MockCloudTenant>>;
+  /** Optional: help-desk scenarios are not offered without computers. */
+  endpoints?: MockEndpoints;
 }
 
 /** A unit of work the environment can currently support. */
@@ -51,6 +57,8 @@ interface Scenario {
   body: string;
   /** Applied before the ticket is raised, so the evidence is real. */
   prepare?: (deps: GeneratorDeps) => UserId[];
+  /** Set for help-desk work: which computer, and what was broken on it. */
+  endpoint?: { computer: string; issue: EndpointIssueId };
 }
 
 // ---------------------------------------------------------------------------
@@ -417,18 +425,86 @@ function cloudScenarios(env: EnvironmentState, deps: GeneratorDeps): Scenario[] 
   return chosen ? [chosen] : [];
 }
 
-function scenariosFor(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
+/**
+ * Help-desk work: something broken on a staff member's computer.
+ *
+ * Offered once there are people with computers. The fault is staged on the
+ * computer in prepare(), so the learner who connects finds exactly what the
+ * ticket describes. One open help-desk ticket per computer: two faults on one
+ * machine would make each ticket's symptoms lie about the other's.
+ */
+function endpointScenarios(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
+  const endpoints = deps.endpoints;
+  if (!endpoints || env.staffLogons.length === 0) return [];
+
+  const endpointKinds: readonly string[] = ENDPOINT_TICKET_KINDS;
+  const busy = new Set(
+    deps.tickets
+      .list()
+      .filter((t) => t.status !== 'resolved' && endpointKinds.includes(t.kind))
+      .map((t) => (t.payload as { computer?: string }).computer?.toUpperCase()),
+  );
+
+  const people = env.staffLogons
+    .map((logon) => deps.dir.getUserByUsername(logon))
+    .filter((u): u is NonNullable<typeof u> => Boolean(u) && u!.status === 'active')
+    .sort(() => Math.random() - 0.5);
+
+  const out: Scenario[] = [];
+  for (const user of people) {
+    if (out.length >= 2) break;
+    // Built healthy if it did not exist; nothing is broken until prepare().
+    const computer = endpoints.ensureFor(user.id);
+    if (!computer || busy.has(computer.name)) continue;
+
+    const software = SOFTWARE_CATALOG.find((s) => !computer.installed.includes(s));
+    const pool = ENDPOINT_ISSUE_IDS.filter((id) => id !== 'software-missing' || software);
+    const issue = pool[Math.floor(Math.random() * pool.length)]!;
+    const spec = ENDPOINT_ISSUES[issue];
+    const story = {
+      display: user.displayName,
+      username: user.username,
+      computer: computer.name,
+      department: user.department,
+      share: computer.homeShare,
+      ...(software ? { software } : {}),
+    };
+
+    out.push({
+      id: `endpoint-${issue}-${user.username}`,
+      kind: spec.kind,
+      priority: spec.priority,
+      subject: spec.subject(story),
+      body: spec.body(story),
+      endpoint: { computer: computer.name, issue },
+      prepare: ({ endpoints: eps }) => (eps?.applyFault(computer.name, issue) ? [user.id] : []),
+    });
+  }
+  return out;
+}
+
+export type GenerateFocus = 'all' | 'helpdesk';
+
+function scenariosFor(env: EnvironmentState, deps: GeneratorDeps, focus: GenerateFocus = 'all'): Scenario[] {
+  if (focus === 'helpdesk') return endpointScenarios(env, deps);
   const byStage: Record<Stage, () => Scenario[]> = {
     bare: () => bareStageScenarios(),
     structured: () => structuredStageScenarios(env),
     'ready-to-staff': () => staffingScenarios(env),
     // Privileged-access work joins the ordinary queue once the domain is
-    // staffed: PIM is a day-to-day discipline, not a separate mode.
-    operating: () => [
-      ...operatingScenarios(env, deps),
-      ...pimScenarios(env, deps),
-      ...cloudScenarios(env, deps),
-    ],
+    // staffed: PIM is a day-to-day discipline, not a separate mode. So does
+    // desk-side support — one help-desk ticket leads, so a short batch always
+    // has one, and the rest follow the identity work.
+    operating: () => {
+      const desk = endpointScenarios(env, deps);
+      return [
+        ...desk.slice(0, 1),
+        ...operatingScenarios(env, deps),
+        ...pimScenarios(env, deps),
+        ...cloudScenarios(env, deps),
+        ...desk.slice(1),
+      ];
+    },
   };
   return byStage[env.stage]();
 }
@@ -473,12 +549,37 @@ function namesToKeep(scenario: Scenario, env: EnvironmentState): string[] {
   // conventions this lab uses throughout: grp-, role-, svc-, and the OU paths.
   for (const m of body.matchAll(/\b(?:grp|role|svc)-[A-Za-z0-9-]+/g)) keep.add(m[0]);
   for (const m of body.matchAll(/\bCorp(?:\/[A-Za-z]+)*/g)) keep.add(m[0]);
+  // The computer a help-desk ticket sends the learner to. Lose it and the
+  // ticket no longer says where to connect.
+  if (scenario.endpoint) keep.add(scenario.endpoint.computer);
 
   return [...keep];
 }
 
 async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Scenario> {
-  const prompt = [
+  // Help-desk tickets are written by the person with the problem. They say
+  // what they see; they do not know the cause, and a ticket that names it
+  // would hand the learner the diagnosis the lab exists to practise.
+  const prompt = scenario.endpoint
+    ? [
+        'You are writing an IT service desk ticket submitted by an employee.',
+        '',
+        'The employee is reporting exactly this problem:',
+        `Subject: ${scenario.subject}`,
+        `Details: ${scenario.body}`,
+        '',
+        'Rewrite it in the employee\'s own words, as a short, slightly frustrated message to the',
+        'service desk. Describe only what they see and what they have tried. Do NOT guess or state',
+        'the technical cause or the fix. Keep the computer name, the username and any drive letter,',
+        'printer name, network name or application name exactly as given. Do not invent other',
+        'people, systems or error codes. Two or three sentences for the body.',
+        '',
+        'Reply with JSON only: {"subject": "...", "body": "..."}',
+      ].join('\n')
+    : null;
+  if (prompt) return rewrite(scenario, env, prompt);
+
+  return rewrite(scenario, env, [
     'You are writing an IT service desk ticket for an identity administration lab.',
     '',
     'CURRENT ENVIRONMENT — do not contradict any of this:',
@@ -495,8 +596,11 @@ async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Sce
     'three sentences.',
     '',
     'Reply with JSON only: {"subject": "...", "body": "..."}',
-  ].join('\n');
+  ].join('\n'));
+}
 
+/** Send one rewrite prompt, and keep the original unless the answer is safe to use. */
+async function rewrite(scenario: Scenario, env: EnvironmentState, prompt: string): Promise<Scenario> {
   try {
     const res = await fetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
@@ -555,12 +659,31 @@ function notAlreadyOpen(scenarios: Scenario[], deps: GeneratorDeps): Scenario[] 
   return scenarios.filter((s) => !openIds.has(s.id) && !legacySubjects.has(s.subject));
 }
 
-function raise(deps: GeneratorDeps, scenario: Scenario): void {
+/** Raise one scenario. Returns whether a ticket was actually created. */
+function raise(deps: GeneratorDeps, scenario: Scenario): boolean {
   const admin = deps.dir.getUserByUsername('admin') ?? deps.dir.listUsers()[0];
-  if (!admin) return;
+  if (!admin) return false;
 
   // Make the scenario true before describing it.
   const related = scenario.prepare?.(deps) ?? [];
+
+  if (scenario.endpoint) {
+    // A help-desk ticket whose fault could not be staged would send the
+    // learner to a computer with nothing wrong with it. Raise nothing.
+    const userId = related[0];
+    if (!userId) return false;
+    deps.tickets.create({
+      kind: scenario.kind as EndpointTicketKind,
+      scenarioId: scenario.id,
+      requesterId: userId,
+      subject: scenario.subject,
+      body: scenario.body,
+      priority: scenario.priority,
+      relatedUserIds: related,
+      payload: { userId, computer: scenario.endpoint.computer, issue: scenario.endpoint.issue },
+    });
+    return true;
+  }
 
   // Payload shape varies per ticket kind and the union is wide; the ticket
   // queue only reads userId, so a narrow cast beats threading every variant.
@@ -580,6 +703,7 @@ function raise(deps: GeneratorDeps, scenario: Scenario): void {
     // The payload union is per-kind and wide; the queue only reads userId.
     payload: payload as { proposedGroupIds: never[]; proposedRoleIds: never[]; startDate: number },
   });
+  return true;
 }
 
 export interface GenerateResult {
@@ -596,10 +720,13 @@ export interface GenerateResult {
  */
 export async function generateTickets(
   deps: GeneratorDeps,
-  options: { useOllama?: boolean; max?: number } = {},
+  options: { useOllama?: boolean; max?: number; focus?: GenerateFocus } = {},
 ): Promise<GenerateResult> {
   const env = readEnvironment(deps.dir);
-  const candidates = notAlreadyOpen(scenariosFor(env, deps), deps).slice(0, options.max ?? 4);
+  const candidates = notAlreadyOpen(scenariosFor(env, deps, options.focus), deps).slice(
+    0,
+    options.max ?? 4,
+  );
 
   if (candidates.length === 0) {
     return { raised: 0, usedOllama: false, stage: env.stage };
@@ -610,8 +737,8 @@ export async function generateTickets(
     ? await Promise.all(candidates.map((s) => embellish(s, env)))
     : candidates;
 
-  for (const s of finalScenarios) raise(deps, s);
-  return { raised: finalScenarios.length, usedOllama: useOllama, stage: env.stage };
+  const raised = finalScenarios.filter((s) => raise(deps, s)).length;
+  return { raised, usedOllama: useOllama, stage: env.stage };
 }
 
 /** Synchronous variant for boot, where waiting on a network call would delay
@@ -619,6 +746,5 @@ export async function generateTickets(
 export function generateTicketsSync(deps: GeneratorDeps, max = 3): number {
   const env = readEnvironment(deps.dir);
   const candidates = notAlreadyOpen(scenariosFor(env, deps), deps).slice(0, max);
-  for (const s of candidates) raise(deps, s);
-  return candidates.length;
+  return candidates.filter((s) => raise(deps, s)).length;
 }

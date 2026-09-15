@@ -11,6 +11,7 @@ import type { UserId } from '@/domain';
 import type { CapabilityContext } from '@/services';
 import { createShellState, dispatch } from '@/terminal/dispatcher';
 import { COMPANY } from '@/config';
+import { notifyEndpointChanged } from '@/util/endpointEvents';
 
 const BANNER = [
   `${COMPANY.name} — Identity Operations Shell`,
@@ -20,7 +21,15 @@ const BANNER = [
   '',
 ].join('\n');
 
-export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): void {
+/**
+ * @param options.host Set when the shell runs on an end user's computer (inside
+ *   a Remote Desktop session): network and repair commands act on that computer.
+ */
+export function renderTerminalWindow(
+  body: HTMLElement,
+  conductor: VmServices,
+  options: { host?: string } = {},
+): void {
   body.innerHTML = '';
   // Additive: replacing cssText would drop the `flex:1; min-height:0` the
   // window manager sets, so the shell would size to its content instead of
@@ -58,6 +67,8 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
       audit: conductor.audit,
       pim: conductor.pim,
       cloud: conductor.cloud,
+      endpoints: conductor.endpoints,
+      ...(options.host ? { host: options.host } : {}),
       actor: 'system' as UserId,
     };
   };
@@ -163,13 +174,19 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
     }
     if (res.control === 'exit') {
       write('');
-      // Ask the window manager to close us; it owns window lifecycle.
-      document.dispatchEvent(new CustomEvent('apex-close-window', { detail: { id: 'terminal' } }));
+      // Ask whoever hosts us to close us; they own window lifecycle. Raised on
+      // our own element so it bubbles from here: a terminal inside a Remote
+      // Desktop session closes that window, not the workstation's terminal.
+      body.dispatchEvent(
+        new CustomEvent('apex-close-window', { bubbles: true, detail: { id: 'terminal' } }),
+      );
       return;
     }
 
     write(res.output, res.ok ? 'var(--fg)' : 'var(--err)');
     write('');
+    // A repair on a computer shows in every window open on it.
+    for (const e of conductor.endpoints?.list() ?? []) notifyEndpointChanged(e.name);
     newPrompt();
   };
 
@@ -183,5 +200,9 @@ export function renderTerminalWindow(body: HTMLElement, conductor: VmServices): 
   });
 
   write(BANNER, '#6a9955');
+  if (options.host) {
+    write(`Running on ${options.host}. ipconfig, ping, net use and the repair cmdlets act on this computer.`, '#6a9955');
+    write('');
+  }
   newPrompt();
 }

@@ -41,6 +41,11 @@ const BASELINE_APPS = [
   'sticky-notes',
   'browser',
   'app-portal',
+  // Every employee has mail, a VPN client and the approved-software store.
+  // They are also what most help-desk tickets are about.
+  'outlook',
+  'vpn-client',
+  'software-center',
   'settings',
   'control-panel',
   'recycle-bin',

@@ -1,7 +1,15 @@
 /**
  * services/mockTicketQueue.ts — in-memory queue of tickets.
  */
-import type { Ticket, TicketId, TicketKind, TicketPriority, UserId } from '@/domain';
+import type {
+  EndpointTicketKind,
+  EndpointTicketPayload,
+  Ticket,
+  TicketId,
+  TicketKind,
+  TicketPriority,
+  UserId,
+} from '@/domain';
 import { mkTicketId } from '@/domain';
 import type { MockAuditLog } from './mockAuditLog';
 
@@ -135,6 +143,18 @@ export type NewTicket =
       priority?: Ticket['priority'];
       payload: Extract<Ticket, { kind: 'incident' }>['payload'];
       relatedUserIds?: UserId[];
+    }
+  | {
+      id?: TicketId;
+      /** Which generator scenario raised this, for the reviewer. */
+      scenarioId?: string;
+      kind: EndpointTicketKind;
+      requesterId: UserId;
+      subject: string;
+      body: string;
+      priority?: Ticket['priority'];
+      payload: EndpointTicketPayload;
+      relatedUserIds?: UserId[];
     };
 
 export class MockTicketQueue {
@@ -205,6 +225,22 @@ export class MockTicketQueue {
     if (!t) return;
     t.comments.push({ authorId: by, at: Date.now(), body });
     t.updatedAt = Date.now();
+  }
+
+  /**
+   * A work note: a comment that is also written to the audit log.
+   *
+   * Notes are what the next person reads when they pick a ticket up, and what
+   * a reviewer reads afterwards. A comment that exists only on the ticket is
+   * gone when the ticket is; the log keeps it.
+   */
+  addWorkNote(id: TicketId, by: UserId, body: string): boolean {
+    const text = body.trim();
+    const t = this.tickets.get(id);
+    if (!t || !text) return false;
+    this.comment(id, by, text);
+    this.audit.record({ actorId: by, action: 'ticket.noted', targetId: id, note: text });
+    return true;
   }
 
   /**
