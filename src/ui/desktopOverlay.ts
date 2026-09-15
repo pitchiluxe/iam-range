@@ -36,6 +36,7 @@ import { toggleDesktopAnnotator } from './desktopAnnotator';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { renderCareerLabWindow } from './consoles/careerLabWindow';
+import { renderRemoteDesktopWindow } from './consoles/remoteDesktopWindow';
 import { onAppRequest } from '@/util/appLauncher';
 import { openContextMenu, type MenuItem } from '@/ui/contextMenu';
 import { THEMES, currentThemeId, setTheme } from '@/ui/themes';
@@ -343,6 +344,14 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 480,
     height: 440,
     render: (_c, b) => renderRecycleBinWindow(b),
+  },
+  {
+    id: 'remote-desktop',
+    title: 'Remote Desktop',
+    icon: '🖥️',
+    width: 480,
+    height: 520,
+    render: (c, b) => renderRemoteDesktopWindow(b, c),
   },
 ];
 

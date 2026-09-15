@@ -57,6 +57,9 @@ const IDENTITY_ADMIN_APPS = [
   // The tenants in front of the domain. Whoever administers accounts on
   // premises administers their cloud copies too.
   'cloud-identity',
+  // Verifying a sign-in without giving up your own session is the same
+  // job as resetting a password or unlocking an account.
+  'remote-desktop',
 ] as const;
 
 /** Ticket handling and investigation. */

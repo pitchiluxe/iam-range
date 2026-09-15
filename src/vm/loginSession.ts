@@ -30,8 +30,10 @@ export type SignInFailure =
   | 'conditional-block'
   | 'unknown';
 
-/** What the sign-in screen should say for each refusal. */
-const MESSAGES: Record<SignInFailure, string> = {
+/** What the sign-in screen should say for each refusal. Exported so any other
+ *  surface that authenticates against the same IdP (e.g. the Remote Desktop
+ *  window) uses identical wording instead of a second, driftable copy. */
+export const MESSAGES: Record<SignInFailure, string> = {
   'bad-password': "The user name or password is incorrect. Try again.",
   disabled: 'Your account has been disabled. Please see your system administrator.',
   locked: 'Your account is locked out. Please see your system administrator.',
