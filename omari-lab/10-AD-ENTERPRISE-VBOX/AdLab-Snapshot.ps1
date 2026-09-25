@@ -78,9 +78,15 @@ function Stop-VmCleanly([string]$key) {
     $vm = $cfg.vms.$key.vmName
     if ((Get-AdLabVmState $vm) -ne 'running') { return }
     Say "  shutting down $key cleanly…"
-    try { Invoke-AdLabGuest -Host_ $key -Script 'Stop-Computer -Force' -TimeoutSec 30 | Out-Null } catch { }
-    # Windows Server can take several minutes to shut down cleanly.
-    if (-not (Wait-VmState $vm @('poweroff') 300)) {
+    # Ask again every minute: a Windows still finishing first sign-in or an
+    # update can drop the first request. Windows Server can take several
+    # minutes to shut down cleanly.
+    $asked = $false
+    for ($i = 0; $i -lt 5 -and -not $asked; $i++) {
+        try { Invoke-AdLabGuest -Host_ $key -Script 'Stop-Computer -Force' -TimeoutSec 30 | Out-Null } catch { }
+        $asked = Wait-VmState $vm @('poweroff') 60
+    }
+    if (-not $asked) {
         & $cfg.vboxManage controlvm $vm acpipowerbutton 2>$null | Out-Null
         if (-not (Wait-VmState $vm @('poweroff') 300)) { throw "$key did not shut down within 10 minutes." }
     }

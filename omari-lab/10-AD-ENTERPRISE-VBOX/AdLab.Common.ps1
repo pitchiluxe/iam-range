@@ -106,7 +106,15 @@ function Wait-AdLabGuestReady {
     <# Wait until Guest Control answers on a VM — i.e. Windows is installed and signed in. #>
     param([Parameter(Mandatory)][ValidateSet('DC01', 'CLIENT01')][string]$Host_, [int]$TimeoutMin = 90)
     $deadline = (Get-Date).AddMinutes($TimeoutMin)
+    $cfg = Get-AdLabConfig
+    $vm = $cfg.vms.$Host_.vmName
     while ((Get-Date) -lt $deadline) {
+        # VirtualBox's Windows post-install step can end with a shutdown rather
+        # than a restart; an installed-but-off VM would otherwise be waited on forever.
+        if ((Get-AdLabVmState $vm) -in @('poweroff', 'aborted')) {
+            Write-Host "  $Host_ powered itself off after setup; starting it again"
+            & $cfg.vboxManage startvm $vm --type gui 2>&1 | Out-Null
+        }
         try {
             $name = Invoke-AdLabGuest -Host_ $Host_ -Script 'hostname' -TimeoutSec 30
             if ($name) { return $name.Trim() }
