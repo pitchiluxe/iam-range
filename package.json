@@ -105,7 +105,13 @@
       ],
       "category": "public.app-category.education",
       "artifactName": "IAM-Range-${version}.${ext}"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "omari-lab/10-AD-ENTERPRISE-VBOX",
+        "to": "adlab-vbox"
+      }
+    ]
   },
   "author": {
     "name": "Erick Omari"

@@ -22,6 +22,7 @@ somebody provisioned it.
 | Cloud Identity | Okta and Entra ID in front of the domain: sync cycles, SCIM, soft-match failures. |
 | Ticket Queue | Work raised for the state the domain is actually in, with the evidence made true first. |
 | IAM Tutor | Answers from a written reference and names the article it used. Socratic by default. |
+| AD Enterprise Lab | Eleven labs that build TechnoBiz's domain from two bare machines: DC networking, AD DS, DNS, RAS/NAT, DHCP, domain join, OUs, groups, GPO, share permissions, and two help-desk tickets. A deterministic checker grades the work, and an Ollama instructor coaches but never changes the lab. You can work in the simulator or on real VirtualBox VMs, and **Start over** resets a lab or the whole series at any time. See `docs/ad-enterprise-lab.md`. |
 | Documentation | Thirteen articles on the things the job and the interview both ask about. |
 | Writer | The documents an identity engineer files — incident report, access review, offboarding checklist. |
 | SecOps Dashboard, App Portal, Control Panel, Settings, Explorer, Terminal | The rest of the desktop. |
@@ -92,7 +93,11 @@ answer, and generated tickets use their built-in wording. That is a narrower
 experience, not a broken one, and it is the one most people will have — so it
 is tested as a first-class path rather than as a fallback.
 
-Settings → AI Assistant reports whether Ollama is currently answering.
+Settings → AI Assistant reports whether Ollama is currently answering, and lets
+you pick any model you have pulled. Every AI feature uses that choice.
+
+The AD Enterprise Lab can also run on two real Windows VMs in VirtualBox. That
+kit, which works on Windows 11 Home, is in `omari-lab/10-AD-ENTERPRISE-VBOX/`.
 
 ## The landing page
 

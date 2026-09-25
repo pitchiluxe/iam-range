@@ -24,7 +24,7 @@ import type {
   MockCloudTenant,
 } from '@/services';
 import type { CloudVendor } from '@/services';
-import { OLLAMA_GENERATE_URL, OLLAMA_MODEL, ollamaAvailable } from '@/config/ollama';
+import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable } from '@/config/ollama';
 
 export interface ReviewDeps {
   dir: MockDirectory;
@@ -572,7 +572,7 @@ async function writeSummary(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model: getOllamaModel(),
         prompt,
         stream: false,
         keep_alive: '15m',

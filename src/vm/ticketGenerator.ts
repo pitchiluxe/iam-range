@@ -32,7 +32,7 @@ import { ENDPOINT_TICKET_KINDS } from '@/domain';
 import type { EndpointIssueId, EndpointTicketKind, Ticket, TicketKind, UserId } from '@/domain';
 import { ENDPOINT_ISSUES, ENDPOINT_ISSUE_IDS } from './endpointIssues';
 import { COMPANY, DEPARTMENTS, GROUP_NAMES } from '@/config';
-import { OLLAMA_GENERATE_URL, OLLAMA_MODEL, ollamaAvailable } from '@/config/ollama';
+import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable } from '@/config/ollama';
 import { readEnvironment, type EnvironmentState, type Stage } from './environmentStage';
 import { describeForPrompt } from './environmentStage';
 
@@ -605,7 +605,7 @@ async function rewrite(scenario: Scenario, env: EnvironmentState, prompt: string
     const res = await fetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false, format: 'json' }),
+      body: JSON.stringify({ model: getOllamaModel(), prompt, stream: false, format: 'json' }),
     });
     if (!res.ok) return scenario;
     const data = (await res.json()) as { response?: string };

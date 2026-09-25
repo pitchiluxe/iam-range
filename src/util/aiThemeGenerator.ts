@@ -21,7 +21,7 @@
  * answer. This button's only job is to generate a theme; if it can't, the
  * caller needs to know why, not receive a quiet no-op.
  */
-import { OLLAMA_GENERATE_URL, OLLAMA_MODEL, ollamaAvailable } from '@/config/ollama';
+import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable } from '@/config/ollama';
 import type { Theme } from '@/ui/themes';
 
 const TOKEN_KEYS = [
@@ -162,7 +162,7 @@ export async function generateThemeWithAI(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model: getOllamaModel(),
         prompt: buildPrompt(hint),
         format: 'json',
         stream: false,

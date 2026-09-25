@@ -28,7 +28,7 @@
  * the model only writes prose.
  */
 import { MANUAL } from '@/config/manual';
-import { OLLAMA_GENERATE_URL, OLLAMA_MODEL, ollamaAvailable } from '@/config/ollama';
+import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable } from '@/config/ollama';
 
 export interface DrillQuestion {
   /** The lesson this came from. */
@@ -186,7 +186,7 @@ export async function critiqueAnswer(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model: getOllamaModel(),
         prompt,
         stream: false,
         keep_alive: '15m',

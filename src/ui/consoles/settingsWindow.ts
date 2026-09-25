@@ -25,6 +25,12 @@ import {
 import { updateManager, type UpdateStatus } from '@/util/updateManager';
 import { tutorAvailable } from '@/vm/tutor';
 import { openExternal, OLLAMA_DOWNLOAD_URL, OLLAMA_MODEL } from '@/util/externalLink';
+import {
+  getOllamaModel,
+  listOllamaModels,
+  pickInstalledModel,
+  setOllamaModel,
+} from '@/config/ollama';
 import { PRODUCT } from '@/config/product';
 import { login } from '@/vm/loginSession';
 import type { User } from '@/domain';
@@ -867,7 +873,7 @@ export function renderSettingsWindow(
       const intro = document.createElement('div');
       intro.style.cssText = 'font-size:12.5px;color:var(--fg);line-height:1.65;margin-bottom:16px;';
       intro.textContent =
-        'The IAM Tutor and the ticket generator both run against Ollama, a local model ' +
+        'The IAM Tutor, the AD Enterprise Lab instructor and the ticket generator run against Ollama, a local model ' +
         'runtime. Nothing is sent anywhere: the model runs on this machine. Both features ' +
         'work without it — the tutor quotes the documentation instead of composing an ' +
         'answer, and tickets use their built-in wording — so this is optional, not required.';
@@ -893,9 +899,53 @@ export function renderSettingsWindow(
         statusLine.style.color = up ? 'var(--accent)' : '#e2a03f';
         statusDetail.textContent = up
           ? `The tutor will compose answers from the documentation, and generated tickets ` +
-            `will be written by the model. Model requested: ${OLLAMA_MODEL}.`
+            `will be written by the model. Model in use: ${getOllamaModel()}.`
           : 'The tutor will quote the documentation and generated tickets will use their ' +
             'built-in wording. Everything else in the workstation is unaffected.';
+      });
+
+      // Model picker: whatever the learner has pulled, not only the default.
+      // Every AI feature reads the choice at call time.
+      const modelRow = document.createElement('div');
+      modelRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:16px;font-size:12px;';
+      const modelLabel = document.createElement('label');
+      modelLabel.textContent = 'Model';
+      modelLabel.style.cssText = 'color:var(--muted);min-width:44px;';
+      const modelSelect = document.createElement('select');
+      modelSelect.disabled = true;
+      modelSelect.style.cssText =
+        'flex:1;max-width:320px;padding:6px 8px;border-radius:4px;border:1px solid var(--border);' +
+        'background:var(--panel);color:var(--fg);font:inherit;';
+      const loading = document.createElement('option');
+      loading.textContent = 'Detecting installed models…';
+      modelSelect.appendChild(loading);
+      const modelNote = document.createElement('span');
+      modelNote.style.cssText = 'font-size:11px;color:var(--muted);';
+      modelRow.append(modelLabel, modelSelect, modelNote);
+      content.appendChild(modelRow);
+      void listOllamaModels().then((models) => {
+        modelSelect.innerHTML = '';
+        if (!models || models.length === 0) {
+          const o = document.createElement('option');
+          o.textContent = models ? 'No models installed' : 'Ollama not running';
+          modelSelect.appendChild(o);
+          modelNote.textContent = `Default: ${getOllamaModel()}`;
+          return;
+        }
+        const current = pickInstalledModel(models, getOllamaModel());
+        for (const m of models) {
+          const o = document.createElement('option');
+          o.value = m;
+          o.textContent = m;
+          modelSelect.appendChild(o);
+        }
+        if (current) modelSelect.value = current;
+        modelSelect.disabled = false;
+        modelNote.textContent = `${models.length} installed`;
+        modelSelect.addEventListener('change', () => {
+          setOllamaModel(modelSelect.value);
+          modelNote.textContent = 'Saved — used from the next question';
+        });
       });
 
       const steps = document.createElement('div');

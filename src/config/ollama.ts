@@ -54,3 +54,69 @@ export async function ollamaAvailable(timeoutMs = 1200): Promise<boolean> {
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Model selection
+// ---------------------------------------------------------------------------
+
+const MODEL_KEY = 'ollama_model';
+
+/**
+ * The model every AI feature asks for: the learner's choice from Settings,
+ * else OLLAMA_MODEL. Read at call time, so a change in Settings reaches the
+ * next question without a restart.
+ */
+export function getOllamaModel(): string {
+  try {
+    const v = typeof localStorage === 'undefined' ? null : localStorage.getItem(MODEL_KEY);
+    return v && v.trim() ? v.trim() : OLLAMA_MODEL;
+  } catch {
+    return OLLAMA_MODEL;
+  }
+}
+
+/** Remember the learner's choice; null goes back to the default. */
+export function setOllamaModel(name: string | null): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (name && name.trim()) localStorage.setItem(MODEL_KEY, name.trim());
+    else localStorage.removeItem(MODEL_KEY);
+  } catch {
+    // Storage blocked: the default model still works.
+  }
+}
+
+/**
+ * Models installed in the local Ollama, by name (e.g. "llama3.2:latest").
+ * Null when Ollama is not answering — distinct from "answering, but empty".
+ */
+export async function listOllamaModels(
+  timeoutMs = 1500,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string[] | null> {
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    const res = await fetchImpl(OLLAMA_TAGS_URL, { signal: ctl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { models?: { name?: string }[] };
+    return (data.models ?? []).map((m) => m.name ?? '').filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The installed model to use for `preferred`: an exact or ":latest" match,
+ * else any tag of it, else the first installed model, else null. Lets the
+ * app work with whatever the learner has pulled instead of insisting on one.
+ */
+export function pickInstalledModel(installed: readonly string[], preferred: string): string | null {
+  const p = preferred.toLowerCase();
+  const exact = installed.find((m) => m.toLowerCase() === p || m.toLowerCase() === `${p}:latest`);
+  if (exact) return exact;
+  const tagged = installed.find((m) => m.toLowerCase().startsWith(`${p}:`));
+  if (tagged) return tagged;
+  return installed[0] ?? null;
+}

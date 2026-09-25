@@ -26,7 +26,7 @@
 import { searchArticles, type Article } from '@/config/knowledgeBase';
 import {
   OLLAMA_GENERATE_URL,
-  OLLAMA_MODEL,
+  getOllamaModel,
   ollamaAvailable,
 } from '@/config/ollama';
 import type { EnvironmentState } from './environmentStage';
@@ -311,7 +311,7 @@ export async function askTutor(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model: getOllamaModel(),
         prompt,
         stream: false,
         // Keep the model resident between questions — otherwise every question

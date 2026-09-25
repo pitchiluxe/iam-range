@@ -259,6 +259,133 @@ ipcMain.handle('capture:reveal', (_event, target) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// AD Enterprise Lab on real VirtualBox VMs
+//
+// Three narrow channels, each bound to the two lab VMs named in
+// adlab.vbox.json — never to an arbitrary VM, command or path:
+//   adlab:vm-status  which of DC01 / CLIENT01 exist and are running
+//   adlab:vm-start   start one of them (in its own VirtualBox window)
+//   adlab:vm-facts   run the read-only collector and return its JSON
+// Grading happens in the renderer, with the same engine the simulator uses.
+// ---------------------------------------------------------------------------
+const { execFile } = require('child_process');
+const ADLAB_KEYS = ['DC01', 'CLIENT01'];
+
+function adlabKitDir() {
+  const candidates = [
+    path.join(process.resourcesPath || '', 'adlab-vbox'),
+    path.join(__dirname, '..', 'omari-lab', '10-AD-ENTERPRISE-VBOX'),
+  ];
+  return candidates.find((d) => fs.existsSync(path.join(d, 'Get-AdLabFacts.ps1'))) || null;
+}
+
+function adlabConfig() {
+  const dir = adlabKitDir();
+  if (!dir) return null;
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(dir, 'adlab.vbox.json'), 'utf8'));
+    cfg.vboxManage = String(cfg.vboxManage).replace(/%([^%]+)%/g, (_m, v) => process.env[v] || '');
+    return { dir, cfg };
+  } catch {
+    return null;
+  }
+}
+
+function run(file, args, timeoutMs) {
+  return new Promise((resolve) => {
+    execFile(file, args, { timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) =>
+      resolve({ err, stdout: String(stdout || ''), stderr: String(stderr || '') }),
+    );
+  });
+}
+
+ipcMain.handle('adlab:vm-status', async () => {
+  const kit = adlabConfig();
+  if (!kit) return { ok: false, error: 'The VirtualBox kit (omari-lab/10-AD-ENTERPRISE-VBOX) was not found.' };
+  if (!fs.existsSync(kit.cfg.vboxManage)) return { ok: false, error: 'VirtualBox is not installed (VBoxManage not found).' };
+  const all = await run(kit.cfg.vboxManage, ['list', 'vms'], 20_000);
+  const running = await run(kit.cfg.vboxManage, ['list', 'runningvms'], 20_000);
+  const vms = {};
+  for (const key of ADLAB_KEYS) {
+    const name = kit.cfg.vms[key].vmName;
+    vms[key] = { vmName: name, exists: all.stdout.includes(`"${name}"`), running: running.stdout.includes(`"${name}"`) };
+  }
+  return { ok: true, vms };
+});
+
+ipcMain.handle('adlab:vm-start', async (_event, key) => {
+  if (!ADLAB_KEYS.includes(key)) return false;
+  const kit = adlabConfig();
+  if (!kit) return false;
+  const res = await run(kit.cfg.vboxManage, ['startvm', kit.cfg.vms[key].vmName, '--type', 'gui'], 60_000);
+  return !res.err;
+});
+
+// Snapshots are how a real lab is reset: "LabNN-Start" is the moment a lab
+// began, "Lab01-Start" the fresh machines. Names are restricted so a renderer
+// can never pass anything VBoxManage would read as an option or a path.
+const SNAPSHOT_NAME = /^[A-Za-z0-9][A-Za-z0-9 _.-]{0,39}$/;
+
+async function snapshotNames(kit, vmName) {
+  const res = await run(kit.cfg.vboxManage, ['snapshot', vmName, 'list', '--machinereadable'], 30_000);
+  return [...res.stdout.matchAll(/^SnapshotName[^=]*="(.*)"$/gm)].map((m) => m[1]);
+}
+
+ipcMain.handle('adlab:vm-snapshots', async () => {
+  const kit = adlabConfig();
+  if (!kit) return { ok: false, error: 'The VirtualBox kit was not found.' };
+  const out = {};
+  for (const key of ADLAB_KEYS) out[key] = await snapshotNames(kit, kit.cfg.vms[key].vmName);
+  return { ok: true, snapshots: out };
+});
+
+/**
+ * Save and restore go through the kit's AdLab-Snapshot.ps1 — the same script
+ * a learner can run by hand — so the app and the command line behave the same.
+ * It saves OFFLINE (clean shutdown, snapshot, start again): live snapshots
+ * crashed VirtualBox's service on a host like this one.
+ */
+async function snapshotScript(kit, args) {
+  const script = path.join(kit.dir, 'AdLab-Snapshot.ps1');
+  const res = await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args, '-Json'], 1_200_000);
+  const line = res.stdout.split(/\r?\n/).filter((l) => l.trim().startsWith('{')).pop();
+  if (!line) return { ok: false, error: (res.stderr || res.stdout || String(res.err || 'No output')).slice(0, 500) };
+  try {
+    return JSON.parse(line);
+  } catch (e) {
+    return { ok: false, error: `Could not read the snapshot script output: ${e.message}` };
+  }
+}
+
+ipcMain.handle('adlab:vm-save', async (_event, name) => {
+  if (typeof name !== 'string' || !SNAPSHOT_NAME.test(name)) return { ok: false, error: 'Invalid snapshot name.' };
+  const kit = adlabConfig();
+  if (!kit) return { ok: false, error: 'The VirtualBox kit was not found.' };
+  return snapshotScript(kit, ['-Save', name]);
+});
+
+ipcMain.handle('adlab:vm-restore', async (_event, name) => {
+  if (typeof name !== 'string' || !SNAPSHOT_NAME.test(name)) return { ok: false, error: 'Invalid snapshot name.' };
+  const kit = adlabConfig();
+  if (!kit) return { ok: false, error: 'The VirtualBox kit was not found.' };
+  return snapshotScript(kit, ['-Restore', name]);
+});
+
+ipcMain.handle('adlab:vm-facts', async () => {
+  const kit = adlabConfig();
+  if (!kit) return { ok: false, error: 'The VirtualBox kit (omari-lab/10-AD-ENTERPRISE-VBOX) was not found.' };
+  const script = path.join(kit.dir, 'Get-AdLabFacts.ps1');
+  const res = await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Json'], 600_000);
+  const line = res.stdout.split(/\r?\n/).filter((l) => l.trim().startsWith('{')).pop();
+  if (!line) return { ok: false, error: (res.stderr || res.stdout || String(res.err || 'No output')).slice(0, 800) };
+  try {
+    return { ok: true, doc: JSON.parse(line) };
+  } catch (e) {
+    return { ok: false, error: `Could not read the collector output: ${e.message}` };
+  }
+});
+
 // Opening a link is the one thing the renderer cannot do for itself, and it
 // must never become "run whatever the page passes". Only http and https.
 ipcMain.handle('shell:openExternal', (_event, url) => {

@@ -1,0 +1,60 @@
+{
+  "_comment": "AD Enterprise Lab Series on VirtualBox. Paths may use %USERPROFILE%. The admin password is a LAB credential for these two throwaway VMs only — change it here before building if you like.",
+  "vboxManage": "C:\\Program Files\\Oracle\\VirtualBox\\VBoxManage.exe",
+  "vmFolder": "%USERPROFILE%\\VirtualBox VMs\\TechnoBiz-ADLab",
+  "group": "/TechnoBiz-ADLab",
+  "internalNetwork": "TechnoBiz-LAN",
+  "adminUser": "Administrator",
+  "adminPassword": "TechnoBiz!Lab2026",
+  "isos": {
+    "server": "%USERPROFILE%\\Downloads\\ADLab-ISOs\\WindowsServer2022-Eval.iso",
+    "client": "%USERPROFILE%\\Downloads\\ADLab-ISOs\\Windows11-Enterprise-Eval.iso"
+  },
+  "vms": {
+    "DC01": {
+      "vmName": "ADLab-DC01",
+      "osType": "Windows2022_64",
+      "memoryMB": 4096,
+      "cpus": 2,
+      "diskGB": 60,
+      "imageIndex": 2,
+      "firmware": "bios",
+      "setupHostname": "WIN-7Q2K9STBL4",
+      "nics": [
+        {
+          "slot": 1,
+          "alias": "Internet",
+          "network": "internet",
+          "mode": "nat",
+          "mac": "080027AD0101"
+        },
+        {
+          "slot": 2,
+          "alias": "Internal",
+          "network": "internal",
+          "mode": "intnet",
+          "mac": "080027AD0102"
+        }
+      ]
+    },
+    "CLIENT01": {
+      "vmName": "ADLab-CLIENT01",
+      "osType": "Windows11_64",
+      "memoryMB": 4096,
+      "cpus": 2,
+      "diskGB": 64,
+      "imageIndex": 1,
+      "firmware": "bios",
+      "setupHostname": "CLIENT01",
+      "nics": [
+        {
+          "slot": 1,
+          "alias": "Ethernet",
+          "network": "internal",
+          "mode": "intnet",
+          "mac": "080027AD0201"
+        }
+      ]
+    }
+  }
+}

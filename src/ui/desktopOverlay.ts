@@ -36,6 +36,7 @@ import { toggleDesktopAnnotator } from './desktopAnnotator';
 import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { renderCareerLabWindow } from './consoles/careerLabWindow';
+import { renderAdLabWindow } from './consoles/adLabWindow';
 import { renderRemoteDesktopWindow } from './consoles/remoteDesktopWindow';
 import type { RemoteAppEntry } from './consoles/remoteSessionDesktop';
 import {
@@ -239,6 +240,17 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 980,
     height: 700,
     render: (_c, b) => renderCareerLabWindow(b),
+  },
+  {
+    // The AD Enterprise Lab Series: its own two-machine estate (DC01 and
+    // CLIENT01), a validation engine, and the Ollama instructor. Separate
+    // from the workstation's directory so nothing here can disturb it.
+    id: 'ad-lab',
+    title: 'AD Enterprise Lab',
+    icon: '🏢',
+    width: 1320,
+    height: 800,
+    render: (_c, b) => renderAdLabWindow(b),
   },
   {
     // Not a window: a sheet over the whole desktop with a floating toolbar,
