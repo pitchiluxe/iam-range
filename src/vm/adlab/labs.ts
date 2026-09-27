@@ -493,6 +493,55 @@ export const AD_LABS: readonly AdLab[] = [
       ['CLIENT01', 'nslookup corp.technobiz.local'],
     ],
   },
+  {
+    id: 'adl-12',
+    number: 12,
+    title: 'Enterprise Organization Setup',
+    scenario:
+      'TechnoBiz is adopting the enterprise identity blueprint: a tiering model (Tier 0 control plane, Tier 1 ' +
+      'systems, Tier 2 staff), a strict naming standard and a hardened password policy. Build the Active ' +
+      'Directory side of it so the portfolio projects have a real organization to run against.',
+    objectives: [
+      'Create Enterprise_Root with Tier0_Admins, Tier1_Systems, Tier2_Staff, Groups and Disabled_Accounts.',
+      'Inside Groups, create Security_Groups and Distribution_Groups.',
+      'Create the three blueprint global security groups in Groups\\Security_Groups.',
+      'Create the GPO Default_Enterprise_Password_Policy and link it to Enterprise_Root.',
+      'Make the password rules actually apply to domain accounts: 14 characters, history 24, maximum age 90 days, complexity on, reversible encryption off.',
+    ],
+    requirements: [
+      `OU=Enterprise_Root,${DN} (+ 5 children, + 2 under Groups)`,
+      'GS-Finance-Accounting-RW, GS-Engineering-DevOps-Admin, GS-HR-Onboarding-RO — Global, Security',
+      'GPO Default_Enterprise_Password_Policy linked to Enterprise_Root',
+      'Domain policy: min 14, history 24, max age 90 days, complexity on, reversible encryption off',
+    ],
+    expectedResult: 'Get-ADOrganizationalUnit shows the tier tree, Get-ADGroup shows the three GS- groups, and Get-ADDefaultDomainPasswordPolicy shows 14 / 24 / 90 days.',
+    tools: ['New-ADOrganizationalUnit', 'Get-ADOrganizationalUnit', 'New-ADGroup', 'Get-ADGroup', 'New-GPO', 'New-GPLink', 'Get-GPO', 'Set-ADDefaultDomainPasswordPolicy', 'Get-ADDefaultDomainPasswordPolicy'],
+    checks: ['org-ou-tree', 'org-groups', 'org-gpo-linked', 'org-pwd-policy'],
+    interviewQuestions: [
+      'What belongs in Tier 0, and why must a Tier 0 admin never sign in to a Tier 2 workstation?',
+      'Why does a password policy in a GPO linked to an OU not apply to domain accounts? What would you use instead for a stricter admin policy?',
+      'What does the name GS-Finance-Accounting-RW tell an auditor without opening the group?',
+    ],
+    concepts: [
+      'Tiering separates the control plane (Tier 0: DCs, IdPs, PKI), systems (Tier 1) and end users (Tier 2) so credentials never flow downwards.',
+      'Domain account password and lockout settings apply only from policy at the domain root; OU-linked GPO password settings affect local accounts only. Fine-Grained Password Policies (New-ADFineGrainedPasswordPolicy) give per-group rules.',
+      'Reversible encryption stores passwords in a recoverable form and must stay disabled.',
+      'Naming standard for groups: [Environment]-[Department]-[Resource/Role]-[AccessType].',
+    ],
+    defaultMode: 'coach',
+    solution: [
+      ['DC01', 'New-ADOrganizationalUnit -Name Enterprise_Root -ProtectedFromAccidentalDeletion $true'],
+      ...['Tier0_Admins', 'Tier1_Systems', 'Tier2_Staff', 'Groups', 'Disabled_Accounts'].map((n): [HostName, string] =>
+        ['DC01', `New-ADOrganizationalUnit -Name ${n} -Path "OU=Enterprise_Root,${DN}"`]),
+      ...['Security_Groups', 'Distribution_Groups'].map((n): [HostName, string] =>
+        ['DC01', `New-ADOrganizationalUnit -Name ${n} -Path "OU=Groups,OU=Enterprise_Root,${DN}"`]),
+      ...['GS-Finance-Accounting-RW', 'GS-Engineering-DevOps-Admin', 'GS-HR-Onboarding-RO'].map((g): [HostName, string] =>
+        ['DC01', `New-ADGroup -Name ${g} -GroupScope Global -GroupCategory Security -Path "OU=Security_Groups,OU=Groups,OU=Enterprise_Root,${DN}"`]),
+      ['DC01', 'New-GPO -Name Default_Enterprise_Password_Policy'],
+      ['DC01', `New-GPLink -Name Default_Enterprise_Password_Policy -Target "OU=Enterprise_Root,${DN}"`],
+      ['DC01', 'Set-ADDefaultDomainPasswordPolicy -Identity corp.technobiz.local -MinPasswordLength 14 -PasswordHistoryCount 24 -MaxPasswordAge "90.00:00:00" -ComplexityEnabled $true -ReversibleEncryptionEnabled $false'],
+    ],
+  },
 ];
 
 /**

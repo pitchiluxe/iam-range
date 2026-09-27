@@ -1,0 +1,155 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+#
+# IAM-Portfolio-Labs — isolated two-VM training network (VirtualBox provider).
+#
+#   DC01   Windows Server 2022   192.168.56.10   AD DS + DNS, forest corp.local
+#   LNX01  Ubuntu Server 22.04   192.168.56.20   Docker CE
+#
+# ISOLATION
+#   * Lab traffic uses a VirtualBox HOST-ONLY network (192.168.56.0/24): only
+#     this computer and the two VMs can reach it. There is NO bridged/public
+#     adapter, so nothing on your home network can reach the VMs.
+#   * Vagrant requires adapter 1 to be VirtualBox NAT for management (SSH /
+#     WinRM). NAT is outbound-only; its forwarded management ports are bound
+#     to 127.0.0.1 below, so they are not exposed to your LAN either.
+#
+# SECRETS
+#   The AD DS Directory Services Restore Mode (DSRM) password is never stored
+#   in this file. Set it for the session before the first `vagrant up`:
+#     PowerShell:  $env:IAMLAB_DSRM_PASSWORD = Read-Host -AsSecureString | ConvertFrom-SecureString -AsPlainText
+#     bash:        read -rs IAMLAB_DSRM_PASSWORD && export IAMLAB_DSRM_PASSWORD
+#
+# USAGE
+#   vagrant validate        # syntax check
+#   vagrant up dc01         # ~20-40 min first time (promotion reboots once)
+#   vagrant up lnx01
+#   vagrant snapshot save baseline
+#
+# Note: ".local" is the name the blueprint specifies. It collides with mDNS
+# on some clients; it is fine inside this isolated lab.
+
+Vagrant.require_version ">= 2.4.0"
+
+LAB_NETWORK_NAME = "IAM-Portfolio"
+DC_IP            = "192.168.56.10"
+LNX_IP           = "192.168.56.20"
+DOMAIN_FQDN      = "corp.local"
+DOMAIN_NETBIOS   = "CORP"
+
+Vagrant.configure("2") do |config|
+  config.vm.box_check_update = false
+
+  # ---------------------------------------------------------------------------
+  # VM 1: DC01 — Windows Server 2022, Active Directory Domain Controller
+  # ---------------------------------------------------------------------------
+  config.vm.define "dc01", primary: true do |dc|
+    dc.vm.box              = "StefanScherer/windows_2022"
+    dc.vm.guest            = :windows
+    dc.vm.communicator     = "winrm"
+    dc.vm.hostname         = "DC01"
+    dc.vm.boot_timeout     = 900
+    dc.winrm.transport     = :plaintext
+    dc.winrm.basic_auth_only = true
+    dc.winrm.retry_limit   = 60
+    dc.winrm.retry_delay   = 10
+
+    # Host-only lab network (isolated from the home network).
+    dc.vm.network "private_network", ip: DC_IP, virtualbox__intnet: false
+
+    # Management ports: localhost only, never the LAN.
+    dc.vm.network "forwarded_port", id: "winrm", guest: 5985, host: 55985, host_ip: "127.0.0.1", auto_correct: true
+    dc.vm.network "forwarded_port", id: "rdp",   guest: 3389, host: 53389, host_ip: "127.0.0.1", auto_correct: true
+
+    dc.vm.provider "virtualbox" do |vb|
+      vb.name   = "IAMPortfolio-DC01"
+      vb.memory = 4096
+      vb.cpus   = 2
+      vb.gui    = true
+      vb.customize ["modifyvm", :id, "--groups", "/#{LAB_NETWORK_NAME}"]
+      vb.customize ["modifyvm", :id, "--clipboard-mode", "bidirectional"]
+    end
+
+    # Step 1: point DNS at itself on the lab adapter, install AD DS, promote.
+    dc.vm.provision "promote-dc", type: "shell", reboot: true, privileged: true,
+      env: { "IAMLAB_DSRM_PASSWORD" => ENV["IAMLAB_DSRM_PASSWORD"].to_s },
+      inline: <<~'POWERSHELL'
+        $ErrorActionPreference = 'Stop'
+        if ((Get-CimInstance Win32_ComputerSystem).DomainRole -ge 4) {
+            Write-Host 'DC01 is already a domain controller - skipping promotion.'
+            exit 0
+        }
+        if ([string]::IsNullOrWhiteSpace($env:IAMLAB_DSRM_PASSWORD)) {
+            throw 'IAMLAB_DSRM_PASSWORD is not set on the host. See the SECRETS note at the top of the Vagrantfile.'
+        }
+        $lab = Get-NetIPAddress -AddressFamily IPv4 | Where-Object IPAddress -eq '192.168.56.10'
+        if (-not $lab) { throw 'Host-only adapter with 192.168.56.10 not found.' }
+        Rename-NetAdapter -Name (Get-NetAdapter -InterfaceIndex $lab.InterfaceIndex).Name -NewName 'Lab' -ErrorAction SilentlyContinue
+        Set-DnsClientServerAddress -InterfaceAlias 'Lab' -ServerAddresses '127.0.0.1'
+        Install-WindowsFeature -Name AD-Domain-Services, DNS -IncludeManagementTools | Out-Null
+        $dsrm = ConvertTo-SecureString $env:IAMLAB_DSRM_PASSWORD -AsPlainText -Force
+        Install-ADDSForest -DomainName 'corp.local' -DomainNetbiosName 'CORP' `
+            -SafeModeAdministratorPassword $dsrm -InstallDns -NoRebootOnCompletion -Force | Out-Null
+        Write-Host 'AD DS forest corp.local installed; Vagrant will reboot DC01 now.'
+      POWERSHELL
+
+    # Step 2 (after reboot): only the lab adapter registers in DNS; forward
+    # external names through the NAT adapter's resolver.
+    dc.vm.provision "post-promotion", type: "shell", privileged: true,
+      inline: <<~'POWERSHELL'
+        $ErrorActionPreference = 'Stop'
+        $deadline = (Get-Date).AddMinutes(15)
+        while ((Get-Service ADWS -ErrorAction SilentlyContinue).Status -ne 'Running' -and (Get-Date) -lt $deadline) { Start-Sleep 10 }
+        Get-NetAdapter | Where-Object Name -ne 'Lab' | ForEach-Object {
+            Set-DnsClient -InterfaceIndex $_.ifIndex -RegisterThisConnectionsAddress $false
+        }
+        if (-not (Get-DnsServerForwarder).IPAddress) { Add-DnsServerForwarder -IPAddress 1.1.1.1, 8.8.8.8 }
+        ipconfig /registerdns | Out-Null
+        Import-Module ActiveDirectory
+        $d = Get-ADDomain
+        Write-Host "Domain $($d.DNSRoot) ($($d.NetBIOSName)) ready on DC01 192.168.56.10."
+      POWERSHELL
+  end
+
+  # ---------------------------------------------------------------------------
+  # VM 2: LNX01 — Ubuntu Server 22.04 with Docker CE
+  # ---------------------------------------------------------------------------
+  config.vm.define "lnx01" do |lnx|
+    lnx.vm.box      = "bento/ubuntu-22.04"
+    lnx.vm.hostname = "LNX01"
+    lnx.vm.network "private_network", ip: LNX_IP, virtualbox__intnet: false
+    lnx.vm.network "forwarded_port", id: "ssh", guest: 22, host: 52222, host_ip: "127.0.0.1", auto_correct: true
+
+    lnx.vm.provider "virtualbox" do |vb|
+      vb.name   = "IAMPortfolio-LNX01"
+      vb.memory = 2048
+      vb.cpus   = 2
+      vb.customize ["modifyvm", :id, "--groups", "/#{LAB_NETWORK_NAME}"]
+    end
+
+    lnx.vm.provision "docker-ce", type: "shell", privileged: true, inline: <<~'BASH'
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      if command -v docker >/dev/null 2>&1; then
+        echo "Docker already installed: $(docker --version)"
+      else
+        apt-get update -y
+        apt-get install -y ca-certificates curl gnupg
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+          > /etc/apt/sources.list.d/docker.list
+        apt-get update -y
+        apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      fi
+      systemctl enable --now docker
+      # Least privilege: the docker group is root-equivalent, so it is NOT
+      # granted to the vagrant user automatically. Use sudo docker, or add it
+      # deliberately and record why:  sudo usermod -aG docker vagrant
+      # Resolve the lab domain through DC01.
+      if ! grep -q "corp.local" /etc/hosts; then echo "192.168.56.10 DC01.corp.local DC01" >> /etc/hosts; fi
+      docker --version
+    BASH
+  end
+end

@@ -60,7 +60,8 @@ export type ValidatorGroup =
   | 'validateGroups'
   | 'validateGPO'
   | 'validatePermissions'
-  | 'validateTicket';
+  | 'validateTicket'
+  | 'validateOrganization';
 
 export interface CheckResult extends CheckOutcome {
   id: string;
@@ -90,6 +91,25 @@ export const EXPECT = {
 } as const;
 
 export const ouDn = (name: string): string => `OU=${name},${EXPECT.rootOu}`;
+
+/** Lab 12 — the enterprise organization from the IAM Organization & Lab Blueprint. */
+const ORG_ROOT = `OU=Enterprise_Root,${DOMAIN_DN}`;
+export const ORG = {
+  root: ORG_ROOT,
+  ous: [
+    ORG_ROOT,
+    `OU=Tier0_Admins,${ORG_ROOT}`,
+    `OU=Tier1_Systems,${ORG_ROOT}`,
+    `OU=Tier2_Staff,${ORG_ROOT}`,
+    `OU=Groups,${ORG_ROOT}`,
+    `OU=Security_Groups,OU=Groups,${ORG_ROOT}`,
+    `OU=Distribution_Groups,OU=Groups,${ORG_ROOT}`,
+    `OU=Disabled_Accounts,${ORG_ROOT}`,
+  ],
+  securityGroupsOu: `OU=Security_Groups,OU=Groups,${ORG_ROOT}`,
+  groups: ['GS-Finance-Accounting-RW', 'GS-Engineering-DevOps-Admin', 'GS-HR-Onboarding-RO'],
+  gpo: 'Default_Enterprise_Password_Policy',
+} as const;
 export const deptOuDn = (dept: string): string => `OU=${dept},${ouDn('Users')}`;
 
 const eq = (a: string | null | undefined, b: string): boolean => (a ?? '').toLowerCase() === b.toLowerCase();
@@ -659,6 +679,66 @@ export const CHECKS: Record<string, CheckDef> = {
       'Compare membership with each person\'s department.',
       'Run Get-ADGroupMember GG-Finance (and the others).',
       'Least privilege: each person is in the group for their own department and no other. An extra membership is access nobody approved.',
+    ],
+  },
+
+  // --- Enterprise organization (Lab 12, blueprint Part 1) -------------------
+  'org-ou-tree': {
+    label: 'Enterprise_Root OU tree (Tier0/1/2, Groups, Disabled_Accounts)',
+    group: 'validateOrganization',
+    run: ({ state: s }) => {
+      const missing = ORG.ous.filter((dn) => !s.ad.ous.some((o) => eq(o, dn)));
+      return { pass: missing.length === 0, observed: missing.length ? `Missing OUs: ${missing.map((d) => d.replace(`,${DOMAIN_DN}`, '')).join('; ')}.` : 'The full Enterprise_Root tree exists.' };
+    },
+    hints: [
+      'Compare the OU tree with the tiering model in the blueprint.',
+      'Run Get-ADOrganizationalUnit -Filter * | Select DistinguishedName and check each path ends with OU=Enterprise_Root,...',
+      'Tiers separate what can control what: Tier 0 admins, Tier 1 systems and service accounts, Tier 2 staff. Security_Groups and Distribution_Groups sit inside Groups, which sits inside Enterprise_Root.',
+    ],
+  },
+  'org-groups': {
+    label: 'GS-Finance-Accounting-RW, GS-Engineering-DevOps-Admin, GS-HR-Onboarding-RO',
+    group: 'validateOrganization',
+    run: ({ state: s }) => {
+      const bad: string[] = [];
+      for (const n of ORG.groups) {
+        const g = findGroup(s, n);
+        if (!g) bad.push(`${n} missing`);
+        else if (g.scope !== 'Global' || g.category !== 'Security' || !eq(g.parent, ORG.securityGroupsOu)) bad.push(`${n} is ${g.scope}/${g.category} in ${g.parent}`);
+      }
+      return { pass: bad.length === 0, observed: bad.length ? `${bad.join('; ')}.` : 'All three groups are Global Security groups in Groups\\Security_Groups.' };
+    },
+    hints: [
+      'Check name, scope, type and location of each group.',
+      'Run Get-ADGroup -Filter "Name -like \'GS-*\'" | Select Name,GroupScope,GroupCategory,DistinguishedName.',
+      'Names follow the access they grant (department, resource, access type), so a reviewer can read the entitlement from the name alone.',
+    ],
+  },
+  'org-gpo-linked': {
+    label: 'GPO Default_Enterprise_Password_Policy linked to Enterprise_Root',
+    group: 'validateOrganization',
+    run: ({ state: s }) => {
+      const g = s.ad.gpos.find((x) => eq(x.name, ORG.gpo));
+      return { pass: !!g?.links.some((l) => eq(l, ORG.root)), observed: g ? `${g.name} is linked to: ${g.links.join('; ') || '(nothing)'}.` : `${ORG.gpo} does not exist.` };
+    },
+    hints: [
+      'Does the blueprint GPO exist, and where is it linked?',
+      'Run Get-GPO -All, then Get-GPInheritance -Target "OU=Enterprise_Root,DC=corp,DC=technobiz,DC=local".',
+      'Link a GPO to the OU whose objects it should reach. Then ask yourself: does a password policy in an OU-linked GPO reach domain accounts at all?',
+    ],
+  },
+  'org-pwd-policy': {
+    label: 'Domain password policy: 14 chars, history 24, max age 90 days, complexity on, reversible off',
+    group: 'validateOrganization',
+    run: ({ state: s }) => {
+      const p = s.ad.passwordPolicy;
+      const ok = p.minPasswordLength >= 14 && p.historyCount >= 24 && p.maxAgeDays === 90 && p.complexityEnabled && !p.reversibleEncryption;
+      return { pass: ok, observed: `Domain policy: MinPasswordLength ${p.minPasswordLength}, PasswordHistoryCount ${p.historyCount}, MaxPasswordAge ${p.maxAgeDays} days, Complexity ${p.complexityEnabled}, ReversibleEncryption ${p.reversibleEncryption}.` };
+    },
+    hints: [
+      'Where do domain accounts actually get their password rules from?',
+      'Run Get-ADDefaultDomainPasswordPolicy and compare each value with the requirements.',
+      'For domain accounts, password settings only take effect from policy at the domain root (Default Domain Policy). The same settings in an OU-linked GPO only change local accounts on computers in that OU. Per-group rules need a Fine-Grained Password Policy.',
     ],
   },
 

@@ -37,6 +37,7 @@ import { renderCloudIdentityWindow } from './consoles/cloudIdentityWindow';
 import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { renderCareerLabWindow } from './consoles/careerLabWindow';
 import { renderAdLabWindow } from './consoles/adLabWindow';
+import { renderPortfolioWindow } from './consoles/portfolioWindow';
 import { renderRemoteDesktopWindow } from './consoles/remoteDesktopWindow';
 import type { RemoteAppEntry } from './consoles/remoteSessionDesktop';
 import {
@@ -251,6 +252,17 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 1320,
     height: 800,
     render: (_c, b) => renderAdLabWindow(b),
+  },
+  {
+    // The 10-project IGA / AM / PAM portfolio: briefs, a deterministic
+    // least-privilege checker and the Ollama instructor from the shared
+    // omari-lab/11-IAM-PORTFOLIO config.
+    id: 'iam-portfolio',
+    title: 'IAM Portfolio',
+    icon: '🗂️',
+    width: 1320,
+    height: 800,
+    render: (_c, b) => renderPortfolioWindow(b),
   },
   {
     // Not a window: a sheet over the whole desktop with a floating toolbar,

@@ -55,7 +55,14 @@ interface RawFacts {
     groups?: (Partial<AdGroup> & { members?: string[] | null })[];
     computers?: { name?: string; parent?: string }[];
     gpos?: { name?: string; links?: string[] | null }[];
-    passwordPolicy?: { minPasswordLength?: number; lockoutThreshold?: number; complexityEnabled?: boolean };
+    passwordPolicy?: {
+      minPasswordLength?: number;
+      lockoutThreshold?: number;
+      complexityEnabled?: boolean;
+      historyCount?: number;
+      maxAgeDays?: number;
+      reversibleEncryption?: boolean;
+    };
   };
   dns?: { zones?: string[]; records?: { zone?: string; name?: string; ip?: string }[] };
   dhcp?: {
@@ -205,6 +212,9 @@ export function factsToLabState(doc: RawFactsDocument): RealVmReading {
           minPasswordLength: ad.passwordPolicy.minPasswordLength ?? 7,
           lockoutThreshold: ad.passwordPolicy.lockoutThreshold ?? 0,
           complexityEnabled: ad.passwordPolicy.complexityEnabled ?? true,
+          historyCount: ad.passwordPolicy.historyCount ?? 24,
+          maxAgeDays: ad.passwordPolicy.maxAgeDays ?? 42,
+          reversibleEncryption: ad.passwordPolicy.reversibleEncryption ?? false,
         };
       }
     }

@@ -137,6 +137,12 @@ export interface AdState {
     minPasswordLength: number;
     lockoutThreshold: number;
     complexityEnabled: boolean;
+    /** Passwords remembered (Windows default 24). */
+    historyCount: number;
+    /** Maximum password age in days (Windows default 42). */
+    maxAgeDays: number;
+    /** "Store passwords using reversible encryption" — must stay off. */
+    reversibleEncryption: boolean;
   };
 }
 
@@ -345,7 +351,14 @@ export function freshState(): LabState {
       groups: [],
       computers: [],
       gpos: [],
-      passwordPolicy: { minPasswordLength: 7, lockoutThreshold: 0, complexityEnabled: true },
+      passwordPolicy: {
+        minPasswordLength: 7,
+        lockoutThreshold: 0,
+        complexityEnabled: true,
+        historyCount: 24,
+        maxAgeDays: 42,
+        reversibleEncryption: false,
+      },
     },
     dhcp: {
       authorized: false,

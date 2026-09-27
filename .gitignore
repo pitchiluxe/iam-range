@@ -14,3 +14,6 @@ public/favicon.svg
 # site/favicon.svg is NOT ignored, even though it is generated. Vercel serves
 # site/ with no build step, so anything the page references has to be in the
 # repository or it 404s on the deployed site.
+
+# Vagrant state
+.vagrant/

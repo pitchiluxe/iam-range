@@ -274,6 +274,7 @@ const ADLAB_KEYS = ['DC01', 'CLIENT01'];
 
 function adlabKitDir() {
   const candidates = [
+    path.join(process.resourcesPath || '', 'omari-lab', '10-AD-ENTERPRISE-VBOX'),
     path.join(process.resourcesPath || '', 'adlab-vbox'),
     path.join(__dirname, '..', 'omari-lab', '10-AD-ENTERPRISE-VBOX'),
   ];
@@ -371,6 +372,45 @@ ipcMain.handle('adlab:vm-restore', async (_event, name) => {
   if (!kit) return { ok: false, error: 'The VirtualBox kit was not found.' };
   return snapshotScript(kit, ['-Restore', name]);
 });
+
+// ---------------------------------------------------------------------------
+// IAM Portfolio — VM track on the same DC01
+//   portfolio:vm-init         prepare DC01 (domain + baseline + Portfolio-Base)
+//   portfolio:vm-setup  (id)  set up / restart one project's scenario
+//   portfolio:vm-facts        read-only collection for the deterministic checks
+// Bound to the kit's own scripts and the six VM project ids — nothing else.
+// ---------------------------------------------------------------------------
+const PORTFOLIO_VM_PROJECTS = ['p01', 'p02', 'p03', 'p04', 'p08', 'p10'];
+
+function portfolioVmDir() {
+  const candidates = [
+    path.join(process.resourcesPath || '', 'omari-lab', '11-IAM-PORTFOLIO', 'vm'),
+    path.join(__dirname, '..', 'omari-lab', '11-IAM-PORTFOLIO', 'vm'),
+  ];
+  return candidates.find((d) => fs.existsSync(path.join(d, 'Get-PortfolioFacts.ps1'))) || null;
+}
+
+async function portfolioScript(name, args, timeoutMs) {
+  const dir = portfolioVmDir();
+  if (!dir) return { ok: false, error: 'The portfolio VM kit (omari-lab/11-IAM-PORTFOLIO/vm) was not found.' };
+  const res = await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(dir, name), ...args, '-Json'], timeoutMs);
+  const line = res.stdout.split(/\r?\n/).filter((l) => l.trim().startsWith('{')).pop();
+  if (!line) return { ok: false, error: (res.stderr || res.stdout || String(res.err || 'No output')).slice(0, 800) };
+  try {
+    return JSON.parse(line);
+  } catch (e) {
+    return { ok: false, error: `Could not read the script output: ${e.message}` };
+  }
+}
+
+ipcMain.handle('portfolio:vm-init', () => portfolioScript('Initialize-PortfolioDC.ps1', [], 3_600_000));
+
+ipcMain.handle('portfolio:vm-setup', (_event, project) => {
+  if (!PORTFOLIO_VM_PROJECTS.includes(project)) return { ok: false, error: 'Not a VM-track project.' };
+  return portfolioScript('Set-PortfolioScenario.ps1', ['-Project', project], 900_000);
+});
+
+ipcMain.handle('portfolio:vm-facts', () => portfolioScript('Get-PortfolioFacts.ps1', [], 900_000));
 
 ipcMain.handle('adlab:vm-facts', async () => {
   const kit = adlabConfig();

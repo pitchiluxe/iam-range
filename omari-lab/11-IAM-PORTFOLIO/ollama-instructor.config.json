@@ -1,0 +1,411 @@
+{
+  "_comment": "Single source of truth for the IAM Portfolio Ollama instructor. New-IamPortfolioWorkspace copies it to IAM-Portfolio-Labs/.ollama-instructor/config.json, and IAM Range's 'IAM Portfolio' app imports it. Edit here, not in the copies.",
+  "version": 2,
+  "ollama": {
+    "endpoint": "http://localhost:11434",
+    "tagsPath": "/api/tags",
+    "chatPath": "/api/chat",
+    "preferredModels": [
+      "llama3",
+      "llama3.1",
+      "mistral",
+      "codellama",
+      "llama3.2"
+    ],
+    "options": {
+      "temperature": 0.2,
+      "num_ctx": 8192,
+      "num_predict": 700
+    },
+    "keepAlive": "15m"
+  },
+  "verification": {
+    "successMessage": "OLLAMA LOCAL INSTANCE VERIFIED: Training Instructor Integrated.",
+    "failureMessage": "OLLAMA LOCAL INSTANCE NOT REACHABLE: Lab build halted."
+  },
+  "systemPrompt": [
+    "You are the embedded IAM training instructor for the IAM-Portfolio-Labs workspace. You act as three people at once: a senior identity engineer who reviews code, a security auditor, and an aggressive corporate compliance auditor working to SOX and SOC 2 standards.",
+    "",
+    "WHO YOU ARE TEACHING",
+    "A learner building a 10-project Identity and Access Management portfolio across Identity Governance and Administration (IGA), Access Management (AM) and Privileged Access Management (PAM). They must be able to defend every artifact in an interview and an audit.",
+    "",
+    "NON-NEGOTIABLE RULES",
+    "1. Never give the direct answer or a finished solution first. Respond with architectural hints, debugging steps, the meaning of the error or log line, and the question the learner should be asking. Escalate in this order only when asked again or when the learner is clearly stuck: (a) direction, (b) which tool, log or API shows the problem, (c) the underlying concept and the documentation topic to read. Only after all three may you describe the fix in words; you still do not write the full working artifact for them.",
+    "2. Judge every script (PowerShell, Python, Bash), JSON/YAML policy, KQL/Lucene query and configuration against the Principle of Least Privilege with absolute strictness. Flag: wildcard actions or resources, standing admin rights, over-broad group membership, missing conditions (MFA, ExternalId, source IP, time bounds), secrets in code or on the command line, disabled certificate/token validation, and missing logging.",
+    "3. Audit like SOX/SOC 2: for every change ask what evidence proves it happened, who approved it, how it is reversed, and where it is logged. Missing evidence, missing approval or missing audit trail is a finding, even if the code works.",
+    "4. Report findings as a numbered list, each with: Severity (Critical/High/Medium/Low), Control (e.g. SOC 2 CC6.1 logical access, CC6.2 provisioning, CC6.3 removal, CC7.2 monitoring; SOX ITGC access management), Evidence (quote the exact line), and a Hint (not the fix). Only report a finding you can back with a quoted line from the submission, or with something the submission is clearly missing. If you cannot quote or name it, do not report it.",
+    "5. Grade submissions with the project rubric: score each criterion 0-4, give the total, and state the single highest-risk gap. Never mark a project complete; the learner self-attests completion and the deterministic checks in the workspace decide pass/fail.",
+    "6. Do not invent cmdlets, API endpoints, policy keys or product behaviour. If unsure, say which official documentation page to check.",
+    "7. You cannot run commands or change any system. Never claim you did.",
+    "8. Format every reply in Markdown: a short ### heading per section (### Findings, ### Rubric, ### Next step), findings as a numbered list starting with the severity in brackets ([Critical], [High], [Medium], [Low]) and **bold** titles, the rubric as a table (Criterion | Score | Why), `backticks` for code, keys and commands. Keep code excerpts to the lines you are critiquing."
+  ],
+  "rubric": [
+    {
+      "id": "least-privilege",
+      "name": "Least privilege",
+      "description": "Grants only what the task needs, scoped by resource and time."
+    },
+    {
+      "id": "evidence",
+      "name": "Audit evidence",
+      "description": "Every change is logged with who, what, when and approval reference."
+    },
+    {
+      "id": "security",
+      "name": "Secure engineering",
+      "description": "No secrets in code, validation enabled, errors handled, idempotent."
+    },
+    {
+      "id": "reversibility",
+      "name": "Reversibility",
+      "description": "Changes can be rolled back and the rollback is documented."
+    },
+    {
+      "id": "explainability",
+      "name": "Explainability",
+      "description": "The learner can explain the design and trade-offs in an interview."
+    }
+  ],
+  "phases": [
+    {
+      "id": "iga",
+      "title": "Phase 1: Identity Governance & Administration (IGA)"
+    },
+    {
+      "id": "am",
+      "title": "Phase 2: Access Management (AM)"
+    },
+    {
+      "id": "pam",
+      "title": "Phase 3: Privileged Access Management (PAM) & Cloud Security"
+    }
+  ],
+  "projects": [
+    {
+      "id": "p01",
+      "number": 1,
+      "phase": "iga",
+      "folder": "01-JML-Pipeline",
+      "title": "Automated Joiner-Mover-Leaver (JML) Pipeline",
+      "objective": "Build an automated system that handles the entire employee identity lifecycle.",
+      "labSetup": "Set up a free Microsoft Entra ID (Azure AD) developer tenant.",
+      "execution": "Create an HR staging trigger (using a mock CSV file or a PowerShell script). When a new row is added (Joiner), automatically provision the account, generate a temporary password, assign a department license, and add them to a dynamic group. If their department changes (Mover), automatically adjust group memberships. When marked inactive (Leaver), instantly revoke active sessions, disable the account, convert their mailbox to shared, and move them to an isolated \"Terminated Users\" Organizational Unit (OU).",
+      "portfolioDeliverable": "A GitHub repository containing your automation script and an architecture diagram showing the state changes of a user object.",
+      "deliverables": [
+        "HR staging trigger (mock CSV or script) with joiner, mover and leaver rows",
+        "Joiner: account, temporary password, department license, dynamic group",
+        "Mover: group memberships adjusted (old access removed before new added)",
+        "Leaver: sessions revoked, account disabled, mailbox converted to shared, moved to \"Terminated Users\" OU",
+        "GitHub repo with the script and a user-object state-change architecture diagram"
+      ],
+      "reviewFocus": [
+        "Mover removes old access (no accumulation)",
+        "Leaver revokes sessions, not only disables",
+        "Temporary password is random and forced to change",
+        "Idempotent re-runs and an audit log"
+      ],
+      "vm": {
+        "supported": true,
+        "host": "DC01",
+        "summary": "On-premises half of the lifecycle on DC01. The kit drops an HR feed in C:\\IAM\\HR\\hr_feed.csv with one joiner (pnair), one mover (mchen: Sales -> Finance) and one leaver (tbrooks). Licensing, dynamic groups, session revocation and shared mailboxes are the Entra ID half (cloud track).",
+        "tasks": [
+          "Write C:\\IAM\\JML\\Invoke-JmlPipeline.ps1 that reads C:\\IAM\\HR\\hr_feed.csv",
+          "Joiner: create pnair in OU=Engineering,OU=Tier2_Staff, EmployeeID 1001, random temporary password, must change at logon, member of GG-Engineering",
+          "Mover: mchen ends in OU=Finance with Department=Finance, member of GG-Finance and no longer of GG-Sales",
+          "Leaver: tbrooks disabled, password reset (kills on-prem sessions/tickets), stripped of groups, moved to OU=Terminated Users,OU=Enterprise_Root",
+          "Write an audit log in C:\\IAM\\JML\\ naming every account changed"
+        ]
+      }
+    },
+    {
+      "id": "p02",
+      "number": 2,
+      "phase": "iga",
+      "folder": "02-RBAC-Matrix",
+      "title": "Role-Based Access Control (RBAC) Matrix Design",
+      "objective": "Eliminate \"privilege creep\" by designing a predictable, scalable enterprise role structure.",
+      "labSetup": "Use your Entra ID tenant or an Okta Developer account.",
+      "execution": "Map out three distinct organizational departments (e.g., Engineering, HR, Finance). Create a comprehensive access matrix. Define specific Security Groups or Okta Groups that represent those roles. Configure the rules so that adding a user to the \"Finance Lead\" group automatically provisions access to a test financial application and assigns read-write folders while withholding domain admin rights.",
+      "portfolioDeliverable": "A clear Markdown documentation file featuring an explicit matrix layout mapping business roles to exact technical permissions, showing a strict adherence to the Principle of Least Privilege.",
+      "deliverables": [
+        "Access matrix for Engineering, HR and Finance",
+        "Role groups representing each business role",
+        "Adding a user to \"Finance Lead\" grants the test financial application and read-write Finance folders",
+        "No role reaches domain admin rights",
+        "Markdown matrix mapping business roles to exact technical permissions"
+      ],
+      "reviewFocus": [
+        "Role groups nest into resource groups; no user-to-resource grants",
+        "Finance Analyst is read-only, Lead is read-write",
+        "No path to Domain Admins / Administrators"
+      ],
+      "vm": {
+        "supported": true,
+        "host": "DC01",
+        "summary": "AGDLP role model on DC01: role groups nest into resource groups that hold the permissions. The kit creates the users (flead, fanalyst, edev, hspec), the folders C:\\Shares\\Finance, \\Engineering and \\HR, and nothing else.",
+        "tasks": [
+          "Create role groups Role-Finance-Lead, Role-Finance-Analyst, Role-Engineering-Developer, Role-HR-Specialist",
+          "Create resource groups; grant NTFS permissions to resource groups only (Finance RW for the Lead, read-only for the Analyst)",
+          "Create App-FinanceLedger-Users (the test financial application's access group) and make Role-Finance-Lead reach it",
+          "Put flead in Role-Finance-Lead and fanalyst in Role-Finance-Analyst; no role may reach Domain Admins/Administrators",
+          "Write C:\\IAM\\RBAC\\access-matrix.md mapping each business role to exact permissions"
+        ]
+      }
+    },
+    {
+      "id": "p03",
+      "number": 3,
+      "phase": "iga",
+      "folder": "03-Access-Reviews",
+      "title": "Automated User Access Review (UAR) & Recertification Campaign",
+      "objective": "Simulate a formal compliance audit requirement by validating that existing access is still justified.",
+      "labSetup": "Use Entra ID Governance (Identity Governance trial) or write a custom script.",
+      "execution": "Purposely inject a security flaw into your test environment: give a \"Sales\" user explicit permissions to a restricted \"Engineering\" folder or group. Set up an Access Review campaign targeting high-risk group memberships. Configure the campaign to email a manager (simulated by a secondary test account) to approve or deny the access. Deny the sales user's permission and verify that the system automatically strips the access and logs the remediation.",
+      "portfolioDeliverable": "A mock Identity Audit & Attestation Report showing the before-and-after state of user permissions, detailing how unauthorized access was caught and remediated.",
+      "deliverables": [
+        "Injected flaw documented (Sales user in restricted Engineering access)",
+        "Campaign targeting high-risk memberships, sent to the manager account",
+        "Manager decision recorded (deny)",
+        "Access stripped automatically and remediation logged",
+        "Identity Audit & Attestation Report with before/after state"
+      ],
+      "reviewFocus": [
+        "Reviewer independence (manager, not the requester)",
+        "Only the denied access is removed",
+        "Evidence chain: before, decision, after"
+      ],
+      "vm": {
+        "supported": true,
+        "host": "DC01",
+        "summary": "Custom-script campaign on DC01. The kit injects the flaw: Sales user rlopez is in GG-Engineering-Restricted and has an explicit Modify ACE on C:\\Shares\\Engineering. The manager account is mgr.engineering (the group's ManagedBy).",
+        "tasks": [
+          "Write C:\\IAM\\UAR\\Start-AccessReview.ps1: find members of high-risk groups outside the owning department",
+          "Send the review to the manager: write C:\\IAM\\UAR\\requests\\mgr.engineering.json (the simulated email)",
+          "Record the manager's decision (deny rlopez) in C:\\IAM\\UAR\\ with reviewer and timestamp",
+          "Remediate automatically: remove rlopez from the group and the explicit ACE, and log it; leave legitimate members alone",
+          "Write C:\\IAM\\UAR\\attestation-report.md with the before and after state"
+        ]
+      }
+    },
+    {
+      "id": "p04",
+      "number": 4,
+      "phase": "iga",
+      "folder": "04-Stale-Accounts",
+      "title": "Stale & Dormant Account Remediation Engine",
+      "objective": "Automatically discover and neutralize forgotten, inactive accounts that attackers look for.",
+      "labSetup": "Local Windows Server VM with Active Directory or a Cloud Directory environment.",
+      "execution": "Write an automated PowerShell or Python script that queries the directory for any user account that has not successfully logged in within the past 90 days. The script must log the account details to a file, strip all its security group memberships, reset its password to a random 32-character string, disable the account object, and drop a notification to an IT queue.",
+      "portfolioDeliverable": "Your production-ready script hosted on GitHub with an operational readme explaining the business risk of unmonitored local stale identities.",
+      "deliverables": [
+        "Inactivity query (90 days; lastLogonTimestamp and never-used accounts)",
+        "Account details logged to a file before any change",
+        "Groups stripped, password reset to a random 32-character string, account disabled",
+        "Notification dropped to an IT queue",
+        "GitHub repo with an operational README on the business risk"
+      ],
+      "reviewFocus": [
+        "Cryptographically random 32-character passwords",
+        "Service and break-glass exclusions",
+        "Dry-run before destructive run",
+        "Log written before changes"
+      ],
+      "vm": {
+        "supported": true,
+        "host": "DC01",
+        "summary": "Runs against the real directory on DC01. The kit creates three dormant accounts that have never signed in (old.contractor1, old.contractor2, legacy.intern), one recently active user (active.user) and two exclusions (svc-backup, bg-admin01). The seeded accounts are new, so test with a -DaysInactive 0 switch; production uses 90.",
+        "tasks": [
+          "Write C:\\IAM\\Stale\\Invoke-StaleAccountRemediation.ps1 with -DaysInactive (default 90) and -WhatIf",
+          "Log each target to C:\\IAM\\Stale\\*.csv before changing it",
+          "Strip groups, reset the password to a cryptographically random 32-character string, disable",
+          "Drop a ticket per account into C:\\IAM\\Queue\\",
+          "Exclude service (svc-*) and break-glass accounts; never touch active users"
+        ]
+      }
+    },
+    {
+      "id": "p05",
+      "number": 5,
+      "phase": "am",
+      "folder": "05-Enterprise-SSO",
+      "title": "Enterprise Single Sign-On (SSO) Application Integration",
+      "objective": "Securely centralize user authentication for third-party corporate software applications.",
+      "labSetup": "An Okta Developer Tenant paired with a free SaaS app platform (e.g., Salesforce Developer edition or a self-hosted web app).",
+      "execution": "Configure a federated identity trust relationship using modern protocols (SAML 2.0 or OIDC/OAuth 2.0). Map user profile attributes (such as email, first name, and employee ID) from Okta to the destination app. Ensure that a user can successfully log into Okta, click the app dashboard tile, and seamlessly sign into the target platform without typing another password.",
+      "portfolioDeliverable": "A step-by-step configuration manual highlighting browser network traces that show the redirection flow and security tokens passing between the Identity Provider (IdP) and Service Provider (SP).",
+      "deliverables": [
+        "Federation trust (SAML 2.0 or OIDC) between Okta and the app",
+        "Attribute mapping: email, first name, employee ID",
+        "Okta dashboard tile signs in without a second password",
+        "Configuration manual with browser network traces of redirects and tokens"
+      ],
+      "reviewFocus": [
+        "Signature and audience validation",
+        "Minimal claims released",
+        "Certificate rollover plan"
+      ],
+      "vm": {
+        "supported": false,
+        "host": "",
+        "summary": "Needs an Okta Developer tenant and a SaaS app. Work in the cloud; paste configs, SAML assertions or token captures here for review.",
+        "tasks": []
+      }
+    },
+    {
+      "id": "p06",
+      "number": 6,
+      "phase": "am",
+      "folder": "06-Conditional-Access",
+      "title": "Context-Aware Adaptive Conditional Access Policies",
+      "objective": "Protect corporate resources by dynamically evaluating risk factors at the exact moment of login.",
+      "labSetup": "Microsoft Entra ID P2 licensing trial capabilities.",
+      "execution": "Build a multi-layered authentication policy. Define rules where users logging in from a known corporate IP range can access cloud applications with standard passwords. However, if the login attempt originates from an unknown IP, a non-compliant device, or a separate geographic location, the policy must trigger mandatory Multi-Factor Authentication (MFA) or block access entirely.",
+      "portfolioDeliverable": "A security policy runbook showing your exact conditional policy logic blocks alongside test logs demonstrating a blocked/challenged login from a simulated external IP (using a VPN to test).",
+      "deliverables": [
+        "Named location for the corporate IP range",
+        "Policies: MFA or block for unknown IP, non-compliant device, other geography",
+        "Break-glass exclusion with monitoring",
+        "Runbook with policy JSON and test sign-in logs from a VPN IP"
+      ],
+      "reviewFocus": [
+        "Legacy authentication blocked",
+        "Break-glass excluded and alerted",
+        "Report-only before enforce"
+      ],
+      "vm": {
+        "supported": false,
+        "host": "",
+        "summary": "Needs an Entra ID P2 trial. Export your policies as JSON and paste them here for review.",
+        "tasks": []
+      }
+    },
+    {
+      "id": "p07",
+      "number": 7,
+      "phase": "am",
+      "folder": "07-OIDC-AuthPortal",
+      "title": "Centralized Modern Authentication Portal (OIDC/OAuth)",
+      "objective": "Provide secure developer-centric identity verification for a custom built web app.",
+      "labSetup": "A local or Vercel-hosted lightweight web application integrated with Auth0 or an alternative IdP.",
+      "execution": "Implement an open authorization standard (OAuth 2.0/OpenID Connect) codebase layer inside the application. Secure the site routing so that unauthenticated web traffic is automatically redirected to the secure login page. Upon successful authentication, extract the JWT (JSON Web Token), read the user's role scope, and display customized user profile details inside the application interface.",
+      "portfolioDeliverable": "A clean GitHub repository showing the integration code, complete with code snippets demonstrating token handling and session security validations.",
+      "deliverables": [
+        "OIDC Authorization Code flow (with PKCE)",
+        "Unauthenticated routes redirect to login",
+        "JWT validated (signature, issuer, audience, expiry) and role scope read",
+        "Profile view customised from claims",
+        "GitHub repo with token-handling snippets"
+      ],
+      "reviewFocus": [
+        "No alg=none / skipped signature checks",
+        "State and nonce validated",
+        "Tokens not stored in localStorage"
+      ],
+      "vm": {
+        "supported": false,
+        "host": "",
+        "summary": "Needs Auth0 (or another IdP) and a web app. Paste your middleware and token-handling code here for review.",
+        "tasks": []
+      }
+    },
+    {
+      "id": "p08",
+      "number": 8,
+      "phase": "pam",
+      "folder": "08-JIT-Privilege-Escalation",
+      "title": "Just-In-Time (JIT) Privileged Access & Escalation",
+      "objective": "Enforce zero-standing-privileges by ensuring users only get administrator capabilities exactly when needed.",
+      "labSetup": "Entra ID Privileged Identity Management (PIM) or AWS IAM.",
+      "execution": "Configure an engineering user account to have zero permanent administrative rights. Create an activation role policy that allows the user to request elevation to an active \"Global Administrator\" or \"AWS Administrator\" role. Enforce conditions: the elevation request must require a valid ticketing system justification number, trigger an approval request to a security lead, and automatically expire after exactly 2 hours, stripping the access back down to a standard user state.",
+      "portfolioDeliverable": "A workflow timeline diagram backed by raw system event log snapshots capturing the precise moment of role assignment escalation, action window, and automated role de-allocation.",
+      "deliverables": [
+        "Engineering user with zero permanent admin rights",
+        "Request requires a ticket number",
+        "Approval by a security lead (not the requester)",
+        "Automatic expiry after exactly 2 hours",
+        "Timeline diagram with event log snapshots of escalation and de-allocation"
+      ],
+      "reviewFocus": [
+        "No permanent active assignments",
+        "Approver is not the requester",
+        "Duration capped at 2 hours"
+      ],
+      "vm": {
+        "supported": true,
+        "host": "DC01",
+        "summary": "On-premises JIT with the real AD Privileged Access Management feature: time-bound group membership that Windows removes (and whose Kerberos tickets expire) on its own. The kit enables the feature and creates dkim (engineer) and sec.lead (in GG-SecurityLeads).",
+        "tasks": [
+          "Keep dkim out of every admin group permanently",
+          "Write C:\\IAM\\PAM\\Request-Elevation.ps1: a request needs a ticket number (INC-/CHG-/REQ-nnnn)",
+          "Approval by a member of GG-SecurityLeads who is not the requester",
+          "Activate with Add-ADGroupMember -MemberTimeToLive (New-TimeSpan -Hours 2) to Domain Admins",
+          "Log requester, ticket, approver, start and expiry to C:\\IAM\\PAM\\elevations.csv"
+        ]
+      }
+    },
+    {
+      "id": "p09",
+      "number": 9,
+      "phase": "pam",
+      "folder": "09-Cross-Account-AWS",
+      "title": "Multi-Account Cross-Account Role Assumption",
+      "objective": "Securely manage access across complex, multi-account corporate enterprise cloud infrastructures without duplicating credentials.",
+      "labSetup": "Free AWS Account Console (using a multi-account organization setup or secondary IAM spaces).",
+      "execution": "Set up a production account and a development account. Create a secure IAM trust policy in the production account that allows an explicit IAM user living inside the development account to securely assume a read-only role in production. The configuration must enforce an ExternalID and an MFA check before the cross-account boundary can be crossed.",
+      "portfolioDeliverable": "An architectural security blueprint file detailing the JSON IAM policies for both the trusting and trusted account environments.",
+      "deliverables": [
+        "Production and development accounts",
+        "Trust policy naming the exact dev IAM user",
+        "Conditions: sts:ExternalId and aws:MultiFactorAuthPresent",
+        "Read-only permissions in production",
+        "Blueprint with the JSON policies for both accounts"
+      ],
+      "reviewFocus": [
+        "Principal not \"*\" or \":root\" unless justified",
+        "Both conditions present",
+        "Session duration limited"
+      ],
+      "vm": {
+        "supported": false,
+        "host": "",
+        "summary": "Needs AWS accounts. Paste the trust and permissions policies here: the checker verifies the principal, ExternalId and MFA conditions.",
+        "tasks": []
+      }
+    },
+    {
+      "id": "p10",
+      "number": 10,
+      "phase": "pam",
+      "folder": "10-SIEM-LogAuditing",
+      "title": "Centralized Identity Directory Event Log Auditing (SIEM)",
+      "objective": "Gain complete visibility over security events by building a centralized tracking engine for identity anomalies.",
+      "labSetup": "Connect your cloud directory tenant logs to a central analysis space (e.g., an Azure Log Analytics workspace or a free Splunk / Elastic instance).",
+      "execution": "Write search and extraction queries (such as KQL or Lucene syntax) that look specifically for high-risk identity indicators: multiple failed login attempts followed by a success, modifications to highly sensitive groups (Domain Admins/Global Admins), or explicit deletions of auditing logs. Set up an alert rule that triggers an instant flag when an MFA device registration changes for an existing user account.",
+      "portfolioDeliverable": "A collection of saved monitoring queries along with a mock security dashboard display showcasing visual widgets tracking your identity infrastructure's baseline health.",
+      "deliverables": [
+        "Query: multiple failed logins followed by a success",
+        "Query: changes to Domain Admins / Global Admins",
+        "Query: audit log cleared or deleted",
+        "Alert rule: MFA device registration changed",
+        "Saved queries plus a mock baseline-health dashboard"
+      ],
+      "reviewFocus": [
+        "Correct event IDs (4625/4624, 4728/4732/4756, 1102)",
+        "Low-noise thresholds",
+        "Alert routed to an owner"
+      ],
+      "vm": {
+        "supported": true,
+        "host": "DC01",
+        "summary": "DC01 is the log source. The kit clears the Security log (a real 1102), then generates six failed logons followed by a success for siem.victim, and adds then removes siem.temp in Domain Admins. The MFA-registration alert is the cloud half (write it as KQL).",
+        "tasks": [
+          "Save detection queries in C:\\IAM\\SIEM\\queries\\ (PowerShell/XPath for DC01, KQL or Lucene for the SIEM)",
+          "Detect failed-then-success for siem.victim (4625 then 4624)",
+          "Detect the Domain Admins change for siem.temp (4728/4729) and the audit log clear (1102)",
+          "Write your detections to C:\\IAM\\SIEM\\alerts.csv (one row per alert: Rule, Account, Time)",
+          "Add C:\\IAM\\SIEM\\queries\\mfa-registration.kql: alert when an MFA method changes (Entra AuditLogs)"
+        ]
+      }
+    }
+  ]
+}

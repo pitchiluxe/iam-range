@@ -77,7 +77,8 @@ export function describeState(v: InstructorView, focus?: readonly Focus[]): stri
     if (want('ad')) lines.push(`  computers: ${ad.computers.map((c) => `${c.name} in ${c.parent}`).join('; ')}`);
     if (want('gpo')) {
       lines.push(`  GPOs: ${ad.gpos.map((g) => `${g.name} -> [${g.links.join('; ')}]`).join('; ')}`);
-      lines.push(`  password policy: min ${ad.passwordPolicy.minPasswordLength}, lockout ${ad.passwordPolicy.lockoutThreshold}`);
+      const pp = ad.passwordPolicy;
+      lines.push(`  password policy: min ${pp.minPasswordLength}, history ${pp.historyCount}, max age ${pp.maxAgeDays}d, complexity ${pp.complexityEnabled}, reversible ${pp.reversibleEncryption}, lockout ${pp.lockoutThreshold}`);
       lines.push(`  CLIENT01 applied GPOs: ${v.hosts.CLIENT01.appliedGpos.join(', ') || 'none'}`);
     }
   } else lines.push('AD: not promoted yet');

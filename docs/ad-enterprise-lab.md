@@ -27,6 +27,7 @@ INTERNET ── NIC "Internet" (DHCP from home router)
 | 09 | Finance share permissions | Coach |
 | 10 | Help desk INC-1047: sign-in failure | Real-World |
 | 11 | Help desk INC-1052: workstation cannot reach the domain | Real-World |
+| 12 | Enterprise organization setup: tiering OUs, naming standard, domain password policy (from the IAM Organization & Lab Blueprint) | Coach |
 
 You can start any lab on its own. The lab's starting state comes from replaying the reference solutions of every earlier lab through the same command engine that you type into.
 
@@ -69,4 +70,6 @@ On the real VMs, passing a lab offers to save the next lab's start point.
 - **Lab memory:** the instructor reads your command history. For example: "ping to DC01 works but nslookup fails, so this is DNS, not the network."
 - **Real-World mode:** the instructor coaches from what you have found. It is not shown the state that contains the answer.
 - **Model:** the instructor uses the model chosen in **Settings → AI Assistant**. That list shows the models installed in your local Ollama. If the chosen model isn't installed, the instructor uses whichever installed model fits best.
+- **Clear chat:** clears the conversation. Your lab, the hints you've used and your check results are kept.
+- **Formatting:** replies stream in as they're written and render as Markdown (lists, **bold**, `code`, tables, severity badges). The renderer never inserts model text as HTML.
 - **Without Ollama:** the badge reads **Ollama Instructor Offline**. The lab and validation still work, and the offline instructor answers from the lab material.

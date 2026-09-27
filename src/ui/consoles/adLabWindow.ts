@@ -29,6 +29,7 @@ import { factsToLabState, type RawFactsDocument } from '@/vm/adlab/realVm';
 import { validate, type ValidationReport } from '@/vm/adlab/validation';
 import { snapshotForInstructor } from '@/vm/adlab/observe';
 import { OLLAMA_HOST } from '@/config/ollama';
+import { renderMarkdown } from '@/ui/markdown';
 import {
   HINT_LEVEL_NAME,
   METHODOLOGY,
@@ -38,6 +39,7 @@ import {
   type InstructorRequest,
   type InstructorSession,
   askInstructor,
+  clearConversation,
   instructorStatus,
   newSession,
   nextHint,
@@ -137,7 +139,7 @@ const STYLES = `
 .adl-coach-head{flex-shrink:0;padding:8px 12px;border-bottom:1px solid var(--border);font-size:11.5px;color:var(--muted);line-height:1.45;}
 .adl-log{flex:1;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:10px;}
 .adl-msg{padding:8px 10px;border-radius:7px;white-space:pre-wrap;line-height:1.55;font-size:12.3px;max-width:94%;}
-.adl-msg.ins{align-self:flex-start;background:var(--panel-alt);border:1px solid var(--border);}
+.adl-msg.ins{white-space:normal;align-self:flex-start;background:var(--panel-alt);border:1px solid var(--border);}
 .adl-msg.me{align-self:flex-end;background:#2563eb;color:#fff;}
 .adl-msg.sys{align-self:center;background:transparent;color:var(--muted);font-size:11px;text-align:center;}
 .adl-src{font-size:10px;color:var(--muted);margin-top:4px;}
@@ -455,7 +457,10 @@ export function renderAdLabWindow(body: HTMLElement): void {
   const checkBtn = el('button', 'adl-btn adl-primary', 'CHECK MY WORK');
   const hintBtn = el('button', 'adl-btn', 'Hint');
   const interviewBtn = el('button', 'adl-btn', 'Ask me a question');
-  actions.append(checkBtn, hintBtn, interviewBtn);
+  const clearBtn = el('button', 'adl-btn', 'Clear chat');
+  clearBtn.title = 'Clear the conversation with the instructor. Your lab, hints and check results are kept.';
+  clearBtn.style.marginLeft = 'auto';
+  actions.append(checkBtn, hintBtn, interviewBtn, clearBtn);
   const ask = el('div', 'adl-ask');
   const askInput = el('input');
   askInput.placeholder = 'Ask your instructor…';
@@ -469,9 +474,15 @@ export function renderAdLabWindow(body: HTMLElement): void {
     interviewBtn.style.display = save.session.mode === 'interview' || save.session.mode === 'guided' ? '' : 'none';
   }
 
-  function bubble(kind: 'ins' | 'me' | 'sys', text: string, source?: 'ollama' | 'offline'): HTMLElement {
-    const b = el('div', `adl-msg ${kind}`, text);
+  /** Instructor replies are Markdown, rendered safely (no innerHTML). */
+  function fill(b: HTMLElement, kind: 'ins' | 'me' | 'sys', text: string, source?: 'ollama' | 'offline'): void {
+    b.replaceChildren(kind === 'ins' ? renderMarkdown(text) : document.createTextNode(text));
     if (source) b.appendChild(el('div', 'adl-src', source === 'ollama' ? 'Ollama instructor' : 'Offline instructor (from lab material)'));
+  }
+
+  function bubble(kind: 'ins' | 'me' | 'sys', text: string, source?: 'ollama' | 'offline'): HTMLElement {
+    const b = el('div', `adl-msg ${kind}`);
+    fill(b, kind, text, source);
     log.appendChild(b);
     log.scrollTop = log.scrollHeight;
     return b;
@@ -498,9 +509,14 @@ export function renderAdLabWindow(body: HTMLElement): void {
         view: snapshotForInstructor(activeState()),
         session: save.session,
         notes: save.notes,
+      }, {
+        // Stream: the reply appears as the model writes it.
+        onText: (partial) => {
+          fill(pending, 'ins', partial);
+          log.scrollTop = log.scrollHeight;
+        },
       });
-      pending.textContent = reply.text;
-      pending.appendChild(el('div', 'adl-src', reply.source === 'ollama' ? 'Ollama instructor' : 'Offline instructor (from lab material)'));
+      fill(pending, 'ins', reply.text, reply.source);
       persist();
     } finally {
       setBusy(false);
@@ -594,6 +610,17 @@ export function renderAdLabWindow(body: HTMLElement): void {
 
   interviewBtn.addEventListener('click', () => {
     if (!busy) void instruct({ kind: 'interview' });
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (busy) return;
+    if (save.session.transcript.length === 0) return;
+    if (!window.confirm('Clear the conversation with the instructor? Your lab, hints and check results are kept.')) return;
+    clearConversation(save.session);
+    persist();
+    log.innerHTML = '';
+    bubble('sys', 'Conversation cleared. Your lab, hints and check results are unchanged.');
+    askInput.focus();
   });
 
   function sendQuestion(): void {

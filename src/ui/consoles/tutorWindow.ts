@@ -24,6 +24,7 @@ import {
   type TutorMode,
 } from '@/vm/tutor';
 import { openDocumentation } from './documentationWindow';
+import { renderMarkdown } from '@/ui/markdown';
 import type { EndpointTicketPayload, Ticket } from '@/domain';
 import { ENDPOINT_TICKET_KINDS } from '@/domain';
 import { ENDPOINT_ISSUES } from '@/vm/endpointIssues';
@@ -72,7 +73,14 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   status.style.cssText = 'margin-left:auto;font-size:11px;color:var(--muted);';
   status.textContent = 'Checking for Ollama…';
 
-  header.append(modeWrap, status);
+  const clearBtn = document.createElement('button');
+  clearBtn.textContent = 'Clear chat';
+  clearBtn.title = 'Clear this conversation and start a new one';
+  clearBtn.style.cssText =
+    'padding:5px 10px;border-radius:4px;border:1px solid var(--border);cursor:pointer;' +
+    'font-size:11px;background:var(--panel);color:var(--fg);';
+
+  header.append(modeWrap, status, clearBtn);
   body.appendChild(header);
 
   // The badge is honest about which tutor you are talking to, because the two
@@ -95,7 +103,11 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
       (who === 'you'
         ? 'align-self:flex-end;background:#2563eb;color:#fff;'
         : 'align-self:flex-start;background:var(--panel-alt);border:1px solid var(--border);');
-    wrap.textContent = text;
+    // The tutor's replies are Markdown, rendered safely (no innerHTML).
+    if (who === 'tutor') {
+      wrap.style.whiteSpace = 'normal';
+      wrap.appendChild(renderMarkdown(text));
+    } else wrap.textContent = text;
     log.appendChild(wrap);
     log.scrollTop = log.scrollHeight;
     return wrap;
@@ -123,13 +135,21 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   }
 
   const env = readEnvironment(vm.dir);
-  bubble(
-    'tutor',
+  const GREETING =
     'I am the tutor for this workstation. I know what state your domain is in and which ' +
-      'ticket you are on, and I answer from the material in Documentation.\n\n' +
-      'By default I will ask rather than tell. Switch to "Explain the concept" or ' +
-      '"Walk me through it" when you want more.',
-  );
+    'ticket you are on, and I answer from the material in Documentation.\n\n' +
+    'By default I will ask rather than tell. Switch to "Explain the concept" or ' +
+    '"Walk me through it" when you want more.';
+  bubble('tutor', GREETING);
+
+  // Each question is answered from the environment and the documentation, not
+  // from earlier turns, so clearing loses nothing the tutor relies on.
+  clearBtn.onclick = () => {
+    if (busy || log.childElementCount <= 1) return;
+    log.innerHTML = '';
+    bubble('tutor', GREETING);
+    input.focus();
+  };
 
   // --- Suggested openers ----------------------------------------------------
   const suggestions = document.createElement('div');
@@ -196,7 +216,7 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
       ...(open ? { ticket: { subject: open.subject, body: open.body, ...hintsFor(vm, open) } } : {}),
     });
 
-    pending.textContent = answer.text;
+    pending.replaceChildren(renderMarkdown(answer.text));
     citations(answer);
 
     busy = false;

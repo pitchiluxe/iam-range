@@ -108,7 +108,8 @@ if ($f.services['NTDS'] -eq 'Running') {
     }
     $ad.gpos = @(Get-GPO -All | ForEach-Object { [ordered]@{ name = $_.DisplayName; links = @($links[$_.DisplayName]) } })
     $pol = Get-ADDefaultDomainPasswordPolicy
-    $ad.passwordPolicy = [ordered]@{ minPasswordLength = $pol.MinPasswordLength; lockoutThreshold = $pol.LockoutThreshold; complexityEnabled = [bool]$pol.ComplexityEnabled }
+    $ad.passwordPolicy = [ordered]@{ minPasswordLength = $pol.MinPasswordLength; lockoutThreshold = $pol.LockoutThreshold; complexityEnabled = [bool]$pol.ComplexityEnabled
+        historyCount = $pol.PasswordHistoryCount; maxAgeDays = [int]$pol.MaxPasswordAge.TotalDays; reversibleEncryption = [bool]$pol.ReversibleEncryptionEnabled }
     $f.ad = $ad
 }
 

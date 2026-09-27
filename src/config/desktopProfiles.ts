@@ -24,6 +24,8 @@ const BASELINE_APPS = [
   // The AD Enterprise Lab Series runs on its own simulated estate, so it is a
   // course like the Career Lab rather than an administrative entitlement.
   'ad-lab',
+  // The 10-project portfolio trainer, for the same reason.
+  'iam-portfolio',
   // The plan view of the manual. On every desktop for the same reason the
   // manual is: knowing where you are in the course is not a departmental
   // entitlement.

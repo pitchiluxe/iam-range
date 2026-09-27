@@ -109,7 +109,11 @@
     "extraResources": [
       {
         "from": "omari-lab/10-AD-ENTERPRISE-VBOX",
-        "to": "adlab-vbox"
+        "to": "omari-lab/10-AD-ENTERPRISE-VBOX"
+      },
+      {
+        "from": "omari-lab/11-IAM-PORTFOLIO",
+        "to": "omari-lab/11-IAM-PORTFOLIO"
       }
     ]
   },

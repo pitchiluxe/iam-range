@@ -100,7 +100,8 @@ const SYSTEM = [
   '- Talk about the learner\'s actual environment, described below, not a generic one.',
   '- Be concrete and operational. Prefer what to check and why over definitions.',
   '- Never claim to have performed an action. You cannot change their environment.',
-  '- Plain text. No markdown headings, no code fences.',
+  '- Format in light Markdown: short paragraphs, bullet lists for steps, **bold** for key terms,',
+  '  `backticks` for cmdlets and values. No large headings.',
 ].join('\n');
 
 /**

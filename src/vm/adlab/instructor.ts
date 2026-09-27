@@ -22,6 +22,7 @@
 import {
   OLLAMA_GENERATE_URL,
   getOllamaModel,
+  ollamaStream,
   listOllamaModels,
   pickInstalledModel,
 } from '@/config/ollama';
@@ -93,6 +94,16 @@ export interface InstructorSession {
 
 export function newSession(labId: string, mode: InstructorMode): InstructorSession {
   return { labId, mode, hintLevels: {}, failCounts: {}, checkRuns: 0, lastReport: null, transcript: [], interviewAsked: [] };
+}
+
+/**
+ * Forget the conversation — and only the conversation. The lab itself, the
+ * hints already given and the check history stay: clearing the chat must not
+ * become a way to reset the hint ladder or wipe evidence of failed checks.
+ */
+export function clearConversation(session: InstructorSession): void {
+  session.transcript = [];
+  session.interviewAsked = [];
 }
 
 /** Fold a validation report into the session's memory. */
@@ -174,7 +185,8 @@ const SYSTEM = [
   '  section REVEAL says it is allowed. Otherwise teach the troubleshooting method: point at what to',
   '  investigate, which tool to use, and what to compare it with.',
   '- Use only facts from the sections below. Do not invent cmdlets, output or settings.',
-  '- Plain text, under 160 words, no markdown headings, no code fences, no bullet lists of tools.',
+  '- Format in light Markdown, under 160 words: short paragraphs, a bullet list when giving steps or',
+  '  findings, **bold** for the key point, `backticks` for commands, settings and values. No large headings.',
   '- Talk TO the student directly as "you" (never "the student").',
 ].join('\n');
 
@@ -207,6 +219,7 @@ const GROUP_FOCUS: Record<ValidatorGroup, Focus[]> = {
   validateGPO: ['ad', 'gpo'],
   validatePermissions: ['accounts', 'shares'],
   validateTicket: ['net', 'accounts'],
+  validateOrganization: ['ad', 'accounts', 'gpo'],
 };
 
 /** The parts of the estate this lab is about. */
@@ -442,8 +455,15 @@ export interface InstructorStatus {
 }
 
 /** Is Ollama answering, and with which model? */
+/**
+ * The last model that answered. While Ollama is busy generating, /api/tags can
+ * be slower than the status timeout; that means busy, not offline, so the
+ * model that worked a moment ago is used instead of the offline instructor.
+ */
+let lastModel: string | null = null;
+
 export async function instructorStatus(fetchImpl: typeof fetch = fetch): Promise<InstructorStatus> {
-  const models = await listOllamaModels(1500, fetchImpl);
+  const models = await listOllamaModels(5000, fetchImpl);
   if (models === null) return { online: false, model: null, reason: 'unreachable' };
   const model = pickInstalledModel(models, getOllamaModel());
   if (!model) return { online: false, model: null, reason: 'no-models' };
@@ -457,7 +477,13 @@ export async function instructorStatus(fetchImpl: typeof fetch = fetch): Promise
 export async function askInstructor(
   req: InstructorRequest,
   ctx: InstructorContext,
-  opts: { fetchImpl?: typeof fetch; timeoutMs?: number; model?: string | null } = {},
+  opts: {
+    fetchImpl?: typeof fetch;
+    timeoutMs?: number;
+    model?: string | null;
+    /** Stream the reply: called with the growing text as tokens arrive. */
+    onText?: (text: string) => void;
+  } = {},
 ): Promise<InstructorReply> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   if (req.kind === 'ask') ctx.session.transcript.push({ role: 'student', text: req.question });
@@ -470,8 +496,20 @@ export async function askInstructor(
   };
 
   let model = opts.model;
-  if (model === undefined) model = (await instructorStatus(fetchImpl)).model;
+  if (model === undefined) model = (await instructorStatus(fetchImpl)).model ?? lastModel;
   if (!model) return finish(offlineInstructor(req, ctx), 'offline');
+
+  if (opts.onText) {
+    const streamed = await ollamaStream(
+      OLLAMA_GENERATE_URL,
+      { model, prompt: buildInstructorPrompt(req, ctx), keep_alive: '15m', options: { temperature: 0.3, num_predict: 280 } },
+      opts.onText,
+      { fetchImpl, idleMs: opts.timeoutMs ?? 150_000 },
+    );
+    if (!streamed) return finish(offlineInstructor(req, ctx), 'offline');
+    lastModel = model;
+    return finish(guardReply(streamed.trim()), 'ollama');
+  }
 
   try {
     const ctl = new AbortController();
@@ -493,6 +531,7 @@ export async function askInstructor(
     const data = (await res.json()) as { response?: string };
     const text = data.response?.trim();
     if (!text) return finish(offlineInstructor(req, ctx), 'offline');
+    lastModel = model;
     return finish(guardReply(text), 'ollama');
   } catch {
     return finish(offlineInstructor(req, ctx), 'offline');

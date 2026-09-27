@@ -1477,6 +1477,17 @@ function setPasswordPolicy(c: Ctx): HandlerResult {
   if (min !== undefined) pol.minPasswordLength = Number(min) || pol.minPasswordLength;
   if (thr !== undefined) pol.lockoutThreshold = Number(thr) || 0;
   if (cx !== undefined) pol.complexityEnabled = cx === 'true';
+  const hist = arg(c, 'PasswordHistoryCount');
+  if (hist !== undefined) pol.historyCount = Math.max(0, Math.min(24, Number(hist) || 0));
+  const maxAge = arg(c, 'MaxPasswordAge');
+  if (maxAge !== undefined) {
+    // "90.00:00:00", "90", or (New-TimeSpan -Days 90)
+    const m = /-Days\s+(\d+)/i.exec(maxAge) ?? /^(\d+)/.exec(maxAge);
+    if (!m) return fail('Set-ADDefaultDomainPasswordPolicy : Cannot convert value to type "System.TimeSpan". Use "90.00:00:00" or (New-TimeSpan -Days 90).');
+    pol.maxAgeDays = Number(m[1]);
+  }
+  const rev = arg(c, 'ReversibleEncryptionEnabled');
+  if (rev !== undefined) pol.reversibleEncryption = rev === 'true';
   return ok('');
 }
 
@@ -1486,7 +1497,9 @@ function getPasswordPolicy(c: Ctx): HandlerResult {
   const pol = c.s.ad.passwordPolicy;
   return ok(props([
     ['ComplexityEnabled', pol.complexityEnabled], ['LockoutThreshold', pol.lockoutThreshold],
-    ['MinPasswordLength', pol.minPasswordLength], ['LockoutDuration', '00:30:00'], ['MaxPasswordAge', '42.00:00:00'],
+    ['MinPasswordLength', pol.minPasswordLength], ['PasswordHistoryCount', pol.historyCount],
+    ['LockoutDuration', '00:30:00'], ['MaxPasswordAge', `${pol.maxAgeDays}.00:00:00`],
+    ['ReversibleEncryptionEnabled', pol.reversibleEncryption],
   ]));
 }
 

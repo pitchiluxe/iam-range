@@ -56,6 +56,75 @@ export async function ollamaAvailable(timeoutMs = 1200): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
+// Streaming
+// ---------------------------------------------------------------------------
+
+/**
+ * POST to /api/generate or /api/chat with stream:true and hand every partial
+ * reply to `onText` as it grows, so a long answer from a CPU model appears
+ * word by word instead of after minutes of "…".
+ *
+ * The timeout is an IDLE timeout: it only fires when no token has arrived
+ * for `idleMs` (loading a model counts as the first wait). A slow model that
+ * keeps producing is never cut off; `totalMs` is a last-resort ceiling.
+ *
+ * Returns the full text, the partial text if the stream broke midway, or null
+ * if nothing arrived — the caller then falls back to its offline reply.
+ */
+export async function ollamaStream(
+  url: string,
+  body: Record<string, unknown>,
+  onText: (text: string) => void,
+  opts: { idleMs?: number; totalMs?: number; fetchImpl?: typeof fetch } = {},
+): Promise<string | null> {
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const ctl = new AbortController();
+  let idle = setTimeout(() => ctl.abort(), opts.idleMs ?? 180_000);
+  const total = setTimeout(() => ctl.abort(), opts.totalMs ?? 900_000);
+  const bump = (): void => {
+    clearTimeout(idle);
+    idle = setTimeout(() => ctl.abort(), opts.idleMs ?? 180_000);
+  };
+  let text = '';
+  try {
+    const res = await fetchImpl(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, stream: true }),
+      signal: ctl.signal,
+    });
+    if (!res.ok || !res.body) return null;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bump();
+      buf += decoder.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        const chunk = JSON.parse(line) as { response?: string; message?: { content?: string }; done?: boolean };
+        const piece = chunk.response ?? chunk.message?.content ?? '';
+        if (piece) {
+          text += piece;
+          onText(text);
+        }
+      }
+    }
+    return text.trim() ? text : null;
+  } catch {
+    return text.trim() ? text : null;
+  } finally {
+    clearTimeout(idle);
+    clearTimeout(total);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Model selection
 // ---------------------------------------------------------------------------
 
@@ -72,6 +141,16 @@ export function getOllamaModel(): string {
     return v && v.trim() ? v.trim() : OLLAMA_MODEL;
   } catch {
     return OLLAMA_MODEL;
+  }
+}
+
+/** The model the learner explicitly picked in Settings, or null if they never did. */
+export function getChosenOllamaModel(): string | null {
+  try {
+    const v = typeof localStorage === 'undefined' ? null : localStorage.getItem(MODEL_KEY);
+    return v && v.trim() ? v.trim() : null;
+  } catch {
+    return null;
   }
 }
 
