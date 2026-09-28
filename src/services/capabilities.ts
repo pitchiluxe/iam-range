@@ -219,7 +219,7 @@ export const CAPABILITIES: readonly IamCapability[] = [
     params: [
       { name: 'SamAccountName', label: 'Username', kind: 'text', required: true },
       { name: 'Name', label: 'Display name', kind: 'text', required: true },
-      { name: 'Department', label: 'Department', kind: 'text', required: true },
+      { name: 'Department', label: 'Department', kind: 'text', required: false },
       { name: 'Title', label: 'Job title', kind: 'text', required: false },
       { name: 'AccountPassword', label: 'Password', kind: 'password', required: false },
       {
@@ -1542,11 +1542,20 @@ export const CAPABILITIES: readonly IamCapability[] = [
     consoleSection: 'audit',
     cmdlet: 'Get-IamAuditLog',
     readOnly: true,
-    params: [{ name: 'Last', label: 'Entries', kind: 'text', required: false }],
+    params: [
+      { name: 'Last', label: 'Entries', kind: 'text', required: false },
+      // The manual's examples filter by action (signin.failure, group.add…);
+      // without this the filter was silently ignored and every event shown.
+      { name: 'Action', label: 'Action (e.g. signin.failure)', kind: 'text', required: false },
+    ],
     resolvesTicketKinds: [],
     run(ctx, a) {
       const n = Number(a.Last ?? 20);
-      const events = ctx.audit.tail(Number.isFinite(n) && n > 0 ? n : 20);
+      const last = Number.isFinite(n) && n > 0 ? n : 20;
+      const action = a.Action?.trim().toLowerCase();
+      const events = action
+        ? ctx.audit.events.filter((e) => e.action.toLowerCase().startsWith(action)).slice(-last)
+        : ctx.audit.tail(last);
       return ok(
         `${events.length} event(s).`,
         events.map((e) => ({

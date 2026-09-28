@@ -99,7 +99,7 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Create the top-level container.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name Corp' },
           { do: 'Create the child OUs beneath it.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name Users -Path Corp' },
           { do: 'Separate service accounts, so they can be delegated apart from staff.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name ServiceAccounts -Path Corp' },
-          { do: 'Confirm the tree in the console, or with Get-ADOrganizationalUnit.', cmdlet: 'Get-ADOrganizationalUnit' },
+          { do: 'Confirm the tree in the console, or with Get-ADOrganizationalUnit.', cmdlet: 'Get-ADOrganizationalUnit', example: 'Get-ADOrganizationalUnit -Filter * | Format-Table Name,DistinguishedName' },
         ],
         verify:
           'The tree in Active Directory Users and Computers shows Corp with its children. If it ' +
@@ -120,8 +120,8 @@ export const MANUAL: readonly Chapter[] = [
           'Access granted directly to individuals is scattered across every system that granted ' +
           'it, and nobody ever finds all of it.',
         steps: [
-          { do: 'Create a group per role, not per request.', cmdlet: 'New-ADGroup', example: 'New-ADGroup -Name grp-helpdesk-tier1 -Description "Service desk tier 1"' },
-          { do: 'Create the groups the other departments will need.', cmdlet: 'New-ADGroup' },
+          { do: 'Create a group per role, not per request.', cmdlet: 'New-ADGroup', example: 'New-ADGroup -Name grp-helpdesk-tier1 -GroupScope Global -GroupCategory Security -Path "OU=Corp,DC=omari,DC=test" -Description "Service desk tier 1"' },
+          { do: 'Create the groups the other departments will need.', cmdlet: 'New-ADGroup', example: 'New-ADGroup -Name grp-hr-readers -GroupScope Global -GroupCategory Security -Path "OU=Corp,DC=omari,DC=test" -Description "HR read-only access"' },
           { do: 'Check what exists.', cmdlet: 'Get-ADGroup', example: 'Get-ADGroup -Filter *' },
         ],
         verify:
@@ -153,7 +153,7 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Create the account.', cmdlet: 'New-ADUser', example: 'New-ADUser -SamAccountName jdoe -Name "John Doe" -Department "Help Desk" -Title "Service Desk Analyst"' },
           { do: 'Put it in the right OU.', cmdlet: 'Move-ADObject', example: 'Move-ADObject -Identity jdoe -TargetPath Users' },
           { do: 'Add the groups the role needs.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity jdoe -Group grp-helpdesk-tier1' },
-          { do: 'Set a password the person will change at first sign-in.', cmdlet: 'Set-ADAccountPassword' },
+          { do: 'Set a password the person will change at first sign-in.', cmdlet: 'Set-ADAccountPassword', example: 'Set-ADAccountPassword -Identity jdoe -Reset -NewPassword (ConvertTo-SecureString "Welcome-2026!" -AsPlainText -Force) -ChangePasswordAtLogon' },
           { do: 'Sign out, and sign in as them from the login screen.' },
         ],
         verify:
@@ -175,10 +175,10 @@ export const MANUAL: readonly Chapter[] = [
           'After three moves an employee holds the union of four jobs. When a review later asks ' +
           'why a salesperson can approve payroll, this is the answer.',
         steps: [
-          { do: 'Add the access the new role needs.', cmdlet: 'Add-ADGroupMember' },
+          { do: 'Add the access the new role needs.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity grp-finance-payroll -Members jdoe' },
           { do: 'Remove the access the old role needed.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity jdoe -Group grp-helpdesk-tier1' },
-          { do: 'Move the account to the OU that matches its new place.', cmdlet: 'Move-ADObject' },
-          { do: 'Read back their membership and check nothing is left over.', cmdlet: 'Get-ADPrincipalGroupMembership' },
+          { do: 'Move the account to the OU that matches its new place.', cmdlet: 'Move-ADObject', example: 'Move-ADObject -Identity jdoe -TargetPath "OU=Users,OU=Corp,DC=omari,DC=test"' },
+          { do: 'Read back their membership and check nothing is left over.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity jdoe | Select-Object name' },
         ],
         verify:
           'Their group membership lists the new role and not the old one. If both are there, ' +
@@ -226,10 +226,10 @@ export const MANUAL: readonly Chapter[] = [
           'unlocking an account without reading the failures first hands it back to whoever was ' +
           'guessing the password.',
         steps: [
-          { do: 'Read the sign-in failures before touching anything.', cmdlet: 'Get-SignInLog' },
+          { do: 'Read the sign-in failures before touching anything.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action signin.failure -Last 20' },
           { do: 'Look at the account state.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Identity jdoe' },
-          { do: 'If it is locked and the failures look like a forgotten password, unlock it with the user name from the queue.', cmdlet: 'Unlock-ADAccount' },
-          { do: 'If it is disabled, find out why before re-enabling anything.', cmdlet: 'Enable-ADAccount' },
+          { do: 'If it is locked and the failures look like a forgotten password, unlock it with the user name from the queue.', cmdlet: 'Unlock-ADAccount', example: 'Unlock-ADAccount -Identity jdoe' },
+          { do: 'If it is disabled, find out why before re-enabling anything.', cmdlet: 'Enable-ADAccount', example: 'Enable-ADAccount -Identity jdoe' },
         ],
         verify:
           'The account signs in, and the audit log shows the unlock followed by a successful ' +
@@ -285,8 +285,8 @@ export const MANUAL: readonly Chapter[] = [
         steps: [
           { do: 'Create the privileged role that will be eligible.', cmdlet: 'New-IamRole', example: 'New-IamRole -Name role-domain-admins -Description "Domain Administrators" -Permissions domain:*' },
           { do: 'Create the eligible assignment.', cmdlet: 'New-PimEligibility', example: 'New-PimEligibility -Identity jdoe -Role role-domain-admins' },
-          { do: 'Remove the permanent assignment it replaces.', cmdlet: 'Remove-PimAssignment' },
-          { do: 'Confirm no standing privilege remains.', cmdlet: 'Get-PimStandingPrivilege' },
+          { do: 'Remove the permanent assignment it replaces.', cmdlet: 'Remove-PimAssignment', example: 'Remove-PimAssignment -Identity jdoe -Role role-domain-admins' },
+          { do: 'Confirm no standing privilege remains.', cmdlet: 'Get-PimStandingPrivilege', example: 'Get-PimStandingPrivilege' },
         ],
         verify:
           'Get-PimAssignment shows the person as eligible, and Get-PimStandingPrivilege is ' +
@@ -307,8 +307,8 @@ export const MANUAL: readonly Chapter[] = [
           'expiry is what closes it without anyone having to remember.',
         steps: [
           { do: 'Activate with a reason and a duration that matches the work.', cmdlet: 'Enable-PimRole', example: 'Enable-PimRole -Identity jdoe -Role role-domain-admins -Justification "INC-4471" -Minutes 60' },
-          { do: 'Try it without a justification, and read the refusal.', cmdlet: 'Enable-PimRole' },
-          { do: 'End it early once the work is done.', cmdlet: 'Disable-PimRole' },
+          { do: 'Try it without a justification, and read the refusal.', cmdlet: 'Enable-PimRole', example: 'Enable-PimRole -Identity jdoe -Role role-domain-admins' },
+          { do: 'End it early once the work is done.', cmdlet: 'Disable-PimRole', example: 'Disable-PimRole -Identity jdoe -Role role-domain-admins' },
         ],
         verify:
           'Get-PimAssignment shows the role active with an expiry and the justification you ' +
@@ -328,10 +328,10 @@ export const MANUAL: readonly Chapter[] = [
           'rubber-stamps is worse than no approver, because the record implies scrutiny that ' +
           'did not happen — and approving your own request removes the control entirely.',
         steps: [
-          { do: 'Require approval on the role.', cmdlet: 'Get-PimAssignment' },
-          { do: 'Request activation as the person who needs it.', cmdlet: 'Enable-PimRole' },
-          { do: 'Try to approve your own request, and read the refusal.', cmdlet: 'Approve-PimRequest' },
-          { do: 'Approve it as somebody else.', cmdlet: 'Approve-PimRequest' },
+          { do: 'Require approval on the role.', cmdlet: 'Get-PimAssignment', example: 'Get-PimAssignment -Identity jdoe' },
+          { do: 'Request activation as the person who needs it.', cmdlet: 'Enable-PimRole', example: 'Enable-PimRole -Identity jdoe -Role role-domain-admins -Justification "CHG-2031 patch window" -Minutes 60' },
+          { do: 'Try to approve your own request, and read the refusal.', cmdlet: 'Approve-PimRequest', example: 'Approve-PimRequest -Identity jdoe -Role role-domain-admins' },
+          { do: 'Approve it as somebody else.', cmdlet: 'Approve-PimRequest', example: 'Approve-PimRequest -Identity jdoe -Role role-domain-admins' },
         ],
         verify:
           'The assignment moves from pending-approval to active, and the record names who ' +
@@ -360,7 +360,7 @@ export const MANUAL: readonly Chapter[] = [
         steps: [
           { do: 'Connect to the tenant.', cmdlet: 'Connect-Okta', example: 'Connect-Okta' },
           { do: 'Look at the accounts and their origin.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider okta' },
-          { do: 'Try to disable a synced account in the cloud, and read the refusal.', cmdlet: 'Disable-CloudUser' },
+          { do: 'Try to disable a synced account in the cloud, and read the refusal.', cmdlet: 'Disable-CloudUser', example: 'Disable-CloudUser -Provider okta -Upn jdoe@omari.test' },
         ],
         verify:
           'Synced accounts are refused with a message naming Active Directory. Cloud-only ' +
@@ -380,10 +380,10 @@ export const MANUAL: readonly Chapter[] = [
           'cycle, the cloud is genuinely still enforcing the old state. For a real leaver you ' +
           'force the sync rather than wait.',
         steps: [
-          { do: 'Disable an account on premises.', cmdlet: 'Disable-ADAccount' },
-          { do: 'Ask the tenant what it currently believes.', cmdlet: 'Get-CloudUser' },
-          { do: 'Ask what has not caught up, and when the last cycle ran.', cmdlet: 'Get-DirectorySyncStatus' },
-          { do: 'Force a cycle.', cmdlet: 'Start-DirectorySync' },
+          { do: 'Disable an account on premises.', cmdlet: 'Disable-ADAccount', example: 'Disable-ADAccount -Identity jdoe' },
+          { do: 'Ask the tenant what it currently believes.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider okta -Upn jdoe@omari.test' },
+          { do: 'Ask what has not caught up, and when the last cycle ran.', cmdlet: 'Get-DirectorySyncStatus', example: 'Get-DirectorySyncStatus -Provider okta' },
+          { do: 'Force a cycle.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider okta' },
         ],
         verify:
           'Before the cycle the cloud copy is active and the delta names it. Afterwards the ' +
@@ -403,9 +403,9 @@ export const MANUAL: readonly Chapter[] = [
           'it, deprovisioning stops at the provider and the leaver keeps a working local ' +
           'account in every app. This is the most common finding in a leaver audit.',
         steps: [
-          { do: 'List accounts still active for disabled people.', cmdlet: 'Get-OrphanedAppAccount' },
+          { do: 'List accounts still active for disabled people.', cmdlet: 'Get-OrphanedAppAccount', example: 'Get-OrphanedAppAccount -Provider okta' },
           { do: 'Switch SCIM on for that application.', cmdlet: 'Set-ScimProvisioning', example: 'Set-ScimProvisioning -Provider okta -App "HR Portal"' },
-          { do: 'Check the gap has closed.', cmdlet: 'Get-OrphanedAppAccount' },
+          { do: 'Check the gap has closed.', cmdlet: 'Get-OrphanedAppAccount', example: 'Get-OrphanedAppAccount -Provider okta' },
         ],
         verify:
           'The orphan list is empty, and the application shows the account deactivated rather ' +
@@ -427,7 +427,7 @@ export const MANUAL: readonly Chapter[] = [
           'membership each time.',
         steps: [
           { do: 'Find objects sharing a login.', cmdlet: 'Get-CloudDuplicate', example: 'Get-CloudDuplicate -Provider okta' },
-          { do: 'Establish which one is synced from the directory — that is the authoritative one.', cmdlet: 'Get-CloudUser' },
+          { do: 'Establish which one is synced from the directory — that is the authoritative one.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider okta -Upn jdoe@omari.test' },
           { do: 'Deal with the cloud-only object, and record what you did.' },
         ],
         verify:
@@ -557,12 +557,12 @@ export const MANUAL: readonly Chapter[] = [
           'Creating users into a structure that does not exist is the commonest first-day error.',
         steps: [
           { do: 'Open Active Directory Users and Computers and read the current tree.', app: 'active-directory' } as ManualStep,
-          { do: 'List the organisational units.', cmdlet: 'Get-ADOrganizationalUnit' },
+          { do: 'List the organisational units.', cmdlet: 'Get-ADOrganizationalUnit', example: 'Get-ADOrganizationalUnit -Filter * | Select-Object Name,DistinguishedName' },
           { do: 'Create the top-level Corp OU if it is missing.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name Corp' },
           { do: 'Create the department OUs if they are missing.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name HR -Path Corp' },
           { do: 'Create an OU to hold user accounts if it is missing.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name Users -Path Corp' },
           { do: 'Create an OU to hold security groups if it is missing.', cmdlet: 'New-ADOrganizationalUnit', example: 'New-ADOrganizationalUnit -Name Groups -Path Corp' },
-          { do: 'List the OUs and groups so you know what is already in place.', cmdlet: 'Get-ADOrganizationalUnit' },
+          { do: 'List the OUs and groups so you know what is already in place.', cmdlet: 'Get-ADOrganizationalUnit', example: 'Get-ADOrganizationalUnit -Filter * | ft Name; Get-ADGroup -Filter * | ft Name,GroupScope' },
         ],
         verify:
           'The tree shows Corp with the department, Users and Groups OUs. Get-ADGroup lists the ' +
@@ -585,7 +585,7 @@ export const MANUAL: readonly Chapter[] = [
           { do: 'Open the PowerShell ISE and load the "Bulk onboarding from a CSV list" template.', app: 'script-editor' } as ManualStep,
           { do: 'Read the list of employees and the department groups it will use.' },
           { do: 'Run the script and watch for any failures or duplicate-name errors.' },
-          { do: 'List the new accounts.', cmdlet: 'Get-ADUser' },
+          { do: 'List the new accounts.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Filter * -SearchBase "OU=Users,OU=Corp,DC=omari,DC=test" | Select-Object Name,SamAccountName,Enabled' },
           { do: 'Check that a sample account is in its role group.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity ana.smith' },
         ],
         verify:
@@ -635,9 +635,9 @@ export const MANUAL: readonly Chapter[] = [
         steps: [
           { do: 'Open the terminal and review the current password policy.', app: 'terminal' } as ManualStep,
           { do: 'Set the minimum password length to 14, require complexity and a 90-day age.', cmdlet: 'Set-PasswordPolicy', example: 'Set-PasswordPolicy -MinimumLength 14 -ComplexityEnabled $true -MaximumAge 90' },
-          { do: 'Confirm the policy is in force.', cmdlet: 'Get-PasswordPolicy' },
+          { do: 'Confirm the policy is in force.', cmdlet: 'Get-PasswordPolicy', example: 'Get-PasswordPolicy' },
           { do: 'Set the lockout threshold to 5 failed attempts for 30 minutes.', cmdlet: 'Set-AccountLockoutPolicy', example: 'Set-AccountLockoutPolicy -Threshold 5 -Duration 30' },
-          { do: 'Confirm the lockout policy is in force.', cmdlet: 'Get-AccountLockoutPolicy' },
+          { do: 'Confirm the lockout policy is in force.', cmdlet: 'Get-AccountLockoutPolicy', example: 'Get-AccountLockoutPolicy' },
           { do: 'Try creating a test account with a weak password to see the policy reject it.', cmdlet: 'New-ADUser', example: 'New-ADUser -Name test.user -AccountPassword weak' },
         ],
         verify:
@@ -687,7 +687,7 @@ export const MANUAL: readonly Chapter[] = [
         steps: [
           { do: 'Open Log Search and look for failed sign-in attempts.', app: 'log-search' } as ManualStep,
           { do: 'Read the audit log from the shell for the last 40 events.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Last 40' },
-          { do: 'List any standing privileged assignments as part of the risk report.', cmdlet: 'Get-PimStandingPrivilege' },
+          { do: 'List any standing privileged assignments as part of the risk report.', cmdlet: 'Get-PimStandingPrivilege', example: 'Get-PimStandingPrivilege' },
           { do: 'Export failed sign-in and group-change events to CSV for spreadsheet analysis.', cmdlet: 'Export-IamAuditLog', example: 'Export-IamAuditLog -Filter signin.failure -Last 50' },
           { do: 'Open the exported CSV in Sheets and count failures with a formula.', app: 'sheets' } as ManualStep,
           { do: 'Simulate a privilege-creep finding by adding an IT user to an HR group.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity ben.okafor -Group grp-hr-readers' },
@@ -738,7 +738,7 @@ export const MANUAL: readonly Chapter[] = [
           'tenant after the sync cycle.',
         steps: [
           { do: 'Open the cloud identity console and connect to Entra.', app: 'cloud-identity' } as ManualStep,
-          { do: 'Connect to the Entra tenant.', cmdlet: 'Connect-Entra' },
+          { do: 'Connect to the Entra tenant.', cmdlet: 'Connect-Entra', example: 'Connect-Entra' },
           { do: 'Run a directory sync cycle.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider entra' },
           { do: 'Check a synced account in the cloud tenant.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider entra -Upn ben.okafor@omari.test' },
         ],
@@ -761,9 +761,9 @@ export const MANUAL: readonly Chapter[] = [
           'membership read before the change.',
         steps: [
           { do: 'Open the Ticket Queue and find the locked-out account.', app: 'ticket-console' } as ManualStep,
-          { do: 'Confirm the locked-out account in Active Directory.', cmdlet: 'Get-ADUser' },
+          { do: 'Confirm the locked-out account in Active Directory.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Filter {LockedOut -eq $true} -Properties LockedOut | Select-Object Name,SamAccountName,LockedOut' },
           { do: 'Read the sign-in failures in the log before unlocking.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Last 20' },
-          { do: 'Unlock the account with the user name from the queue.', cmdlet: 'Unlock-ADAccount' },
+          { do: 'Unlock the account with the user name from the queue.', cmdlet: 'Unlock-ADAccount', example: 'Unlock-ADAccount -Identity greta.olsen' },
           { do: 'Investigate the access-denied report by checking effective access.', cmdlet: 'Get-EffectiveAccess', example: 'Get-EffectiveAccess -Name HR -Identity greta.olsen' },
           { do: 'Add the missing group or remove the one that is blocking access.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity greta.olsen -Group grp-hr-readers' },
         ],
@@ -863,7 +863,7 @@ export const MANUAL: readonly Chapter[] = [
           'not start, or whether an event log shows an attack. Windows admin literacy is the ' +
           'foundation of that explanation.',
         steps: [
-          { do: 'Review the computer identity and operating system.', cmdlet: 'Get-ComputerInfo' },
+          { do: 'Review the computer identity and operating system.', cmdlet: 'Get-ComputerInfo', example: 'Get-ComputerInfo' },
           { do: 'List the critical services and check that AD and DNS are running.', cmdlet: 'Get-Service', example: "Get-Service -Name 'AD WS'" },
           { do: 'Look at recent processes to spot anything unusual.', cmdlet: 'Get-Process', example: 'Get-Process -Name svchost' },
           { do: 'Read the security log for sign-in and group-change events.', cmdlet: 'Get-EventLog', example: 'Get-EventLog -LogName Security' },
@@ -927,9 +927,9 @@ export const MANUAL: readonly Chapter[] = [
           'identity-governance findings.',
         steps: [
           { do: 'Open the Ticket Queue and review the open help-desk tickets.', app: 'ticket-console' } as ManualStep,
-          { do: 'Find a locked-out account and check the audit log for failures.', cmdlet: 'Get-ADUser' },
-          { do: 'Unlock the account and clear the failure count.', cmdlet: 'Unlock-ADAccount' },
-          { do: 'Resolve a wrong-group ticket by adding or removing the right group.', cmdlet: 'Add-ADGroupMember' },
+          { do: 'Find a locked-out account and check the audit log for failures.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Filter {LockedOut -eq $true} -Properties LockedOut | Select-Object Name,SamAccountName' },
+          { do: 'Unlock the account and clear the failure count.', cmdlet: 'Unlock-ADAccount', example: 'Unlock-ADAccount -Identity jdoe' },
+          { do: 'Resolve a wrong-group ticket by adding or removing the right group.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity grp-hr-readers -Members jdoe' },
         ],
         verify:
           'Two help-desk tickets are resolved, one lockout is cleared, and one group membership is ' +
@@ -1000,7 +1000,7 @@ export const MANUAL: readonly Chapter[] = [
           'with two role groups for one job has privilege creep, and the analyst has to find and ' +
           'remove it.',
         steps: [
-          { do: 'Create four or more department/role groups if they are not already there.', cmdlet: 'Get-ADGroup' },
+          { do: 'Create four or more department/role groups if they are not already there.', cmdlet: 'New-ADGroup', example: 'New-ADGroup -Name grp-finance-analysts -GroupScope Global -GroupCategory Security -Description "Finance analysts"' },
           { do: 'List the groups a specific user belongs to.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity jdoe' },
           { do: 'Add a user to the correct role group.', cmdlet: 'Add-ADGroupMember', example: 'Add-ADGroupMember -Identity jdoe -Group grp-hr-readers' },
           { do: 'Remove a group the user should no longer have.', cmdlet: 'Remove-ADGroupMember', example: 'Remove-ADGroupMember -Identity jdoe -Group grp-it-admins' },
@@ -1021,7 +1021,7 @@ export const MANUAL: readonly Chapter[] = [
           'SSO is what the user clicks; the IAM analyst has to know what the tenant sees and ' +
           'whether it matches AD. A disconnected tenant is a second directory nobody is watching.',
         steps: [
-          { do: 'Open a session to the Okta tenant.', cmdlet: 'Connect-Okta' },
+          { do: 'Open a session to the Okta tenant.', cmdlet: 'Connect-Okta', example: 'Connect-Okta' },
           { do: 'List the cloud accounts Okta holds.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider okta' },
           { do: 'Compare the cloud-only users to the on-prem directory.',
         },
@@ -1062,7 +1062,7 @@ export const MANUAL: readonly Chapter[] = [
           'Hybrid identity is the bridge between on-prem AD and the cloud. The analyst has to know ' +
           'how to trigger a sync, read its status, and prove the cloud copy matches.',
         steps: [
-          { do: 'Open a session to the Entra ID tenant.', cmdlet: 'Connect-Entra' },
+          { do: 'Open a session to the Entra ID tenant.', cmdlet: 'Connect-Entra', example: 'Connect-Entra' },
           { do: 'Run a directory sync cycle.', cmdlet: 'Start-DirectorySync', example: 'Start-DirectorySync -Provider entra' },
           { do: 'Find a synced user in the tenant.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider entra -Upn jdoe@omari.test' },
         ],
@@ -1131,7 +1131,7 @@ export const MANUAL: readonly Chapter[] = [
           'Modern identity is driven by APIs. Calling them safely — with the right provider, ' +
           'connection and scope — is what turns a directory into an integration.',
         steps: [
-          { do: 'Connect to the Okta tenant.', cmdlet: 'Connect-Okta' },
+          { do: 'Connect to the Okta tenant.', cmdlet: 'Connect-Okta', example: 'Connect-Okta' },
           { do: 'Check the sync status to see pending changes.', cmdlet: 'Get-DirectorySyncStatus', example: 'Get-DirectorySyncStatus -Provider okta' },
           { do: 'List the users Okta has and compare to the directory.', cmdlet: 'Get-CloudUser', example: 'Get-CloudUser -Provider okta' },
         ],
@@ -1171,9 +1171,9 @@ export const MANUAL: readonly Chapter[] = [
           'Standing admin is a risk; PAM makes privilege something a user asks for, with a reason ' +
           'and an expiry. The engineer has to build and run that workflow.',
         steps: [
-          { do: 'List the permanently assigned privileged roles.', cmdlet: 'Get-PimStandingPrivilege' },
+          { do: 'List the permanently assigned privileged roles.', cmdlet: 'Get-PimStandingPrivilege', example: 'Get-PimStandingPrivilege' },
           { do: 'Make a user eligible for a privileged role.', cmdlet: 'New-PimEligibility', example: 'New-PimEligibility -Identity jdoe -Role role-domain-admins' },
-          { do: 'Have the user activate the eligible role.', cmdlet: 'Enable-PimRole', example: 'Enable-PimRole -Identity jdoe -Role role-domain-admins -Minutes 60' },
+          { do: 'Have the user activate the eligible role.', cmdlet: 'Enable-PimRole', example: 'Enable-PimRole -Identity jdoe -Role role-domain-admins -Justification "INC-4471 server patching" -Minutes 60' },
           { do: 'Approve the activation request.', cmdlet: 'Approve-PimRequest', example: 'Approve-PimRequest -Identity jdoe -Role role-domain-admins' },
         ],
         verify:
@@ -1223,8 +1223,8 @@ export const MANUAL: readonly Chapter[] = [
           'An architect does not choose a vendor; they choose the trade-offs and write them down. ' +
           'The decision record is the deliverable that survives the project.',
         steps: [
-          { do: 'Review the identity risk dashboard.', cmdlet: 'Get-RiskDashboard' },
-          { do: 'List the conditional access policies.', cmdlet: 'Get-ConditionalAccessPolicy' },
+          { do: 'Review the identity risk dashboard.', cmdlet: 'Get-RiskDashboard', example: 'Get-RiskDashboard' },
+          { do: 'List the conditional access policies.', cmdlet: 'Get-ConditionalAccessPolicy', example: 'Get-ConditionalAccessPolicy' },
           { do: 'Open Writer and create an architecture decision record.', app: 'writer' } as ManualStep,
           { do: 'Record the context, decision, consequences and rollback plan.' },
         ],
@@ -1244,7 +1244,7 @@ export const MANUAL: readonly Chapter[] = [
           'Zero Trust means the identity provider is the boundary. The controls that matter are ' +
           'MFA, device compliance, legacy-auth blocking and location policy.',
         steps: [
-          { do: 'List the conditional access policies.', cmdlet: 'Get-ConditionalAccessPolicy' },
+          { do: 'List the conditional access policies.', cmdlet: 'Get-ConditionalAccessPolicy', example: 'Get-ConditionalAccessPolicy' },
           { do: 'Check MFA enrolment for a privileged user.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Identity admin -Properties MfaMethod' },
           { do: 'Read failed sign-in events for legacy clients.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action signin.failure' },
         ],
@@ -1264,9 +1264,9 @@ export const MANUAL: readonly Chapter[] = [
           'Compliance is not a spreadsheet; it is a control story backed by evidence. The architect ' +
           'connects the risk dashboard, the policy and the remediation.',
         steps: [
-          { do: 'Run the risk dashboard.', cmdlet: 'Get-RiskDashboard' },
+          { do: 'Run the risk dashboard.', cmdlet: 'Get-RiskDashboard', example: 'Get-RiskDashboard' },
           { do: 'Review dormant accounts.', cmdlet: 'Get-DormantAccount', example: 'Get-DormantAccount -Days 90' },
-          { do: 'List standing privileged assignments.', cmdlet: 'Get-PimStandingPrivilege' },
+          { do: 'List standing privileged assignments.', cmdlet: 'Get-PimStandingPrivilege', example: 'Get-PimStandingPrivilege' },
         ],
         verify:
           'The risk dashboard, dormant-account report and standing-privilege report all run and ' +
@@ -1284,7 +1284,7 @@ export const MANUAL: readonly Chapter[] = [
           'Strategy starts with an honest inventory. The portfolio tells the architect what exists ' +
           'today so they can choose the tools and sequence that close the gaps.',
         steps: [
-          { do: 'Generate the portfolio summary.', cmdlet: 'Get-Portfolio' },
+          { do: 'Generate the portfolio summary.', cmdlet: 'Get-Portfolio', example: 'Get-Portfolio' },
           { do: 'Export the audit log to count reviews and changes.', cmdlet: 'Export-IamAuditLog', example: 'Export-IamAuditLog -Last 100' },
           { do: 'Identify the gaps: no reviews, too many standing admins, no synced tenant.' },
         ],
