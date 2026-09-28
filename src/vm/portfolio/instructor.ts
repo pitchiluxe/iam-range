@@ -13,8 +13,7 @@ import {
   getOllamaModel,
   listOllamaModels,
   ollamaStream,
-  pickInstalledModel,
-} from '@/config/ollama';
+  pickInstalledModel, ollamaFetch } from '@/config/ollama';
 import { PORTFOLIO, SYSTEM_PROMPT, type PortfolioProject } from './config';
 import type { Finding } from './lint';
 import type { VmCheckResult } from './vmChecks';
@@ -181,8 +180,9 @@ export interface PortfolioStatus {
 let lastModel: string | null = null;
 
 /** The Ollama verification the workspace scripts perform, done from the app. */
-export async function portfolioStatus(fetchImpl: typeof fetch = fetch): Promise<PortfolioStatus> {
-  const models = await listOllamaModels(5000, fetchImpl);
+export async function portfolioStatus(fetchImpl: typeof fetch = ollamaFetch): Promise<PortfolioStatus> {
+  // A cold or busy Ollama can miss the first window; one longer retry before "offline".
+  const models = (await listOllamaModels(5000, fetchImpl)) ?? (await listOllamaModels(12_000, fetchImpl));
   if (!models) return { online: false, model: null, message: PORTFOLIO.verification.failureMessage };
   let model: string | null = null;
   // An explicit choice in Settings wins; otherwise the portfolio's own preference
@@ -209,7 +209,7 @@ export async function askPortfolioInstructor(
     onText?: (text: string) => void;
   } = {},
 ): Promise<PortfolioReply> {
-  const fetchImpl = opts.fetchImpl ?? fetch;
+  const fetchImpl = opts.fetchImpl ?? ollamaFetch;
   if (req.kind === 'ask') s.transcript.push({ role: 'user', text: req.question });
   const finish = (text: string, source: PortfolioReply['source']): PortfolioReply => {
     s.transcript.push({ role: 'assistant', text });

@@ -148,10 +148,14 @@ describe('transfer review', () => {
       title: 'Partner',
       mfa: 'none',
     });
+    // The ticket first, then the work: checks count what happened after it
+    // was raised. Adding before raising passed only when both landed in the
+    // same millisecond, which made this test fail at random.
+    const ticket = ticketFor(s, 'transfer', user.id, 'Move mchen');
     const group = s.dir.getGroupByName('grp-helpdesk-tier1')!;
     s.dir.addToGroup(user.id, group.id, ACTOR);
 
-    const review = reviewTicketSync(ticketFor(s, 'transfer', user.id, 'Move mchen'), deps(s), ACTOR);
+    const review = reviewTicketSync(ticket, deps(s), ACTOR);
     expect(review.passed).toBe(false);
     // The move itself is now checked too. Swapping group membership without
     // moving the account leaves the directory disagreeing with the org chart,

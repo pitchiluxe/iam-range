@@ -299,6 +299,22 @@ export class MockTicketQueue {
     t.updatedAt = Date.now();
   }
 
+  /**
+   * Replace a ticket's wording, only while nobody has started on it.
+   *
+   * The generator raises tickets at once with its own wording and lets the
+   * local model rewrite them afterwards. Once the ticket is picked up,
+   * commented on or closed, the text the learner read is the text that stays.
+   */
+  reword(id: TicketId, subject: string, body: string): boolean {
+    const t = this.tickets.get(id);
+    if (!t || t.status !== 'open' || t.assigneeId || t.comments.length > 0) return false;
+    t.subject = subject;
+    t.body = body;
+    t.updatedAt = Date.now();
+    return true;
+  }
+
   escalate(id: TicketId, by: UserId): void {
     const t = this.tickets.get(id);
     if (!t) return;

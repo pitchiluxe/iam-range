@@ -24,8 +24,7 @@ import {
   getOllamaModel,
   ollamaStream,
   listOllamaModels,
-  pickInstalledModel,
-} from '@/config/ollama';
+  pickInstalledModel, ollamaFetch } from '@/config/ollama';
 import type { AdLab, InstructorMode } from './labs';
 import {
   type Focus,
@@ -462,7 +461,7 @@ export interface InstructorStatus {
  */
 let lastModel: string | null = null;
 
-export async function instructorStatus(fetchImpl: typeof fetch = fetch): Promise<InstructorStatus> {
+export async function instructorStatus(fetchImpl: typeof fetch = ollamaFetch): Promise<InstructorStatus> {
   const models = await listOllamaModels(5000, fetchImpl);
   if (models === null) return { online: false, model: null, reason: 'unreachable' };
   const model = pickInstalledModel(models, getOllamaModel());
@@ -485,7 +484,7 @@ export async function askInstructor(
     onText?: (text: string) => void;
   } = {},
 ): Promise<InstructorReply> {
-  const fetchImpl = opts.fetchImpl ?? fetch;
+  const fetchImpl = opts.fetchImpl ?? ollamaFetch;
   if (req.kind === 'ask') ctx.session.transcript.push({ role: 'student', text: req.question });
 
   const finish = (text: string, source: InstructorReply['source']): InstructorReply => {

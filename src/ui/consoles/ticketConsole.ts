@@ -641,10 +641,19 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
        */
       const generate = (button: HTMLElement, focus: GenerateFocus): void => {
         const original = button.textContent;
-        button.setAttribute('disabled', 'true');
-        button.style.opacity = '0.6';
-        button.style.pointerEvents = 'none';
-        button.textContent = '🤖 Generating…';
+        const busy = (on: boolean): void => {
+          if (on) button.setAttribute('disabled', 'true');
+          else button.removeAttribute('disabled');
+          button.style.opacity = on ? '0.6' : '1';
+          button.style.pointerEvents = on ? 'none' : 'auto';
+          button.textContent = on ? '🤖 Generating…' : original;
+        };
+        const refresh = (): void => {
+          ticketStore.getState().setTickets(conductor.tickets.list());
+          render();
+        };
+        busy(true);
+        let released = false;
         void generateTickets(
           {
             dir: conductor.dir,
@@ -654,31 +663,37 @@ export function renderTicketConsole(body: HTMLElement, conductor: VmServices) {
             cloud: conductor.cloud,
             endpoints: conductor.endpoints,
           },
-          { focus },
+          {
+            focus,
+            // The tickets are in the queue at once; Ollama rewords them
+            // afterwards, so the button is free again straight away.
+            onRaised: (count) => {
+              refresh();
+              busy(false);
+              released = true;
+              if (count > 0) {
+                showToast(`Raised ${count} ticket(s). Ollama will reword them if it is running.`, { kind: 'success' });
+                ticketBlip();
+              }
+            },
+            onReworded: refresh,
+          },
         )
           .then((res) => {
-            ticketStore.getState().setTickets(conductor.tickets.list());
-            render();
-            const none =
-              focus === 'helpdesk'
-                ? res.stage === 'operating'
-                  ? 'Every staff computer already has an open support ticket — work those first.'
-                  : 'Help-desk tickets need staff with computers. Onboard some people first.'
-                : 'Nothing new to raise — work the open queue first.';
-            showToast(
-              res.raised === 0
-                ? none
-                : `Raised ${res.raised} ticket(s)${res.usedOllama ? ', written by Ollama' : ''}.`,
-              { kind: res.raised === 0 ? 'info' : 'success' },
-            );
-            if (res.raised > 0) ticketBlip();
+            refresh();
+            if (res.raised === 0) {
+              const none =
+                focus === 'helpdesk'
+                  ? res.stage === 'operating'
+                    ? 'Every staff computer already has an open support ticket — work those first.'
+                    : 'Help-desk tickets need staff with computers. Onboard some people first.'
+                  : res.note ?? 'Nothing new to raise — work the open queue first.';
+              showToast(none, { kind: 'info' });
+            }
           })
           .catch(() => showToast('Could not generate work.', { kind: 'error' }))
           .finally(() => {
-            button.removeAttribute('disabled');
-            button.style.opacity = '1';
-            button.style.pointerEvents = 'auto';
-            button.textContent = original;
+            if (!released) busy(false);
           });
       };
       const genBtn = btn('🤖 Generate Work', 'var(--accent)', () => generate(genBtn, 'all'));

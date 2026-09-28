@@ -14,8 +14,12 @@
  * tests/ollamaConfig.test.ts rather than trusted.
  */
 
-/** Where Ollama listens by default. */
-export const OLLAMA_HOST = 'http://localhost:11434';
+/**
+ * Where Ollama listens by default. 127.0.0.1 rather than "localhost": on some
+ * Windows machines localhost resolves to ::1 first, where Ollama is not
+ * listening, and the retry can outlast a short availability timeout.
+ */
+export const OLLAMA_HOST = 'http://127.0.0.1:11434';
 
 /**
  * The model the tutor and the ticket generator ask for.
@@ -34,18 +38,126 @@ export const OLLAMA_PULL_COMMAND = `ollama pull ${OLLAMA_MODEL}`;
 export const OLLAMA_TAGS_URL = `${OLLAMA_HOST}/api/tags`;
 export const OLLAMA_GENERATE_URL = `${OLLAMA_HOST}/api/generate`;
 
+// ---------------------------------------------------------------------------
+// Transport
+// ---------------------------------------------------------------------------
+
+type OllamaBridge = (
+  req: { path: string; method?: string; body?: string },
+  onEvent: (kind: string, data?: unknown) => void,
+) => () => void;
+
+function ollamaBridge(): OllamaBridge | null {
+  const e = (globalThis as { electron?: { ollamaRequest?: OllamaBridge } }).electron;
+  return typeof e?.ollamaRequest === 'function' ? e.ollamaRequest : null;
+}
+
 /**
- * Whether a local Ollama is answering right now.
+ * fetch() for the local Ollama. Use it for every Ollama call.
  *
- * Asked fresh every time rather than cached: the learner may start it while
- * the workstation is already open, and a cached "no" would tell them their
- * install did not work when it did.
+ * In the desktop app the page is loaded from file:, so a plain fetch carries
+ * "Origin: null", which Ollama refuses with 403 unless OLLAMA_ORIGINS was set
+ * on that computer. The main process makes the request instead (no origin,
+ * always accepted) and streams it back; this rebuilds an ordinary streaming
+ * Response, so callers cannot tell the difference. In a browser build it is
+ * plain fetch, looked up at call time so tests can stub it.
  */
-export async function ollamaAvailable(timeoutMs = 1200): Promise<boolean> {
+export const ollamaFetch: typeof fetch = (input, init) =>
+  transport(input, init).then((res) => {
+    if (res.ok) noteAnswer();
+    return res;
+  });
+
+const transport: typeof fetch = (input, init) => {
+  const bridge = ollamaBridge();
+  if (!bridge) return globalThis.fetch(input, init);
+  const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const url = new URL(raw, OLLAMA_HOST);
+  const signal = init?.signal ?? undefined;
+  return new Promise<Response>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const encoder = new TextEncoder();
+    let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+    let headed = false;
+    let finished = false;
+    const fail = (err: Error): void => {
+      if (finished) return;
+      finished = true;
+      if (!headed) reject(err);
+      else {
+        try { controller?.error(err); } catch { /* already closed */ }
+      }
+    };
+    const body = new ReadableStream<Uint8Array>({
+      start(c) { controller = c; },
+      cancel() { finished = true; abort(); },
+    });
+    const abort = bridge(
+      { path: url.pathname + url.search, method: init?.method ?? 'GET', body: typeof init?.body === 'string' ? init.body : undefined },
+      (kind, data) => {
+        if (kind === 'head') {
+          headed = true;
+          const h = data as { status: number; statusText: string };
+          resolve(new Response(body, { status: h.status, statusText: h.statusText }));
+        } else if (kind === 'data') {
+          if (!finished) controller?.enqueue(encoder.encode(String(data)));
+        } else if (kind === 'end') {
+          if (!finished) { finished = true; controller?.close(); }
+        } else if (kind === 'error') {
+          fail(new TypeError(String(data ?? 'Ollama request failed')));
+        }
+      },
+    );
+    signal?.addEventListener('abort', () => { abort(); fail(new DOMException('Aborted', 'AbortError')); }, { once: true });
+  });
+};
+
+// ---------------------------------------------------------------------------
+// Busy is not offline
+// ---------------------------------------------------------------------------
+
+/**
+ * While Ollama is loading a model or writing an answer, even its model list
+ * can take several seconds (measured: 1.6-9 s on a CPU-only machine). The
+ * checks used to give up after 1.2 s, so the app declared Ollama "not
+ * reachable" exactly when it was working hardest -- more often on slower
+ * computers, which is why it worked on some and not on others.
+ *
+ * So a recent answer counts. Only a "yes" is remembered: a "no" is always
+ * asked again, so starting Ollama with the app open is noticed at once.
+ */
+const RECENT_MS = 3 * 60_000;
+let lastAnswerAt = 0;
+let lastModels: string[] | null = null;
+
+function noteAnswer(): void {
+  lastAnswerAt = Date.now();
+}
+
+/** Whether Ollama answered anything in the last few minutes. */
+export function ollamaRecentlyAnswered(now = Date.now()): boolean {
+  return lastAnswerAt > 0 && now - lastAnswerAt < RECENT_MS;
+}
+
+/** Forget what Ollama last said. For tests, which must not see each other's Ollama. */
+export function forgetOllamaState(): void {
+  lastAnswerAt = 0;
+  lastModels = null;
+}
+
+/**
+ * Whether a local Ollama is answering. A recent answer counts (see above);
+ * otherwise it is asked, with enough time for a busy Ollama to reply.
+ */
+export async function ollamaAvailable(timeoutMs = 4000): Promise<boolean> {
+  if (ollamaRecentlyAnswered()) return true;
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
-    const res = await fetch(OLLAMA_TAGS_URL, { signal: ctl.signal });
+    const res = await ollamaFetch(OLLAMA_TAGS_URL, { signal: ctl.signal });
     clearTimeout(timer);
     return res.ok;
   } catch {
@@ -77,7 +189,7 @@ export async function ollamaStream(
   onText: (text: string) => void,
   opts: { idleMs?: number; totalMs?: number; fetchImpl?: typeof fetch } = {},
 ): Promise<string | null> {
-  const fetchImpl = opts.fetchImpl ?? fetch;
+  const fetchImpl = opts.fetchImpl ?? ollamaFetch;
   const ctl = new AbortController();
   let idle = setTimeout(() => ctl.abort(), opts.idleMs ?? 180_000);
   const total = setTimeout(() => ctl.abort(), opts.totalMs ?? 900_000);
@@ -170,19 +282,25 @@ export function setOllamaModel(name: string | null): void {
  * Null when Ollama is not answering — distinct from "answering, but empty".
  */
 export async function listOllamaModels(
-  timeoutMs = 1500,
-  fetchImpl: typeof fetch = fetch,
+  timeoutMs = 4000,
+  fetchImpl: typeof fetch = ollamaFetch,
 ): Promise<string[] | null> {
+  // Only the real transport shares memory; an injected fetch (a test) is on its own.
+  const shared = fetchImpl === ollamaFetch;
+  const fallback = (): string[] | null => (shared && ollamaRecentlyAnswered() ? lastModels : null);
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     const res = await fetchImpl(OLLAMA_TAGS_URL, { signal: ctl.signal });
     clearTimeout(timer);
-    if (!res.ok) return null;
+    if (!res.ok) return fallback();
     const data = (await res.json()) as { models?: { name?: string }[] };
-    return (data.models ?? []).map((m) => m.name ?? '').filter(Boolean);
+    const models = (data.models ?? []).map((m) => m.name ?? '').filter(Boolean);
+    if (shared) lastModels = models;
+    return models;
   } catch {
-    return null;
+    // Busy rather than gone: the list it gave a moment ago is still true.
+    return fallback();
   }
 }
 

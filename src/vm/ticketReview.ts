@@ -24,7 +24,9 @@ import type {
   MockCloudTenant,
 } from '@/services';
 import type { CloudVendor } from '@/services';
-import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable } from '@/config/ollama';
+import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable, ollamaFetch } from '@/config/ollama';
+import { DEPARTMENTS } from '@/config';
+import { DEPARTMENT_OUS_ID, JOB_ROLES, ROLE_GROUPS_ID, waveFor } from './orgPlan';
 
 export interface ReviewDeps {
   dir: MockDirectory;
@@ -171,6 +173,73 @@ function estateChecks(ticket: Ticket, deps: ReviewDeps): ReviewCheck[] | null {
             'Every group is in the default container. A group is a directory object like an ' +
               'account, and it is placed where delegation reaches it.',
           ),
+    ];
+  }
+
+  return growthChecks(ticket, dir);
+}
+
+/**
+ * The organisation-growth tickets (vm/orgPlan.ts): department OUs, job-role
+ * groups and hiring waves. Graded against the same plan that raised them, so
+ * a wave is only done when every person it names is really there.
+ */
+function growthChecks(ticket: Ticket, dir: MockDirectory): ReviewCheck[] | null {
+  const list = (xs: string[]): string => (xs.length > 6 ? `${xs.slice(0, 6).join(', ')} and ${xs.length - 6} more` : xs.join(', '));
+
+  if (ticket.scenarioId === DEPARTMENT_OUS_ID) {
+    const missing = DEPARTMENTS.filter((d) => !dir.getOuByName(d));
+    const flat = DEPARTMENTS.filter((d) => {
+      const ou = dir.getOuByName(d);
+      return ou && ou.parentId === undefined;
+    });
+    return [
+      missing.length === 0
+        ? pass('Every department has an OU', `${DEPARTMENTS.length} department OUs exist.`)
+        : fail('Every department has an OU', `Missing: ${list(missing)}.`),
+      missing.length === 0 && flat.length === 0
+        ? pass('Inside the structure', 'Each department OU sits beneath another OU.')
+        : fail('Inside the structure', flat.length ? `At the top level instead of inside Users: ${list(flat)}.` : 'Create the missing OUs first.'),
+    ];
+  }
+
+  if (ticket.scenarioId === ROLE_GROUPS_ID) {
+    const missing = JOB_ROLES.filter((r) => !dir.getGroupByName(r.group)).map((r) => r.group);
+    const unplaced = JOB_ROLES.filter((r) => {
+      const g = dir.getGroupByName(r.group);
+      return g && g.ouId === undefined;
+    }).map((r) => r.group);
+    return [
+      missing.length === 0
+        ? pass('Every job role has a group', `${JOB_ROLES.length} job-role groups exist.`)
+        : fail('Every job role has a group', `Missing: ${list(missing)}.`),
+      missing.length === 0 && unplaced.length === 0
+        ? pass('They live in the Groups OU', 'Every job-role group is placed in an OU.')
+        : fail('They live in the Groups OU', unplaced.length ? `In the default container: ${list(unplaced)}.` : 'Create the missing groups first.'),
+    ];
+  }
+
+  const wave = waveFor(ticket.scenarioId);
+  if (wave) {
+    const users = wave.hires.map((h) => ({ h, u: dir.getUserByUsername(h.logon) }));
+    const missing = users.filter((x) => !x.u).map((x) => x.h.logon);
+    const present = users.filter((x): x is { h: (typeof users)[number]['h']; u: NonNullable<(typeof users)[number]['u']> } => Boolean(x.u));
+    const notActive = present.filter((x) => x.u.status !== 'active').map((x) => `${x.h.logon} (${x.u.status})`);
+    const wrongOu = present.filter((x) => (x.u.ouId ? dir.getOu(x.u.ouId)?.name : undefined) !== wave.department).map((x) => x.h.logon);
+    const noRole = present.filter((x) => !dir.getGroupByName(x.h.role.group)?.memberIds.includes(x.u.id)).map((x) => `${x.h.logon} → ${x.h.role.group}`);
+    return [
+      missing.length === 0
+        ? pass('Every starter has an account', `${wave.hires.length} accounts exist.`)
+        : fail('Every starter has an account', `Not created yet: ${list(missing)}.`),
+      present.length > 0 && notActive.length === 0
+        ? pass('Accounts are usable', 'Every account that exists is enabled.')
+        : fail('Accounts are usable', notActive.length ? `Not active: ${list(notActive)}.` : 'No account exists yet.'),
+      present.length > 0 && wrongOu.length === 0
+        ? pass(`Placed in the ${wave.department} OU`, `Every account sits in ${wave.department}.`)
+        : fail(`Placed in the ${wave.department} OU`, wrongOu.length ? `Elsewhere: ${list(wrongOu)}.` : 'No account exists yet.'),
+      present.length > 0 && noRole.length === 0
+        ? pass('In their job-role group', 'Every starter is a member of their job-role group.')
+        : fail('In their job-role group', noRole.length ? `Missing membership: ${list(noRole)}.` : 'No account exists yet.'),
     ];
   }
 
@@ -568,7 +637,7 @@ async function writeSummary(
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 60_000);
-    const res = await fetch(OLLAMA_GENERATE_URL, {
+    const res = await ollamaFetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

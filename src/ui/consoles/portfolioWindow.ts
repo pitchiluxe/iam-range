@@ -147,13 +147,21 @@ export function renderPortfolioWindow(body: HTMLElement): void {
   const verify = el('span', 'pf-verify off', 'Verifying local Ollama…');
   head.append(verify);
 
+  // Checked again on click, and every 20 s while offline, so starting Ollama
+  // after opening the window is noticed without reopening it.
+  let verifyTimer: ReturnType<typeof setTimeout> | null = null;
+  verify.style.cursor = 'pointer';
+  verify.addEventListener('click', () => { verify.textContent = 'Verifying local Ollama…'; void refreshVerify(); });
   async function refreshVerify(): Promise<void> {
+    if (verifyTimer) clearTimeout(verifyTimer);
     const st = await portfolioStatus();
+    // Stops once the window is closed (the banner is no longer in the page).
+    if (!st.online) verifyTimer = setTimeout(() => { if (verify.isConnected) void refreshVerify(); }, 20_000);
     verify.className = `pf-verify ${st.online ? 'on' : 'off'}`;
     verify.textContent = st.online ? `${st.message} (${st.model})` : st.message;
     verify.title = st.online
       ? 'The instructor uses this local model. Change it in Settings → AI Assistant.'
-      : 'Start Ollama (see omari-lab/11-IAM-PORTFOLIO/Test-OllamaInstructor.ps1). The checker still works offline.';
+      : 'Start Ollama (see omari-lab/11-IAM-PORTFOLIO/Test-OllamaInstructor.ps1), then click here to check again. The checker still works offline.';
   }
 
   // --- Left: projects -------------------------------------------------------

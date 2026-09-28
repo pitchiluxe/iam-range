@@ -111,7 +111,7 @@ function setupAutoUpdater() {
  * origin rules, so a negative answer here means Ollama really is not running
  * rather than that the page was not allowed to ask.
  */
-function probeOllama(timeoutMs = 1200) {
+function probeOllama(timeoutMs = 4000) {
   return new Promise((resolve) => {
     let settled = false;
     const done = (value) => {
@@ -188,6 +188,70 @@ ipcMain.handle('update:install', () => {
 });
 
 ipcMain.handle('ollama:probe', () => probeOllama());
+
+/**
+ * The renderer's requests to Ollama, made from here.
+ *
+ * The packaged app loads its page from file:, so every fetch it makes carries
+ * "Origin: null" -- and Ollama answers 403 to that origin unless the learner
+ * happened to set OLLAMA_ORIGINS. That is why the instructor, the tutor and
+ * "Generate work" worked on some computers and not on others, and always in
+ * development (http://localhost is allowed). The main process sends no origin
+ * at all, so Ollama accepts it everywhere, with no setting to change.
+ *
+ * Only paths under /api/ on the local Ollama are reachable, only the
+ * workstation's own window may ask, and the reply streams back chunk by chunk
+ * so long answers still appear word by word.
+ */
+const OLLAMA_BASE = new URL(OLLAMA_URL).origin;
+const ollamaRequests = new Map();
+
+ipcMain.on('ollama:request', async (event, id, req) => {
+  const key = `${event.sender.id}:${id}`;
+  const send = (kind, data) => {
+    if (!event.sender.isDestroyed()) event.sender.send('ollama:event', id, kind, data);
+  };
+  let url;
+  try {
+    url = new URL(String(req?.path ?? ''), OLLAMA_BASE);
+  } catch {
+    url = null;
+  }
+  if (!mainWindow || event.sender !== mainWindow.webContents || !url || url.origin !== OLLAMA_BASE || !url.pathname.startsWith('/api/')) {
+    send('error', 'Request refused');
+    return;
+  }
+  const ctl = new AbortController();
+  ollamaRequests.set(key, ctl);
+  try {
+    const post = req.method === 'POST';
+    const res = await net.fetch(url.href, {
+      method: post ? 'POST' : 'GET',
+      body: post && typeof req.body === 'string' ? req.body : undefined,
+      headers: post ? { 'Content-Type': 'application/json' } : undefined,
+      signal: ctl.signal,
+    });
+    send('head', { status: res.status, statusText: res.statusText });
+    if (res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        send('data', decoder.decode(value, { stream: true }));
+      }
+    }
+    send('end');
+  } catch (err) {
+    send('error', String(err?.message ?? err));
+  } finally {
+    ollamaRequests.delete(key);
+  }
+});
+
+ipcMain.on('ollama:abort', (event, id) => {
+  ollamaRequests.get(`${event.sender.id}:${id}`)?.abort();
+});
 
 /**
  * Capture the workstation's own window, for the annotation tool.

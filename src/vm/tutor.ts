@@ -27,8 +27,7 @@ import { searchArticles, type Article } from '@/config/knowledgeBase';
 import {
   OLLAMA_GENERATE_URL,
   getOllamaModel,
-  ollamaAvailable,
-} from '@/config/ollama';
+  ollamaAvailable, ollamaFetch } from '@/config/ollama';
 import type { EnvironmentState } from './environmentStage';
 import { describeForPrompt, STAGE_SUMMARY } from './environmentStage';
 
@@ -308,7 +307,7 @@ export async function askTutor(
     // Generous, because the first question after boot also pays for loading
     // the model. Subsequent ones are much faster thanks to keep_alive below.
     const t = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 120_000);
-    const res = await fetch(OLLAMA_GENERATE_URL, {
+    const res = await ollamaFetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -21,7 +21,7 @@
  * answer. This button's only job is to generate a theme; if it can't, the
  * caller needs to know why, not receive a quiet no-op.
  */
-import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable } from '@/config/ollama';
+import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable, ollamaFetch } from '@/config/ollama';
 import type { Theme } from '@/ui/themes';
 
 const TOKEN_KEYS = [
@@ -158,7 +158,7 @@ export async function generateThemeWithAI(
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 60_000);
-    const res = await fetch(OLLAMA_GENERATE_URL, {
+    const res = await ollamaFetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

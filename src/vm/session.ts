@@ -26,6 +26,7 @@ import type { CloudVendor } from '@/services';
 import { applyBaseline } from '@/seed/baseline';
 import { generateTicketsSync } from './ticketGenerator';
 import { auditStore, ticketStore } from '@/stores';
+import { clearSavedSession, loadSavedSession, restoreSession, serializeSession, writeSavedSession } from './sessionStore';
 
 /**
  * The service surface the VM windows expect.
@@ -63,8 +64,54 @@ export class VmSession implements VmServices {
   cloud!: Record<CloudVendor, MockCloudTenant>;
   endpoints!: MockEndpoints;
 
-  constructor() {
-    this.boot();
+  /** Whether this session resumed saved work rather than starting fresh. */
+  resumed = false;
+  private lastSaved = '';
+  private persistent = false;
+
+  /**
+   * @param saved a saved environment to resume, or null to start fresh.
+   * @param opts.autosave keep saving while the page is open. Only the app's
+   *   own session does; a session built in a test must never write over, or
+   *   resume from, anyone else's work.
+   */
+  constructor(saved: string | null = null, opts: { autosave?: boolean } = {}) {
+    this.persistent = opts.autosave ?? false;
+    this.boot(saved);
+    if (this.persistent) this.startAutosave();
+  }
+
+  /**
+   * Save the environment now, if it changed since the last save.
+   * Returns false when nothing could be written (no storage, or a value that
+   * cannot be saved) — the lab keeps working either way.
+   */
+  save(): boolean {
+    let json: string;
+    try {
+      json = serializeSession(this);
+    } catch {
+      return false;
+    }
+    // savedAt changes every call; compare what matters.
+    const body = json.replace(/"savedAt":\d+,/, '');
+    if (body === this.lastSaved) return true;
+    const ok = writeSavedSession(json);
+    if (ok) this.lastSaved = body;
+    return ok;
+  }
+
+  /**
+   * Save every few seconds while the VM is open, and on the way out, so a
+   * learner who closes the window mid-ticket resumes exactly there.
+   */
+  private startAutosave(): void {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    setInterval(() => this.save(), 5000);
+    const flush = (): void => { this.save(); };
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   }
 
   /**
@@ -74,7 +121,7 @@ export class VmSession implements VmServices {
    * would otherwise keep writing to the old instance. The windows in this app
    * resolve services per action for exactly that reason.
    */
-  boot(): void {
+  boot(saved: string | null = null): void {
     this.audit = new MockAuditLog();
     this.dir = new MockDirectory(this.audit);
     this.idp = new MockIdP(this.audit, this.dir);
@@ -98,6 +145,17 @@ export class VmSession implements VmServices {
       }
     }
 
+    this.resumed = saved !== null && restoreSession(this, saved);
+    if (!this.resumed) this.seedFresh();
+
+    // Mirror seeded state into the stores the windows subscribe to.
+    auditStore.getState().reset();
+    for (const e of this.audit.events) auditStore.getState().append(e);
+    ticketStore.getState().setTickets(this.tickets.list());
+  }
+
+  /** A brand-new domain: the baseline, and the first work it is ready for. */
+  private seedFresh(): void {
     applyBaseline(this.dir, this.idp, this.apps);
     // Raise the work this domain is ready for. On a fresh install that is
     // building the OU structure, not onboarding — there is nowhere to put
@@ -110,18 +168,16 @@ export class VmSession implements VmServices {
       cloud: this.cloud,
       endpoints: this.endpoints,
     });
-
-    // Mirror seeded state into the stores the windows subscribe to.
-    auditStore.getState().reset();
-    for (const e of this.audit.events) auditStore.getState().append(e);
-    ticketStore.getState().setTickets(this.tickets.list());
   }
 
-  /** Discard all work and re-seed — the sandbox's "start over". */
+  /** Discard all work and re-seed — the sandbox's "start over". The save goes too. */
   reset(): void {
-    this.boot();
+    if (this.persistent) clearSavedSession();
+    this.lastSaved = '';
+    this.boot(null);
+    if (this.persistent) this.save();
   }
 }
 
 /** The single session this app runs on. */
-export const session = new VmSession();
+export const session = new VmSession(loadSavedSession(), { autosave: true });

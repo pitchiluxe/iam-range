@@ -4,12 +4,15 @@
 // Exposes:
 //   window.electron.invoke(cmd, ...args)  — call a main-process handler
 //   window.electron.onUpdateStatus(fn)    — subscribe to auto-update changes
+//   window.electron.ollamaRequest(req, fn) — talk to the local Ollama via the main process
 //   window.env                            — static values, read once at startup
 //
 // Node and Electron APIs are never handed to the renderer. Everything crosses
 // as a named channel the main process chose to answer.
 
 const { contextBridge, ipcRenderer } = require('electron');
+
+let ollamaSeq = 0;
 
 contextBridge.exposeInMainWorld('electron', {
   /**
@@ -43,6 +46,30 @@ contextBridge.exposeInMainWorld('electron', {
    * @param {(sources: {id:string,name:string,kind:string,thumbnail:string|null}[]) => void} fn
    * @returns {() => void} unsubscribe
    */
+  /**
+   * One request to the local Ollama, made by the main process (see
+   * 'ollama:request' in main.cjs for why). onEvent receives
+   * ('head', {status, statusText}), then ('data', text) per chunk, then
+   * ('end') -- or ('error', message) at any point.
+   * @param {{path: string, method?: string, body?: string}} req
+   * @param {(kind: string, data?: unknown) => void} onEvent
+   * @returns {() => void} abort
+   */
+  ollamaRequest: (req, onEvent) => {
+    const id = ++ollamaSeq;
+    const handler = (_event, msgId, kind, data) => {
+      if (msgId !== id) return;
+      if (kind === 'end' || kind === 'error') ipcRenderer.removeListener('ollama:event', handler);
+      onEvent(kind, data);
+    };
+    ipcRenderer.on('ollama:event', handler);
+    ipcRenderer.send('ollama:request', id, { path: req.path, method: req.method, body: req.body });
+    return () => {
+      ipcRenderer.removeListener('ollama:event', handler);
+      ipcRenderer.send('ollama:abort', id);
+    };
+  },
+
   onPickCaptureSource: (fn) => {
     const handler = (_event, sources) => fn(sources);
     ipcRenderer.on('capture:pick-source', handler);

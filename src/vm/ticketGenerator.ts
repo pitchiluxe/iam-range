@@ -32,9 +32,18 @@ import { ENDPOINT_TICKET_KINDS } from '@/domain';
 import type { EndpointIssueId, EndpointTicketKind, Ticket, TicketKind, UserId } from '@/domain';
 import { ENDPOINT_ISSUES, ENDPOINT_ISSUE_IDS } from './endpointIssues';
 import { COMPANY, DEPARTMENTS, GROUP_NAMES } from '@/config';
-import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable } from '@/config/ollama';
+import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable, ollamaFetch } from '@/config/ollama';
 import { readEnvironment, type EnvironmentState, type Stage } from './environmentStage';
 import { describeForPrompt } from './environmentStage';
+import {
+  DEPARTMENT_OUS_ID,
+  HIRE_PREFIX,
+  JOB_ROLES,
+  ROLE_GROUPS_ID,
+  hiringWave,
+  slug,
+  waveFor,
+} from './orgPlan';
 
 export interface GeneratorDeps {
   dir: MockDirectory;
@@ -120,7 +129,7 @@ function structuredStageScenarios(env: EnvironmentState): Scenario[] {
       priority: 'high',
       subject: 'Define the security group model',
       body:
-        'The OU structure is in place. Create the security groups access will be granted ' +
+        'Build on the OU structure: create the security groups access will be granted ' +
         `through: ${missing.join(', ')}. Grant access to groups rather than to people — ` +
         'otherwise every leaver becomes an archaeology exercise across individual accounts.',
     },
@@ -483,6 +492,97 @@ function endpointScenarios(env: EnvironmentState, deps: GeneratorDeps): Scenario
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Growth: the organisation after the foundation
+// ---------------------------------------------------------------------------
+
+/**
+ * The work that turns a six-person domain into a company: a department OU for
+ * every team, a group for every job, then a hiring wave per department. Each
+ * is raised once, in this order, and graded by the reviewer against the same
+ * plan (vm/orgPlan.ts).
+ */
+function growthScenarios(): Scenario[] {
+  const out: Scenario[] = [
+    {
+      id: DEPARTMENT_OUS_ID,
+      kind: 'onboarding',
+      priority: 'normal',
+      subject: 'Give every department its own OU',
+      body:
+        'The company is growing and every team is about to hire. Create one OU per department ' +
+        `inside the Users OU: ${DEPARTMENTS.join(', ')}. Each team's accounts will live in its own ` +
+        'OU, so policy and delegated administration can be aimed at one department at a time ' +
+        '(for example: New-ADOrganizationalUnit -Name Finance -Path Users).',
+    },
+    {
+      id: ROLE_GROUPS_ID,
+      kind: 'access-request',
+      priority: 'normal',
+      subject: 'Create a group for every job role',
+      body:
+        'Access will be granted by job, not by person (role-based access control). Create these ' +
+        'job-role groups in the Groups OU: ' +
+        JOB_ROLES.map((r) => `${r.group} (${r.department}: ${r.title})`).join('; ') +
+        '. Every new starter is added to exactly one of them, and access is granted to the ' +
+        'role group rather than to the account.',
+    },
+  ];
+  for (const d of DEPARTMENTS) {
+    const hires = hiringWave(d);
+    const lead = hires[0]!;
+    out.push({
+      id: `${HIRE_PREFIX}${slug(d)}`,
+      kind: 'onboarding',
+      priority: 'normal',
+      subject: `New starters: ${d} team (${hires.length} people)`,
+      body:
+        `${d} is hiring ${hires.length} people. Create each account in the ${d} OU and add it to ` +
+        'its job-role group: ' +
+        hires.map((h) => `${h.logon} (${h.first} ${h.last}, ${h.role.title}, ${h.role.group})`).join('; ') +
+        `. ${lead.first} ${lead.last} (${lead.logon}) leads the team: set them as manager of the others. ` +
+        "Set each account's department and title, give each a temporary password that must be " +
+        'changed at first sign-in, then sign in as one of them to prove the account works.',
+    });
+  }
+  return out;
+}
+
+/** Growth tickets open at once. Enough to plan ahead, not a wall of work. */
+const MAX_OPEN_GROWTH = 3;
+
+/** Scenario ids ever raised, open or resolved: growth work is raised once. */
+function everRaised(deps: GeneratorDeps): Set<string> {
+  return new Set(deps.tickets.list().map((t) => t.scenarioId).filter((x): x is string => Boolean(x)));
+}
+
+/**
+ * The next work to plan ahead, beyond what the current stage asks for.
+ *
+ * Before this, a new domain offered exactly one ticket ("build the OU
+ * structure") and every further "Generate work" answered "nothing new" until
+ * it was done, so the queue looked broken after the first ticket. The queue
+ * now plans ahead: the group model once the OU ticket exists, then the growth
+ * program, a few tickets at a time.
+ */
+function planAhead(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
+  const raised = everRaised(deps);
+  const out: Scenario[] = [];
+  if (raised.has('build-ou-structure') && !raised.has('define-group-model') && env.stage === 'bare') {
+    out.push(...structuredStageScenarios(env));
+  }
+  const foundationRaised = raised.has('define-group-model') || env.stage === 'ready-to-staff' || env.stage === 'operating';
+  if (!foundationRaised) return out;
+  const program = growthScenarios();
+  const programIds = new Set(program.map((p) => p.id));
+  const openGrowth = deps.tickets
+    .list()
+    .filter((t) => t.status !== 'resolved' && t.scenarioId !== undefined && programIds.has(t.scenarioId)).length;
+  const room = Math.max(0, MAX_OPEN_GROWTH - openGrowth);
+  out.push(...program.filter((p) => !raised.has(p.id)).slice(0, room));
+  return out;
+}
+
 export type GenerateFocus = 'all' | 'helpdesk';
 
 function scenariosFor(env: EnvironmentState, deps: GeneratorDeps, focus: GenerateFocus = 'all'): Scenario[] {
@@ -552,11 +652,19 @@ function namesToKeep(scenario: Scenario, env: EnvironmentState): string[] {
   // The computer a help-desk ticket sends the learner to. Lose it and the
   // ticket no longer says where to connect.
   if (scenario.endpoint) keep.add(scenario.endpoint.computer);
+  // The people a hiring wave asks for do not exist yet, and they are exactly
+  // who the reviewer will look for.
+  for (const h of waveFor(scenario.id)?.hires ?? []) keep.add(h.logon);
 
   return [...keep];
 }
 
-async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Scenario> {
+/** One rewrite may take this long before the built-in wording is used. */
+const REWRITE_TIMEOUT_MS = 45_000;
+/** All rewrites in one "Generate work" together; the rest keep built-in wording. */
+const REWRITE_BUDGET_MS = 120_000;
+
+async function embellish(scenario: Scenario, env: EnvironmentState, timeoutMs = REWRITE_TIMEOUT_MS): Promise<Scenario> {
   // Help-desk tickets are written by the person with the problem. They say
   // what they see; they do not know the cause, and a ticket that names it
   // would hand the learner the diagnosis the lab exists to practise.
@@ -577,7 +685,7 @@ async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Sce
         'Reply with JSON only: {"subject": "...", "body": "..."}',
       ].join('\n')
     : null;
-  if (prompt) return rewrite(scenario, env, prompt);
+  if (prompt) return rewrite(scenario, env, prompt, timeoutMs);
 
   return rewrite(scenario, env, [
     'You are writing an IT service desk ticket for an identity administration lab.',
@@ -596,16 +704,26 @@ async function embellish(scenario: Scenario, env: EnvironmentState): Promise<Sce
     'three sentences.',
     '',
     'Reply with JSON only: {"subject": "...", "body": "..."}',
-  ].join('\n'));
+  ].join('\n'), timeoutMs);
 }
 
 /** Send one rewrite prompt, and keep the original unless the answer is safe to use. */
-async function rewrite(scenario: Scenario, env: EnvironmentState, prompt: string): Promise<Scenario> {
+async function rewrite(
+  scenario: Scenario,
+  env: EnvironmentState,
+  prompt: string,
+  timeoutMs = REWRITE_TIMEOUT_MS,
+): Promise<Scenario> {
+  // A CPU-only model can take minutes, or never answer. Without a limit the
+  // "Generate work" button spun forever on those computers and raised nothing.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const res = await fetch(OLLAMA_GENERATE_URL, {
+    const res = await ollamaFetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: getOllamaModel(), prompt, stream: false, format: 'json' }),
+      body: JSON.stringify({ model: getOllamaModel(), prompt, stream: false, format: 'json', keep_alive: '30m' }),
+      signal: ctl.signal,
     });
     if (!res.ok) return scenario;
     const data = (await res.json()) as { response?: string };
@@ -625,6 +743,8 @@ async function rewrite(scenario: Scenario, env: EnvironmentState, prompt: string
     return { ...scenario, subject: parsed.subject, body: parsed.body };
   } catch {
     return scenario;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -659,10 +779,10 @@ function notAlreadyOpen(scenarios: Scenario[], deps: GeneratorDeps): Scenario[] 
   return scenarios.filter((s) => !openIds.has(s.id) && !legacySubjects.has(s.subject));
 }
 
-/** Raise one scenario. Returns whether a ticket was actually created. */
-function raise(deps: GeneratorDeps, scenario: Scenario): boolean {
+/** Raise one scenario. Returns the ticket, or null when none was created. */
+function raise(deps: GeneratorDeps, scenario: Scenario): Ticket | null {
   const admin = deps.dir.getUserByUsername('admin') ?? deps.dir.listUsers()[0];
-  if (!admin) return false;
+  if (!admin) return null;
 
   // Make the scenario true before describing it.
   const related = scenario.prepare?.(deps) ?? [];
@@ -671,8 +791,8 @@ function raise(deps: GeneratorDeps, scenario: Scenario): boolean {
     // A help-desk ticket whose fault could not be staged would send the
     // learner to a computer with nothing wrong with it. Raise nothing.
     const userId = related[0];
-    if (!userId) return false;
-    deps.tickets.create({
+    if (!userId) return null;
+    return deps.tickets.create({
       kind: scenario.kind as EndpointTicketKind,
       scenarioId: scenario.id,
       requesterId: userId,
@@ -682,7 +802,6 @@ function raise(deps: GeneratorDeps, scenario: Scenario): boolean {
       relatedUserIds: related,
       payload: { userId, computer: scenario.endpoint.computer, issue: scenario.endpoint.issue },
     });
-    return true;
   }
 
   // Payload shape varies per ticket kind and the union is wide; the ticket
@@ -691,7 +810,7 @@ function raise(deps: GeneratorDeps, scenario: Scenario): boolean {
     ? { userId: related[0], method: 'helpdesk' as const }
     : { proposedGroupIds: [], proposedRoleIds: [], startDate: Date.now() };
 
-  deps.tickets.create({
+  return deps.tickets.create({
     kind: scenario.kind as 'onboarding',
     // So the reviewer can tell an estate ticket from one about a person.
     scenarioId: scenario.id,
@@ -703,13 +822,14 @@ function raise(deps: GeneratorDeps, scenario: Scenario): boolean {
     // The payload union is per-kind and wide; the queue only reads userId.
     payload: payload as { proposedGroupIds: never[]; proposedRoleIds: never[]; startDate: number },
   });
-  return true;
 }
 
 export interface GenerateResult {
   raised: number;
   usedOllama: boolean;
   stage: Stage;
+  /** When nothing was raised: why, in words for the learner. */
+  note?: string;
 }
 
 /**
@@ -720,25 +840,65 @@ export interface GenerateResult {
  */
 export async function generateTickets(
   deps: GeneratorDeps,
-  options: { useOllama?: boolean; max?: number; focus?: GenerateFocus } = {},
+  options: {
+    useOllama?: boolean;
+    max?: number;
+    focus?: GenerateFocus;
+    /** Called as soon as the tickets are in the queue, before any rewording. */
+    onRaised?: (count: number) => void;
+    /** Called each time Ollama rewords one of them. */
+    onReworded?: () => void;
+  } = {},
 ): Promise<GenerateResult> {
   const env = readEnvironment(deps.dir);
-  const candidates = notAlreadyOpen(scenariosFor(env, deps, options.focus), deps).slice(
-    0,
-    options.max ?? 4,
-  );
+  const max = options.max ?? 4;
+  const current = notAlreadyOpen(scenariosFor(env, deps, options.focus), deps);
+  const ahead = options.focus === 'helpdesk' ? [] : notAlreadyOpen(planAhead(env, deps), deps);
+  const seen = new Set<string>();
+  // The next build tickets go first: once the domain is operating there is
+  // always routine work to raise, and it used to take every slot, so the
+  // company stopped growing at its first handful of people.
+  const candidates = [...ahead.slice(0, 2), ...current, ...ahead.slice(2)]
+    .filter((s) => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    })
+    .slice(0, max);
 
   if (candidates.length === 0) {
-    return { raised: 0, usedOllama: false, stage: env.stage };
+    const note =
+      options.focus === 'helpdesk'
+        ? undefined
+        : 'Nothing new to raise yet: resolve some of the open build tickets and the next ones will follow.';
+    return { raised: 0, usedOllama: false, stage: env.stage, note };
   }
 
-  const useOllama = (options.useOllama ?? true) && (await ollamaAvailable());
-  const finalScenarios = useOllama
-    ? await Promise.all(candidates.map((s) => embellish(s, env)))
-    : candidates;
+  // The tickets are raised straight away, in the built-in wording, so the
+  // queue fills the moment the button is pressed on every computer. Waiting
+  // for a CPU-only model first meant a minute or more of "Generating…", and
+  // nothing at all if it never answered.
+  const raisedPairs = candidates
+    .map((s) => ({ s, t: raise(deps, s) }))
+    .filter((x): x is { s: Scenario; t: Ticket } => x.t !== null);
+  options.onRaised?.(raisedPairs.length);
 
-  const raised = finalScenarios.filter((s) => raise(deps, s)).length;
-  return { raised, usedOllama: useOllama, stage: env.stage };
+  // Then Ollama rewrites them, one at a time (a local model answers one
+  // request at a time anyway), each within a time limit. A ticket somebody
+  // has already started on keeps the words they read.
+  let wrote = false;
+  const useOllama = raisedPairs.length > 0 && (options.useOllama ?? true) && (await ollamaAvailable());
+  const deadline = Date.now() + REWRITE_BUDGET_MS;
+  for (const { s, t } of useOllama ? raisedPairs : []) {
+    const left = deadline - Date.now();
+    if (left < 5000) break;
+    const out = await embellish(s, env, Math.min(REWRITE_TIMEOUT_MS, left));
+    if (out !== s && deps.tickets.reword(t.id, out.subject, out.body)) {
+      wrote = true;
+      options.onReworded?.();
+    }
+  }
+  return { raised: raisedPairs.length, usedOllama: wrote, stage: env.stage };
 }
 
 /** Synchronous variant for boot, where waiting on a network call would delay
@@ -746,5 +906,5 @@ export async function generateTickets(
 export function generateTicketsSync(deps: GeneratorDeps, max = 3): number {
   const env = readEnvironment(deps.dir);
   const candidates = notAlreadyOpen(scenariosFor(env, deps), deps).slice(0, max);
-  return candidates.filter((s) => raise(deps, s)).length;
+  return candidates.filter((s) => raise(deps, s) !== null).length;
 }

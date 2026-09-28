@@ -28,7 +28,7 @@
  * the model only writes prose.
  */
 import { MANUAL } from '@/config/manual';
-import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable } from '@/config/ollama';
+import { OLLAMA_GENERATE_URL, getOllamaModel, ollamaAvailable, ollamaFetch } from '@/config/ollama';
 
 export interface DrillQuestion {
   /** The lesson this came from. */
@@ -182,7 +182,7 @@ export async function critiqueAnswer(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(OLLAMA_GENERATE_URL, {
+    const res = await ollamaFetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
