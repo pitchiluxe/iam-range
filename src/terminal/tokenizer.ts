@@ -23,10 +23,28 @@ function splitRespectingQuotes(line: string): string[] {
   let buf = '';
   let quote: '"' | "'" | null = null;
 
+  // Depth inside a { script block } or ( sub-expression ). Such a group is one
+  // argument, spaces, quotes and all: `Where-Object { $_.Name -like "j*" }`
+  // must reach the stage whole, not split into six pieces.
+  let depth = 0;
+
   for (const ch of line) {
     if (quote) {
       if (ch === quote) quote = null;
-      else buf += ch;
+      // Inside a group the quotes belong to the group's text; outside they only delimit.
+      if (depth > 0 || ch !== '"' && ch !== "'" || quote !== null) buf += ch;
+      continue;
+    }
+    if (depth > 0) {
+      if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === '{' || ch === '(') depth++;
+      else if (ch === '}' || ch === ')') depth--;
+      buf += ch;
+      continue;
+    }
+    if ((ch === '{' || ch === '(') && buf === '') {
+      depth = 1;
+      buf += ch;
       continue;
     }
     if (ch === '"' || ch === "'") {

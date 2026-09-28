@@ -969,14 +969,26 @@ export const CAPABILITIES: readonly IamCapability[] = [
       // Named to match New-ADGroup -Path, and resolved the same way
       // New-ADOrganizationalUnit resolves its parent.
       { name: 'Path', label: 'Target OU', kind: 'text', required: false },
+      { name: 'GroupScope', label: 'Scope (Global, DomainLocal, Universal)', kind: 'text', required: false },
+      { name: 'GroupCategory', label: 'Category (Security, Distribution)', kind: 'text', required: false },
     ],
     resolvesTicketKinds: [],
     run(ctx, a) {
       if (!a.Name) return err('Name is required.');
-      if (ctx.dir.getGroupByName(a.Name)) return err(`Group '${a.Name}' already exists.`);
+      if (ctx.dir.getGroupByName(a.Name)) return err(`The specified group already exists: '${a.Name}'.`);
       const target = a.Path ? ctx.dir.getOuByName(a.Path) : undefined;
       if (a.Path && !target) return err(`Cannot find an OU named '${a.Path}'.`);
+      const scope = ({ global: 'Global', domainlocal: 'DomainLocal', universal: 'Universal' } as const)[
+        (a.GroupScope ?? 'Global').toLowerCase() as 'global'
+      ];
+      if (!scope) return err(`GroupScope must be Global, DomainLocal or Universal (got '${a.GroupScope}').`);
+      const category = ({ security: 'Security', distribution: 'Distribution' } as const)[
+        (a.GroupCategory ?? 'Security').toLowerCase() as 'security'
+      ];
+      if (!category) return err(`GroupCategory must be Security or Distribution (got '${a.GroupCategory}').`);
       const g = ctx.dir.createGroup(a.Name, a.Description ?? '', ctx.actor, target?.id);
+      g.scope = scope;
+      g.category = category;
       return ok(`Created group ${g.name}${target ? ` in ${target.name}` : ''}.`);
     },
   },

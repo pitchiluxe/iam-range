@@ -11,6 +11,8 @@ import { CAPABILITY_BY_CMDLET, CAPABILITIES, type CapabilityContext } from '@/se
 import { tokenize } from './tokenizer';
 import { formatTable } from './format';
 import { FS, INTRINSIC_HELP, runIntrinsic } from './shellIntrinsics';
+import { adaptAdWrite, normaliseArgs, runAdRead, unwrapSecureStrings } from './adCmdlets';
+import { objectStage, renderRows, type Row, type View } from './objectPipeline';
 
 export interface DispatchResult {
   ok: boolean;
@@ -20,6 +22,9 @@ export interface DispatchResult {
   /** Set when a capability actually mutated state, so the caller can record
    *  evidence and refresh other windows. */
   ranCapabilityId?: string;
+  /** Objects, when the command returned objects; `output` is then their default rendering. */
+  rows?: Row[];
+  view?: View;
 }
 
 const ok = (output: string, extra: Partial<DispatchResult> = {}): DispatchResult => ({
@@ -130,6 +135,8 @@ function splitPipeline(line: string): string[] {
   const parts: string[] = [];
   let buf = '';
   let quote: string | null = null;
+  // A | inside { } or ( ) belongs to that block, not to this pipeline.
+  let depth = 0;
   for (const ch of line) {
     if (quote) {
       if (ch === quote) quote = null;
@@ -141,7 +148,9 @@ function splitPipeline(line: string): string[] {
       buf += ch;
       continue;
     }
-    if (ch === '|') {
+    if (ch === '{' || ch === '(') depth++;
+    if ((ch === '}' || ch === ')') && depth > 0) depth--;
+    if (ch === '|' && depth === 0) {
       parts.push(buf);
       buf = '';
       continue;
@@ -163,6 +172,7 @@ function splitStatements(line: string): { text: string; stopOnFailure: boolean }
   let buf = '';
   let quote: string | null = null;
   let stopOnFailure = false;
+  let depth = 0;
 
   for (let i = 0; i < line.length; i += 1) {
     const ch = line[i]!;
@@ -176,13 +186,15 @@ function splitStatements(line: string): { text: string; stopOnFailure: boolean }
       buf += ch;
       continue;
     }
-    if (ch === ';') {
+    if (ch === '{' || ch === '(') depth++;
+    if ((ch === '}' || ch === ')') && depth > 0) depth--;
+    if (ch === ';' && depth === 0) {
       out.push({ text: buf.trim(), stopOnFailure });
       buf = '';
       stopOnFailure = false;
       continue;
     }
-    if (ch === '&' && line[i + 1] === '&') {
+    if (ch === '&' && line[i + 1] === '&' && depth === 0) {
       out.push({ text: buf.trim(), stopOnFailure });
       buf = '';
       stopOnFailure = true;
@@ -230,7 +242,35 @@ export function dispatch(
     if (result.ranCapabilityId) ranCapabilityId = result.ranCapabilityId;
 
     let text = result.output;
-    for (const stage of stages) text = applyFilter(text, stage);
+    let rows = result.rows;
+    let view = result.view ?? 'auto';
+    for (const stage of stages) {
+      // Objects flow through object stages; the first stage that only
+      // understands text gets the formatted output, as in PowerShell.
+      if (rows) {
+        const r = objectStage(rows, stage);
+        if (r.kind === 'rows') {
+          rows = r.rows;
+          view = r.view ?? view;
+          continue;
+        }
+        if (r.kind === 'error') {
+          lastOk = false;
+          text = r.error;
+          rows = undefined;
+          break;
+        }
+        const current = rows;
+        rows = undefined;
+        if (r.kind === 'text') {
+          text = r.text;
+          continue;
+        }
+        text = renderRows(current, view);
+      }
+      text = applyFilter(text, stage);
+    }
+    if (rows) text = renderRows(rows, view);
     if (text) outputs.push(text);
   }
 
@@ -242,12 +282,15 @@ export function dispatch(
   };
 }
 
+/** Cmdlets of the real ActiveDirectory module that change the directory. */
+const ADMODULE_WRITE = /^(New|Set|Remove|Add|Move|Disable|Enable|Unlock|Rename)-AD/i;
+
 function dispatchOne(
   line: string,
   ctx: CapabilityContext,
   shell: ShellState = createShellState(),
 ): DispatchResult {
-  const { cmdlet, args, positional } = tokenize(line);
+  const { cmdlet, args, positional } = tokenize(unwrapSecureStrings(line));
   if (!cmdlet) return ok('');
 
   const name = cmdlet.toLowerCase();
@@ -269,6 +312,13 @@ function dispatchOne(
     return target ? helpForOne(target) : ok(helpForAll());
   }
 
+  // The ActiveDirectory module's read cmdlets answer with real AD objects.
+  const read = runAdRead(name, args, positional, ctx);
+  if (read) {
+    if (!read.ok) return fail(read.error);
+    return ok(renderRows(read.rows, 'list'), { rows: read.rows, view: 'list' });
+  }
+
   const cap = CAPABILITY_BY_CMDLET[name];
   if (!cap) {
     return fail(
@@ -277,19 +327,40 @@ function dispatchOne(
     );
   }
 
-  // Check required parameters before running, so the learner is told which one
-  // is missing instead of getting a generic failure from inside the capability.
-  const missing = cap.params.filter((p) => p.required && !args[p.name]?.trim());
-  if (missing.length > 0) {
-    return fail(
-      `${cap.cmdlet}: missing required parameter -${missing[0]!.name} (${missing[0]!.label}).`,
-    );
+  // Real syntax first: -Path as a distinguished name, the positional name,
+  // -Identity <group> -Members a,b, parameter names in any case.
+  const adapted = adaptAdWrite(name, args, positional, ctx);
+  if (adapted && !adapted.ok) return fail(adapted.error);
+  const runs = adapted ? adapted.runs : [normaliseArgs(args, cap.params.map((p) => p.name))];
+
+  const messages: string[] = [];
+  let lastRows: Record<string, unknown>[] | undefined;
+  for (const run of runs) {
+    // Check required parameters before running, so the learner is told which one
+    // is missing instead of getting a generic failure from inside the capability.
+    const missing = cap.params.filter((p) => p.required && !run[p.name]?.trim());
+    if (missing.length > 0) {
+      return fail(
+        `${cap.cmdlet}: missing required parameter -${missing[0]!.name} (${missing[0]!.label}).`,
+      );
+    }
+    const res = cap.run(ctx, run);
+    if (!res.ok) return fail(res.error);
+    messages.push(res.message);
+    lastRows = res.rows;
   }
 
-  const res = cap.run(ctx, args);
-  if (!res.ok) return fail(res.error);
+  // The ActiveDirectory module's write cmdlets print nothing when they
+  // succeed, and so does this terminal: the result is in the directory.
+  if (!cap.readOnly && ADMODULE_WRITE.test(cap.cmdlet)) {
+    return ok('', { ranCapabilityId: cap.id });
+  }
 
-  const table = res.rows && res.rows.length > 0 ? formatTable(res.rows) : '';
-  const output = table ? `${table}\n\n${res.message}` : res.message;
-  return ok(output, cap.readOnly ? {} : { ranCapabilityId: cap.id });
+  const table = lastRows && lastRows.length > 0 ? formatTable(lastRows) : '';
+  const message = messages.join('\n');
+  const output = table ? `${table}\n\n${message}` : message;
+  return ok(output, {
+    ...(cap.readOnly ? {} : { ranCapabilityId: cap.id }),
+    ...(lastRows && lastRows.length > 0 ? { rows: lastRows, view: 'table' as View } : {}),
+  });
 }

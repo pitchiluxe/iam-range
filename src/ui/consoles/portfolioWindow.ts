@@ -152,6 +152,89 @@ export function renderPortfolioWindow(body: HTMLElement): void {
   let verifyTimer: ReturnType<typeof setTimeout> | null = null;
   verify.style.cursor = 'pointer';
   verify.addEventListener('click', () => { verify.textContent = 'Verifying local Ollama…'; void refreshVerify(); });
+  // --- Reset ------------------------------------------------------------------
+  // Start a project (or the whole portfolio) over: conversation, submission,
+  // deliverable ticks and VM results. DC01 itself is reset separately, from its
+  // Portfolio-Base snapshot, because that powers the VM off and back on.
+  const resetWrap = el('div');
+  resetWrap.style.cssText = 'position:relative;';
+  const resetBtn = el('button', 'pf-btn', 'Reset ▾');
+  resetBtn.title = 'Start a project, or the whole portfolio, over';
+  const resetMenu = el('div');
+  resetMenu.style.cssText =
+    'display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:20;min-width:250px;background:var(--panel);' +
+    'border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.35);padding:4px;';
+  const menuItem = (label: string, detail: string, action: () => void | Promise<void>): HTMLElement => {
+    const b = el('button');
+    b.style.cssText =
+      'display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--fg);padding:7px 10px;' +
+      'border-radius:4px;cursor:pointer;font:inherit;';
+    b.append(el('div', undefined, label));
+    const small = el('div', undefined, detail);
+    small.style.cssText = 'font-size:11px;color:var(--muted);margin-top:2px;';
+    b.append(small);
+    b.addEventListener('mouseenter', () => { b.style.background = 'var(--border)'; });
+    b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; });
+    b.addEventListener('click', () => {
+      resetMenu.style.display = 'none';
+      void action();
+    });
+    return b;
+  };
+  const repaintAll = (): void => {
+    persist();
+    paintList();
+    paintWork();
+    repaintLog();
+  };
+  resetMenu.append(
+    menuItem('Reset this project', 'Clears its chat, submission, ticked deliverables and VM results.', () => {
+      if (busy || !window.confirm(`Reset Project ${project.number}: ${project.title}? Its conversation, submission, ticked deliverables and VM results are cleared.`)) return;
+      delete store.sessions[project.id];
+      if (store.vmResults) delete store.vmResults[project.id];
+      repaintAll();
+      bubble('sys', `Project ${project.number} was reset. Start again from the brief above.`);
+    }),
+    menuItem('Reset all projects', 'Every project back to the start.', () => {
+      if (busy || !window.confirm('Reset ALL ten projects? Every conversation, submission, ticked deliverable and VM result is cleared.')) return;
+      store.sessions = {};
+      store.vmResults = {};
+      repaintAll();
+      bubble('sys', 'The whole portfolio was reset.');
+    }),
+    menuItem('Reset DC01 to Portfolio-Base', 'Undo everything done inside the VM (desktop app, about a minute).', async () => {
+      const b = bridge();
+      if (!b) {
+        bubble('sys', 'Resetting DC01 needs the IAM Range desktop app: a browser tab cannot talk to VirtualBox.');
+        return;
+      }
+      if (!window.confirm('Restore DC01 to the Portfolio-Base snapshot? Everything done inside the VM since "Prepare DC01" is undone. DC01 is powered off and back on.')) return;
+      const note = bubble('sys', 'Restoring DC01 to Portfolio-Base… (about a minute)');
+      try {
+        const r = (await b.invoke('adlab:vm-restore', 'Portfolio-Base')) as { ok: boolean; restored?: string[]; error?: string };
+        if (!r?.ok || !r.restored?.includes('DC01')) {
+          note.textContent = `Could not restore DC01: ${r?.error ?? 'DC01 has no Portfolio-Base snapshot yet. Run "Prepare DC01" first.'}`;
+          return;
+        }
+        store.vmResults = {};
+        persist();
+        paintWork();
+        note.textContent = 'DC01 is back at Portfolio-Base. Set a project up again to continue.';
+      } catch (e) {
+        note.textContent = `Could not restore DC01: ${String(e)}`;
+      }
+    }),
+  );
+  resetBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    resetMenu.style.display = resetMenu.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', (e) => {
+    if (!resetWrap.contains(e.target as Node)) resetMenu.style.display = 'none';
+  });
+  resetWrap.append(resetBtn, resetMenu);
+  head.append(resetWrap);
+
   async function refreshVerify(): Promise<void> {
     if (verifyTimer) clearTimeout(verifyTimer);
     const st = await portfolioStatus();

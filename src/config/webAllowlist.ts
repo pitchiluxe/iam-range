@@ -99,7 +99,11 @@ export function normalizeUrl(raw: string): string {
 }
 
 /** Curated starting points, shown as the browser's bookmarks bar. */
+/** Where the lab's browser opens, and where its Home button goes. */
+export const BROWSER_HOME = 'https://erickomari.vercel.app/';
+
 export const IAM_BOOKMARKS: ReadonlyArray<{ label: string; url: string }> = [
+  { label: 'Home', url: BROWSER_HOME },
   { label: 'Microsoft Entra ID', url: 'https://learn.microsoft.com/entra/identity/' },
   { label: 'OAuth 2.0', url: 'https://oauth.net/2/' },
   { label: 'OpenID Connect', url: 'https://openid.net/developers/how-connect-works/' },

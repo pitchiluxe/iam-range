@@ -267,7 +267,7 @@ function operatingScenarios(env: EnvironmentState, deps: GeneratorDeps): Scenari
           `${mfaUser.displayName} (${mfaTarget}) needs a working second factor. ` +
           'Clear any existing MFA registration with Reset-MfaRegistration, then enrol a new ' +
           'factor with Set-MfaMethod (totp, fido2, sms, or push). Confirm the new method is ' +
-          'active with Get-UserDetails before closing the ticket.',
+          `active with Get-ADUser -Identity ${mfaTarget} -Properties MfaMethod before closing the ticket.`,
         prepare: () => [mfaUser.id],
       });
     }

@@ -139,6 +139,11 @@ function parse(segment: string): Parsed {
         continue;
       }
       const key = t.slice(1).toLowerCase();
+      // `-Filter*` typed without the space: the intent is `-Filter *`.
+      if (key.length > 1 && key.endsWith('*')) {
+        params[key.slice(0, -1)] = '*';
+        continue;
+      }
       const next = tokens[i + 1];
       if (!SWITCHES.has(key) && next !== undefined && !/^-[A-Za-z]/.test(next)) {
         params[key] = normaliseValue(next);
@@ -226,7 +231,7 @@ function props(pairs: [string, string | number | boolean | null][]): string {
   const w = Math.max(...pairs.map(([k]) => k.length));
   return (
     '\n' +
-    pairs.map(([k, v]) => `${k.padEnd(w)} : ${v === null ? '' : String(v)}`).join('\n') +
+    pairs.map(([k, v]) => `${k.padEnd(w)} : ${v === null ? '' : typeof v === 'boolean' ? (v ? 'True' : 'False') : String(v)}`).join('\n') +
     '\n'
   );
 }
@@ -1283,10 +1288,8 @@ function getUser(c: Ctx): HandlerResult {
       return re.test(v);
     });
   }
-  const extra = requested.filter((r) => r !== '*' && USER_PROPS[Object.keys(USER_PROPS).find((k) => k.toLowerCase() === r.toLowerCase()) ?? '']);
-  const headers = ['Name', 'SamAccountName', 'Enabled', ...extra.map((e) => Object.keys(USER_PROPS).find((k) => k.toLowerCase() === e.toLowerCase())!), 'DistinguishedName'];
-  const rows = users.map((u) => [u.name, u.sam, String(u.enabled), ...extra.map((e) => String(USER_PROPS[Object.keys(USER_PROPS).find((k) => k.toLowerCase() === e.toLowerCase())!]!(u) ?? '')), `CN=${u.name},${u.parent}`]);
-  return { ...ok(table(headers, rows)), objects: users.map((u) => u.sam) };
+  // One property list per account, as Get-ADUser prints on a real domain controller.
+  return { ...ok(users.map((u) => userCard(c.s, u, requested)).join('')), objects: users.map((u) => u.sam) };
 }
 
 function targetUsers(c: Ctx, cmd: string): AdUser[] | CommandResult {
@@ -1380,15 +1383,22 @@ function newGroup(c: Ctx): HandlerResult {
   if (g) return g;
   const name = arg(c, 'Name') ?? c.p.positional[0];
   if (!name) return fail('New-ADGroup : Cannot process command because of one or more missing mandatory parameters: Name.');
-  const scopeRaw = (arg(c, 'GroupScope') ?? '').toLowerCase();
-  const scope = scopeRaw === 'global' ? 'Global' : scopeRaw === 'domainlocal' ? 'DomainLocal' : scopeRaw === 'universal' ? 'Universal' : null;
-  if (!scope) return fail('New-ADGroup : Cannot process command because of one or more missing mandatory parameters: GroupScope (Global, DomainLocal or Universal).');
+  // -GroupScope is the second positional parameter: New-ADGroup grp-x Global.
+  const scopeGiven = arg(c, 'GroupScope') ?? (arg(c, 'Name') ? c.p.positional[0] : c.p.positional[1]);
+  const scopeRaw = (scopeGiven ?? '').toLowerCase();
+  const scope = scopeRaw === 'global' || scopeRaw === '1' ? 'Global' : scopeRaw === 'domainlocal' || scopeRaw === '0' ? 'DomainLocal' : scopeRaw === 'universal' || scopeRaw === '2' ? 'Universal' : null;
+  if (!scope && scopeGiven) {
+    return fail(`New-ADGroup : Cannot bind parameter 'GroupScope'. Cannot convert value "${scopeGiven}" to type "Microsoft.ActiveDirectory.Management.ADGroupScope". Specify one of the following enumerator names and try again: DomainLocal, Global, Universal`);
+  }
+  // PowerShell prompts for a missing -GroupScope; this terminal cannot prompt,
+  // so it takes the answer nearly everyone gives: Global.
+  const finalScope = scope ?? 'Global';
   const catRaw = (arg(c, 'GroupCategory') ?? 'Security').toLowerCase();
   const category = catRaw === 'distribution' ? 'Distribution' : 'Security';
   if (findGroup(c.s, name) || findUser(c.s, name)) return fail('New-ADGroup : The specified group already exists.');
   const path = arg(c, 'Path') ?? `CN=Users,${DOMAIN_DN_FOR(c.s)}`;
   if (!containerExists(c.s, path)) return fail(`New-ADGroup : Directory object not found: '${path}'.`);
-  c.s.ad.groups.push({ name, parent: path, scope, category, members: [], builtin: false });
+  c.s.ad.groups.push({ name, parent: path, scope: finalScope, category, members: [], builtin: false });
   return ok('');
 }
 
@@ -1398,8 +1408,14 @@ function getGroup(c: Ctx): HandlerResult {
   const id = identityArg(c);
   const groups: AdGroup[] = id ? [findGroup(c.s, id)].filter((x): x is AdGroup => !!x) : c.s.ad.groups;
   if (id && groups.length === 0) return objectNotFound(id);
-  return ok(table(['Name', 'GroupScope', 'GroupCategory', 'DistinguishedName'],
-    groups.map((x) => [x.name, x.scope, x.category, dnOf(x)])));
+  if (!id && !arg(c, 'Filter') && !arg(c, 'LDAPFilter')) {
+    return fail('Get-ADGroup : Cannot process command because of one or more missing mandatory parameters: Filter.');
+  }
+  // One property list per group, as on a real domain controller.
+  return ok(groups.map((x) => props([
+    ['DistinguishedName', dnOf(x)], ['GroupCategory', x.category], ['GroupScope', x.scope],
+    ['Name', x.name], ['ObjectClass', 'group'], ['SamAccountName', x.name],
+  ])).join(''));
 }
 
 function groupMember(c: Ctx, add: boolean): HandlerResult {

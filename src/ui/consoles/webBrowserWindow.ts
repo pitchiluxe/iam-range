@@ -11,7 +11,7 @@
  *   - Web build: <iframe>. Most real sites send X-Frame-Options/CSP and will
  *     refuse to render; the UI says so plainly instead of showing a blank box.
  */
-import { IAM_BOOKMARKS, isAllowedUrl, normalizeUrl } from '@/config/webAllowlist';
+import { BROWSER_HOME, IAM_BOOKMARKS, isAllowedUrl, normalizeUrl } from '@/config/webAllowlist';
 import { openExternal } from '@/util/externalLink';
 
 /** True when running inside the Electron shell, where <webview> is available. */
@@ -53,6 +53,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   const backBtn = mkNav('←', 'Back');
   const fwdBtn = mkNav('→', 'Forward');
   const reloadBtn = mkNav('↺', 'Reload');
+  const homeBtn = mkNav('⌂', 'Home');
 
   const urlBar = document.createElement('input');
   urlBar.type = 'text';
@@ -81,7 +82,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
     if (isAllowedUrl(target)) window.open(target, '_blank', 'noopener,noreferrer');
   });
 
-  chrome.append(backBtn, fwdBtn, reloadBtn, urlBar, goBtn, openExt);
+  chrome.append(backBtn, fwdBtn, reloadBtn, homeBtn, urlBar, goBtn, openExt);
   root.appendChild(chrome);
 
   // ── Bookmarks ─────────────────────────────────────────────────────────────
@@ -262,15 +263,11 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   fwdBtn.addEventListener('click', () => {
     if (historyPos < history.length - 1) go(history[++historyPos]!, false);
   });
+  homeBtn.addEventListener('click', () => go(BROWSER_HOME));
   reloadBtn.addEventListener('click', () => {
     if (historyPos >= 0) go(history[historyPos]!, false);
   });
 
-  showMessage(
-    'Browser',
-    'Type a question to search, or an address to go straight there. Reachable ' +
-      'hosts are limited to search engines and identity documentation, so the ' +
-      'lab stays a lab — but you can look things up the way you would at work.',
-    'info',
-  );
+  // The browser opens on its home page, like any browser does.
+  go(BROWSER_HOME);
 }

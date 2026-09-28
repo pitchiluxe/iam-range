@@ -7,6 +7,7 @@
  */
 import { appsForDepartment } from '@/config/desktopProfiles';
 import type { VmServices } from '@/vm/session';
+import { onProfilePicturesChanged, paintAvatar } from '@/util/profilePictures';
 import { renderActiveDirectoryWindow } from './consoles/activeDirectoryWindow';
 import { renderTicketConsole } from './consoles/ticketConsole';
 import { renderSecOpsDashboard } from './consoles/secOpsDashboard';
@@ -1501,9 +1502,7 @@ export function createDesktopOverlay(): DesktopOverlay {
     header.style.cssText = 'padding: 16px 20px 12px; border-bottom: 1px solid var(--border);';
     header.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;">
-          <span style="font-size:20px;color:var(--panel);font-weight:bold;">${PRODUCT.name.charAt(0)}</span>
-        </div>
+        <div id="sm-avatar" style="width:36px;height:36px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;color:var(--panel);font-weight:bold;overflow:hidden;"></div>
         <div>
           <div style="font-size:14px;font-weight:600;color:var(--fg);">${PRODUCT.name}</div>
           <div id="sm-subtitle" style="font-size:11px;color:var(--muted);">Workstation</div>
@@ -1511,6 +1510,19 @@ export function createDesktopOverlay(): DesktopOverlay {
       </div>
     `;
     sm.appendChild(header);
+
+    // The signed-in person, beside the product name: their photo if they have
+    // set one in Settings, their initial if not. Repainted when it changes.
+    const paintStartAvatar = (): void => {
+      const user = currentServices?.dir.getUserByUsername(currentUser);
+      const display = user?.displayName ?? currentUser;
+      // The header tile and the account pill at the bottom of the menu.
+      for (const av of sm.querySelectorAll<HTMLElement>('#sm-avatar, #sm-user-avatar')) {
+        paintAvatar(av, currentUser, display);
+        av.title = `Signed in as ${display}`;
+      }
+    };
+    onProfilePicturesChanged(paintStartAvatar);
 
     const pinnedLabel = document.createElement('div');
     pinnedLabel.style.cssText = `
@@ -1536,6 +1548,7 @@ export function createDesktopOverlay(): DesktopOverlay {
       const subtitle = header.querySelector('#sm-subtitle');
       if (subtitle)
         subtitle.textContent = `${currentDepartment} Workstation`;
+      paintStartAvatar();
       appsGrid.innerHTML = '';
       const apps = DESKTOP_APPS.filter((a) => appAllowed(a.id));
       for (const app of apps) {
@@ -1578,7 +1591,7 @@ export function createDesktopOverlay(): DesktopOverlay {
       transition: background 0.15s; color: var(--fg); flex-shrink: 0;
     `;
     userPill.innerHTML = `
-      <div style="width:28px;height:28px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--panel);font-weight:700;flex-shrink:0;">A</div>
+      <div id="sm-user-avatar" style="width:28px;height:28px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--panel);font-weight:700;flex-shrink:0;overflow:hidden;">A</div>
       <div style="text-align:left;">
         <div style="font-size:12px;font-weight:500;">${VM_HOST.email}</div>
         <div style="font-size:10px;color:var(--muted);">IAM Administrator</div>

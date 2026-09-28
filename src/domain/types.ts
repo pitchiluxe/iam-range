@@ -198,6 +198,10 @@ export interface Group {
    *  Group Policy attach. This was missing, so every group was pinned to
    *  CN=Users no matter which container was selected when it was created. */
   ouId?: OuId;
+  /** New-ADGroup -GroupScope. Absent means Global, AD's usual choice. */
+  scope?: 'DomainLocal' | 'Global' | 'Universal';
+  /** New-ADGroup -GroupCategory. Absent means Security. */
+  category?: 'Security' | 'Distribution';
 }
 
 export interface RoleRecord {

@@ -209,11 +209,12 @@ export function renderSettingsWindow(
     account.style.cssText = 'display:flex;align-items:center;gap:10px;padding:6px 16px 14px;';
     const avatar = document.createElement('div');
     avatar.textContent = VM_HOST.user.slice(0, 1).toUpperCase();
-    if (accountUser) paintAvatar(avatar, accountUser.username, accountUser.displayName);
     avatar.style.cssText =
       'width:32px;height:32px;border-radius:50%;background:var(--accent);color:#06231d;' +
       'display:flex;align-items:center;justify-content:center;font-size:14px;' +
       'font-weight:700;flex-shrink:0;';
+    // After the styles: assigning cssText replaced the picture paintAvatar had set.
+    if (accountUser) paintAvatar(avatar, accountUser.username, accountUser.displayName);
     const who = document.createElement('div');
     who.style.cssText = 'min-width:0;';
     const whoName = document.createElement('div');

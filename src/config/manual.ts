@@ -72,9 +72,9 @@ export const MANUAL: readonly Chapter[] = [
           'look like before?" is the first question asked when something breaks.',
         steps: [
           { do: 'Open Active Directory Users and Computers and expand the domain.', app: 'active-directory' } as ManualStep,
-          { do: 'List the accounts that exist.', cmdlet: 'Get-ADUser', example: 'Get-ADUser' },
-          { do: 'List the organisational units.', cmdlet: 'Get-ADOrganizationalUnit', example: 'Get-ADOrganizationalUnit' },
-          { do: 'List the groups.', cmdlet: 'Get-ADGroup', example: 'Get-ADGroup' },
+          { do: 'List the accounts that exist.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Filter *' },
+          { do: 'List the organisational units.', cmdlet: 'Get-ADOrganizationalUnit', example: 'Get-ADOrganizationalUnit -Filter *' },
+          { do: 'List the groups.', cmdlet: 'Get-ADGroup', example: 'Get-ADGroup -Filter *' },
         ],
         verify:
           'One account — the built-in administrator — no organisational units and no groups. ' +
@@ -122,7 +122,7 @@ export const MANUAL: readonly Chapter[] = [
         steps: [
           { do: 'Create a group per role, not per request.', cmdlet: 'New-ADGroup', example: 'New-ADGroup -Name grp-helpdesk-tier1 -Description "Service desk tier 1"' },
           { do: 'Create the groups the other departments will need.', cmdlet: 'New-ADGroup' },
-          { do: 'Check what exists.', cmdlet: 'Get-ADGroup', example: 'Get-ADGroup' },
+          { do: 'Check what exists.', cmdlet: 'Get-ADGroup', example: 'Get-ADGroup -Filter *' },
         ],
         verify:
           'Get-ADGroup lists the groups, and each name says which job it corresponds to. If a ' +
@@ -1245,7 +1245,7 @@ export const MANUAL: readonly Chapter[] = [
           'MFA, device compliance, legacy-auth blocking and location policy.',
         steps: [
           { do: 'List the conditional access policies.', cmdlet: 'Get-ConditionalAccessPolicy' },
-          { do: 'Check MFA enrolment for a privileged user.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Filter admin' },
+          { do: 'Check MFA enrolment for a privileged user.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Identity admin -Properties MfaMethod' },
           { do: 'Read failed sign-in events for legacy clients.', cmdlet: 'Get-IamAuditLog', example: 'Get-IamAuditLog -Action signin.failure' },
         ],
         verify:

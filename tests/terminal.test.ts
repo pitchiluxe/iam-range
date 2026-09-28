@@ -110,7 +110,7 @@ describe('dispatch', () => {
   });
 
   it('runs a query and returns a table', () => {
-    const r = dispatch('Get-ADUser', ctx);
+    const r = dispatch('Get-ADUser -Filter *', ctx);
     expect(r.ok).toBe(true);
     expect(r.output).toContain('SamAccountName');
     expect(r.output).toContain('jane.doe');
@@ -133,8 +133,8 @@ describe('dispatch', () => {
   });
 
   it('matches cmdlets case-insensitively, as PowerShell does', () => {
-    expect(dispatch('get-aduser', ctx).ok).toBe(true);
-    expect(dispatch('GET-ADUSER', ctx).ok).toBe(true);
+    expect(dispatch('get-aduser -filter *', ctx).ok).toBe(true);
+    expect(dispatch('GET-ADUSER -FILTER *', ctx).ok).toBe(true);
   });
 
   it('reports an unknown cmdlet in PowerShell’s wording', () => {
@@ -447,7 +447,7 @@ describe('Windows shell built-ins', () => {
   });
 
   it('built-ins do not shadow IAM cmdlets', () => {
-    expect(dispatch('Get-ADUser', ctx).output).toContain('SamAccountName');
+    expect(dispatch('Get-ADUser -Filter *', ctx).output).toContain('SamAccountName');
   });
 
   it('Get-Help advertises both cmdlets and shell commands', () => {

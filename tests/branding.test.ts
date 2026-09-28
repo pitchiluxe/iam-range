@@ -57,7 +57,9 @@ const PUBLISHER_FILES = ['product.ts'];
  * what it replaced. Deleting that sentence to satisfy a lint rule would throw
  * away the reason the file exists.
  */
-const HISTORY_FILES = ['vmHost.ts', 'product.ts'];
+// webAllowlist.ts holds the browser's home page, the maintainer's own site
+// (erickomari.vercel.app): a URL, not a simulated account.
+const HISTORY_FILES = ['vmHost.ts', 'product.ts', 'webAllowlist.ts'];
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
