@@ -12,6 +12,7 @@
  * instructor explains and grades. Nothing here marks a project complete except
  * the learner ticking every deliverable.
  */
+import { openLabSetupGuide } from '@/ui/labSetupGuide';
 import { PORTFOLIO, projectById, type PortfolioProject } from '@/vm/portfolio/config';
 import { renderMarkdown } from '@/ui/markdown';
 import { gradeVmProject, isVmProject, type PortfolioFacts, type VmCheckResult } from '@/vm/portfolio/vmChecks';
@@ -233,7 +234,10 @@ export function renderPortfolioWindow(body: HTMLElement): void {
     if (!resetWrap.contains(e.target as Node)) resetMenu.style.display = 'none';
   });
   resetWrap.append(resetBtn, resetMenu);
-  head.append(resetWrap);
+  const guideBtn = el('button', 'pf-btn', '📘 Setup guide');
+  guideBtn.title = 'Download Windows Server and the Windows client, and build the real VMs';
+  guideBtn.addEventListener('click', () => openLabSetupGuide('portfolio'));
+  head.append(guideBtn, resetWrap);
 
   async function refreshVerify(): Promise<void> {
     if (verifyTimer) clearTimeout(verifyTimer);
@@ -477,6 +481,11 @@ export function renderPortfolioWindow(body: HTMLElement): void {
     const ol = el('ol');
     for (const t of project.vm.tasks) ol.appendChild(el('li', undefined, t));
     box.appendChild(ol);
+    const guideRow = el('p', 'pf-brief');
+    const guideLink = el('button', 'pf-btn', '📘 Need the VMs? Setup guide');
+    guideLink.addEventListener('click', () => openLabSetupGuide('portfolio'));
+    guideRow.append(guideLink);
+    box.appendChild(guideRow);
     const row = el('div', 'pf-row');
     const initBtn = el('button', 'pf-btn', '1. Prepare DC01 (once)');
     initBtn.title = 'Promotes DC01 to corp.technobiz.local if needed, builds the enterprise baseline and saves snapshot Portfolio-Base. Takes 10-30 minutes the first time.';

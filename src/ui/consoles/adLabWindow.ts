@@ -22,6 +22,7 @@
  * main process to read them (read-only), turns that into the same lab state,
  * and grades it with the same validation engine.
  */
+import { openLabSetupGuide } from '@/ui/labSetupGuide';
 import { AD_LABS, type AdLab, hostsForLab, labById, startingState } from '@/vm/adlab/labs';
 import { COMMAND_NAMES, runCommand } from '@/vm/adlab/commands';
 import { type HostName, type LabState, freshState } from '@/vm/adlab/state';
@@ -233,7 +234,10 @@ export function renderAdLabWindow(body: HTMLElement): void {
   resetBtn.title = 'Restart this lab or the whole series — any time';
   resetWrap.appendChild(resetBtn);
   const badge = el('span', 'adl-badge', 'Checking Ollama…');
-  head.append(labSel, envSel, modeSel, resetWrap, badge);
+  const guideBtn = el('button', 'adl-btn', '📘 Setup guide');
+  guideBtn.title = 'Download Windows Server and the Windows client, and build the real VMs';
+  guideBtn.addEventListener('click', () => openLabSetupGuide('adlab'));
+  head.append(labSel, envSel, modeSel, resetWrap, guideBtn, badge);
 
   /** The state being examined: the simulator's, or the last reading of the real VMs. */
   function activeState(): LabState {
@@ -816,6 +820,9 @@ export function renderAdLabWindow(body: HTMLElement): void {
     realPanel.appendChild(el('h2', undefined, 'Real VMs — VirtualBox'));
     realPanel.appendChild(el('p', undefined,
       'Do this lab inside the real machines, in their VirtualBox windows. Nothing is typed here: the consoles are the VMs.'));
+    const guide = el('button', 'adl-btn', '📘 First time? Download Windows Server + Windows 11 and build the VMs');
+    guide.addEventListener('click', () => openLabSetupGuide('adlab'));
+    realPanel.appendChild(guide);
     const cards = el('div', 'adl-vms');
     for (const key of HOSTS) {
       const st = vmStatus?.[key];

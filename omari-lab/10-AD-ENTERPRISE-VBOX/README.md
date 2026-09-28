@@ -12,6 +12,55 @@ This kit runs the same 11 labs as **IAM Range → AD Enterprise Lab**, but on tw
              CLIENT01 ADLab-CLIENT01 · Windows 11 Enterprise
 ```
 
+## Get the software (once)
+
+Both the AD Enterprise Lab's **Real VMs** mode and the IAM Portfolio's **real-VM track** run on the same two VMs, so you build them once. In the app, **📘 Setup guide** (in both windows) shows these steps with working buttons.
+
+![AD Enterprise Lab network: DC01 with an Internet NIC on VirtualBox NAT and an Internal NIC at 172.16.0.1 on TechnoBiz-LAN; CLIENT01 gets its address from DC01](../../docs/images/ad-lab-network.svg)
+
+1. **Install VirtualBox 7:** <https://www.virtualbox.org/wiki/Downloads> → *Windows hosts*. Keep the default install folder.
+2. **Download Windows Server 2022** (the domain controller, DC01): <https://www.microsoft.com/en-us/evalcenter/download-windows-server-2022>. Fill in the short form, then pick *English (United States) → ISO downloads → 64-bit edition*.
+3. **Download Windows 11 Enterprise** (the client, CLIENT01): <https://www.microsoft.com/en-us/evalcenter/download-windows-11-enterprise>. Pick *English (United States) → ISO – Enterprise download → 64-bit edition* (not LTSC).
+4. **Rename and place them exactly like this.** The kit finds them by name:
+
+   | Folder | `%USERPROFILE%\Downloads\ADLab-ISOs` |
+   |---|---|
+   | Server ISO | `WindowsServer2022-Eval.iso` |
+   | Client ISO | `Windows11-Enterprise-Eval.iso` |
+
+   ```powershell
+   New-Item -ItemType Directory -Force "$env:USERPROFILE\Downloads\ADLab-ISOs"
+   Move-Item "$env:USERPROFILE\Downloads\*SERVER_EVAL*.iso" "$env:USERPROFILE\Downloads\ADLab-ISOs\WindowsServer2022-Eval.iso"
+   Move-Item "$env:USERPROFILE\Downloads\*CLIENTENTERPRISEEVAL*.iso" "$env:USERPROFILE\Downloads\ADLab-ISOs\Windows11-Enterprise-Eval.iso"
+   ```
+
+   Stored them elsewhere? Edit the two `isos` paths in `adlab.vbox.json` instead.
+5. **Build:** run `01-New-AdLabVMs.ps1`, then `02-Initialize-AdLabGuests.ps1` (see [Scripts](#scripts)). In an installed app, this folder is `<install folder>\resources\omari-lab\10-AD-ENTERPRISE-VBOX`; the guide's **Open the kit folder** button takes you there.
+
+Both ISOs are free 180-day Microsoft evaluations, about 5 GB each, and need no product key.
+
+### Naming convention
+
+The kit and the labs create these names, and the checks, snapshots and scripts look for them. Keep them as they are.
+
+| Item | Name |
+|---|---|
+| VirtualBox group | `/TechnoBiz-ADLab` |
+| Domain controller VM | `ADLab-DC01` (computer name `DC01`) |
+| Client VM | `ADLab-CLIENT01` (computer name `CLIENT01`) |
+| DC01 adapters | `Internet` (NAT) and `Internal` (TechnoBiz-LAN) |
+| CLIENT01 adapter | `Ethernet` (TechnoBiz-LAN) |
+| Internal network | `TechnoBiz-LAN` · 172.16.0.0/24 |
+| DC01 internal address | 172.16.0.1 / 255.255.255.0 · DNS 127.0.0.1 · no gateway |
+| DHCP scope | `TechnoBiz LAN` · 172.16.0.100–172.16.0.200 · router and DNS 172.16.0.1 |
+| Domain | `corp.technobiz.local` (NetBIOS `CORP`) |
+| Sign-in | `Administrator`, then `CORP\Administrator` once the domain exists. The password is `adminPassword` in `adlab.vbox.json` |
+| AD Lab snapshots | `Lab01-Start`, `Lab02-Start`, … |
+| Portfolio snapshot | `Portfolio-Base` (made by **Prepare DC01**) |
+| Portfolio OUs | `Enterprise_Root` → `Tier0_Admins` · `Tier1_Systems` · `Tier2_Staff` (one OU per department) |
+| Portfolio groups | `GG-<Department>` (people) · `GS-<Resource>-RW/RO` (access) · `Role-*` / `Res-*` (Project 2) |
+| Portfolio work folders | `C:\IAM\<project>` · `C:\Shares\<Department>` |
+
 ## Before you build: turn off Windows' hypervisor
 
 If Windows' own hypervisor is running, VirtualBox has to run on top of it and becomes very slow. The VMs fall minutes behind real time, stop taking keyboard input, and live snapshots can crash VirtualBox's service. Turn these off, then restart the PC:

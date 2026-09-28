@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="1200" height="760" font-family="Segoe UI, system-ui, -apple-system, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">IAM Range AD Enterprise Lab: network and naming</title>
+  <desc id="d">ADLab-DC01 (Windows Server 2022) has an Internet NIC on VirtualBox NAT and an Internal NIC at 172.16.0.1 on the internal network TechnoBiz-LAN. It runs AD DS for corp.technobiz.local, DNS, DHCP (172.16.0.100 to 172.16.0.200) and RAS/NAT. ADLab-CLIENT01 (Windows 11 Enterprise) gets its address from DC01.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101826"/>
+      <stop offset="1" stop-color="#0b111c"/>
+    </linearGradient>
+    <linearGradient id="srv" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e2b40"/>
+      <stop offset="1" stop-color="#172234"/>
+    </linearGradient>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="760" rx="18" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="40" y="54" font-size="26" font-weight="700" fill="#f1f5f9">AD Enterprise Lab · network &amp; naming</text>
+  <text x="40" y="82" font-size="14" fill="#94a3b8">Two VirtualBox VMs. DC01 is the only way out to the internet; CLIENT01 lives on the internal lab network.</text>
+
+  <!-- Internet -->
+  <g filter="url(#sh)">
+    <path d="M118 190 a42 42 0 0 1 60-48 a52 52 0 0 1 96 6 a38 38 0 0 1 44 52 a36 36 0 0 1-22 64 h-168 a40 40 0 0 1-10-74z" fill="#1c2a3f" stroke="#38bdf8" stroke-width="2"/>
+  </g>
+  <text x="208" y="216" text-anchor="middle" font-size="18" font-weight="700" fill="#e0f2fe">INTERNET</text>
+  <text x="208" y="238" text-anchor="middle" font-size="12" fill="#7dd3fc">through VirtualBox NAT</text>
+
+  <!-- Internal switch -->
+  <g filter="url(#sh)">
+    <rect x="770" y="118" width="330" height="64" rx="12" fill="#1f1733" stroke="#a78bfa" stroke-width="2"/>
+  </g>
+  <text x="935" y="146" text-anchor="middle" font-size="16" font-weight="700" fill="#ede9fe">Internal network: TechnoBiz-LAN</text>
+  <text x="935" y="168" text-anchor="middle" font-size="12" fill="#c4b5fd">VirtualBox "Internal Network" · 172.16.0.0/24 · no route out</text>
+
+  <!-- Links -->
+  <path d="M208 272 C208 320 230 330 268 330" fill="none" stroke="#38bdf8" stroke-width="3" marker-end="url(#arr)"/>
+  <path d="M700 330 C760 330 800 260 850 184" fill="none" stroke="#a78bfa" stroke-width="3"/>
+  <path d="M1020 184 C1040 240 1040 280 1040 312" fill="none" stroke="#a78bfa" stroke-width="3" marker-end="url(#arr)"/>
+
+  <!-- DC01 -->
+  <g filter="url(#sh)">
+    <rect x="360" y="252" width="260" height="176" rx="14" fill="url(#srv)" stroke="#34d399" stroke-width="2"/>
+  </g>
+  <text x="490" y="286" text-anchor="middle" font-size="20" font-weight="800" fill="#ecfdf5">DC01</text>
+  <text x="490" y="308" text-anchor="middle" font-size="13" fill="#a7f3d0">VM name: ADLab-DC01</text>
+  <text x="490" y="330" text-anchor="middle" font-size="13" fill="#cbd5e1">Windows Server 2022 (Desktop Experience)</text>
+  <text x="490" y="352" text-anchor="middle" font-size="12" fill="#94a3b8">4 GB RAM · 2 vCPU · 60 GB</text>
+  <rect x="392" y="370" width="196" height="40" rx="8" fill="#0f1a2b" stroke="#1f3a52"/>
+  <text x="490" y="388" text-anchor="middle" font-size="12" fill="#e2e8f0">Domain Controller · DNS</text>
+  <text x="490" y="403" text-anchor="middle" font-size="12" fill="#e2e8f0">DHCP · RAS/NAT router</text>
+
+  <!-- DC01 NIC Internet -->
+  <g filter="url(#sh)"><rect x="228" y="304" width="132" height="54" rx="10" fill="#0c2a3a" stroke="#38bdf8" stroke-width="2"/></g>
+  <text x="294" y="326" text-anchor="middle" font-size="14" font-weight="700" fill="#e0f2fe">NIC "Internet"</text>
+  <text x="294" y="345" text-anchor="middle" font-size="11.5" fill="#7dd3fc">NAT · DHCP</text>
+  <text x="80" y="386" font-size="12.5" fill="#7dd3fc">DHCP from VirtualBox NAT</text>
+  <text x="80" y="404" font-size="12.5" fill="#7dd3fc">(e.g. 10.0.2.15). Nothing to set.</text>
+
+  <!-- DC01 NIC Internal -->
+  <g filter="url(#sh)"><rect x="620" y="304" width="140" height="54" rx="10" fill="#241a3d" stroke="#a78bfa" stroke-width="2"/></g>
+  <text x="690" y="326" text-anchor="middle" font-size="14" font-weight="700" fill="#ede9fe">NIC "Internal"</text>
+  <text x="690" y="345" text-anchor="middle" font-size="11.5" fill="#c4b5fd">static</text>
+  <g font-size="13" fill="#e2e8f0">
+    <text x="636" y="392"><tspan font-weight="700" fill="#c4b5fd">IP</tspan>        172.16.0.1</text>
+    <text x="636" y="412"><tspan font-weight="700" fill="#c4b5fd">Mask</tspan>    255.255.255.0</text>
+    <text x="636" y="432"><tspan font-weight="700" fill="#c4b5fd">Gateway</tspan> (empty)</text>
+    <text x="636" y="452"><tspan font-weight="700" fill="#c4b5fd">DNS</tspan>     127.0.0.1</text>
+  </g>
+
+  <!-- CLIENT01 -->
+  <g filter="url(#sh)">
+    <rect x="930" y="312" width="230" height="140" rx="14" fill="url(#srv)" stroke="#fbbf24" stroke-width="2"/>
+  </g>
+  <text x="1045" y="346" text-anchor="middle" font-size="20" font-weight="800" fill="#fffbeb">CLIENT01</text>
+  <text x="1045" y="368" text-anchor="middle" font-size="13" fill="#fde68a">VM name: ADLab-CLIENT01</text>
+  <text x="1045" y="390" text-anchor="middle" font-size="13" fill="#cbd5e1">Windows 11 Enterprise</text>
+  <text x="1045" y="412" text-anchor="middle" font-size="12" fill="#94a3b8">4 GB RAM · 2 vCPU · 64 GB</text>
+  <text x="1045" y="436" text-anchor="middle" font-size="12" fill="#e2e8f0">joins corp.technobiz.local</text>
+  <g filter="url(#sh)"><rect x="850" y="330" width="80" height="44" rx="10" fill="#3a2c0c" stroke="#fbbf24" stroke-width="2"/></g>
+  <text x="890" y="349" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fef3c7">NIC</text>
+  <text x="890" y="365" text-anchor="middle" font-size="11" fill="#fde68a">"Ethernet"</text>
+  <text x="930" y="478" font-size="12.5" fill="#fde68a">DHCP from DC01: 172.16.0.100–200</text>
+  <text x="930" y="496" font-size="12.5" fill="#fde68a">gateway + DNS = 172.16.0.1</text>
+
+  <!-- Roles -->
+  <path d="M490 428 V520" stroke="#475569" stroke-width="2"/>
+  <path d="M150 520 H1050" stroke="#475569" stroke-width="2"/>
+  <path d="M150 520 V540 M490 520 V540 M840 520 V540" stroke="#475569" stroke-width="2"/>
+
+  <g filter="url(#sh)">
+    <rect x="40" y="540" width="300" height="118" rx="12" fill="#10231d" stroke="#34d399"/>
+    <rect x="360" y="540" width="260" height="118" rx="12" fill="#0c2231" stroke="#38bdf8"/>
+    <rect x="640" y="540" width="520" height="118" rx="12" fill="#1c1531" stroke="#a78bfa"/>
+  </g>
+  <text x="60" y="570" font-size="16" font-weight="800" fill="#ecfdf5">AD DS · DNS</text>
+  <g font-size="13" fill="#d1fae5">
+    <text x="60" y="594">Domain  corp.technobiz.local</text>
+    <text x="60" y="614">NetBIOS  CORP</text>
+    <text x="60" y="634">Admin  CORP\Administrator</text>
+  </g>
+  <text x="380" y="570" font-size="16" font-weight="800" fill="#e0f2fe">RAS / NAT</text>
+  <g font-size="13" fill="#bae6fd">
+    <text x="380" y="594">Outside  NIC "Internet"</text>
+    <text x="380" y="614">Inside    NIC "Internal"</text>
+    <text x="380" y="634">CLIENT01 reaches the web via DC01</text>
+  </g>
+  <text x="660" y="570" font-size="16" font-weight="800" fill="#ede9fe">DHCP · one scope</text>
+  <g font-size="13" fill="#ddd6fe">
+    <text x="660" y="594">Range     172.16.0.100 – 172.16.0.200</text>
+    <text x="660" y="614">Mask      255.255.255.0</text>
+    <text x="660" y="634">Router (003) 172.16.0.1   ·   DNS (006) 172.16.0.1</text>
+    <text x="930" y="594">Scope name  "TechnoBiz LAN"</text>
+  </g>
+
+  <!-- Requirements strip -->
+  <g font-size="13" font-weight="700">
+    <rect x="40" y="682" width="190" height="42" rx="21" fill="#1e293b" stroke="#334155"/>
+    <text x="135" y="708" text-anchor="middle" fill="#e2e8f0">VirtualBox 7.x</text>
+    <rect x="244" y="682" width="330" height="42" rx="21" fill="#1e293b" stroke="#334155"/>
+    <text x="409" y="708" text-anchor="middle" fill="#e2e8f0">WindowsServer2022-Eval.iso</text>
+    <rect x="588" y="682" width="330" height="42" rx="21" fill="#1e293b" stroke="#334155"/>
+    <text x="753" y="708" text-anchor="middle" fill="#e2e8f0">Windows11-Enterprise-Eval.iso</text>
+    <rect x="932" y="682" width="228" height="42" rx="21" fill="#1e293b" stroke="#334155"/>
+    <text x="1046" y="708" text-anchor="middle" fill="#e2e8f0">Downloads\ADLab-ISOs</text>
+  </g>
+</svg>

@@ -430,6 +430,16 @@ ipcMain.handle('adlab:vm-save', async (_event, name) => {
   return snapshotScript(kit, ['-Save', name]);
 });
 
+// Where the VirtualBox kit lives, for the setup guide: the install folder is
+// the learner's choice, so the guide asks rather than guessing.
+ipcMain.handle('adlab:kit-folder', () => adlabKitDir());
+ipcMain.handle('adlab:open-kit-folder', async () => {
+  const dir = adlabKitDir();
+  if (!dir) return { ok: false, error: 'The VirtualBox kit was not found.' };
+  const err = await shell.openPath(dir);
+  return err ? { ok: false, error: err } : { ok: true, dir };
+});
+
 ipcMain.handle('adlab:vm-restore', async (_event, name) => {
   if (typeof name !== 'string' || !SNAPSHOT_NAME.test(name)) return { ok: false, error: 'Invalid snapshot name.' };
   const kit = adlabConfig();

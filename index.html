@@ -16,6 +16,8 @@
         style-src   'unsafe-inline' every window styles itself with cssText
         img-src     data:           wallpapers are inline SVG data URIs
         connect-src localhost:11434 the local Ollama, and nothing else
+        frame-src   allowlisted     the in-VM browser's hosts, filled in from
+                                    shared/webAllowlist.json at build time
         object-src  'none'          no plugins, ever
 
       frame-ancestors is absent because it is ignored in a meta element and
@@ -31,6 +33,7 @@
                img-src 'self' data: blob:;
                font-src 'self' data:;
                connect-src 'self' http://localhost:11434 http://127.0.0.1:11434;
+               frame-src %FRAME_SRC%;
                object-src 'none';
                base-uri 'self';
                form-action 'none';"

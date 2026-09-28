@@ -30,6 +30,10 @@ Then run `00-Organization-Setup\Invoke-EnterpriseOrgSetup.ps1` on DC01, and open
 
 Six projects are the on-premises side of the brief and run on the AD Enterprise Lab's real `ADLab-DC01` VM (`../10-AD-ENTERPRISE-VBOX`):
 
+> **First, get the VMs.** You need Windows Server 2022 and Windows 11 Enterprise (free evaluation ISOs), named `WindowsServer2022-Eval.iso` and `Windows11-Enterprise-Eval.iso` in `Downloads\ADLab-ISOs`. The download links, build steps and naming convention are in [Get the software](../10-AD-ENTERPRISE-VBOX/README.md#get-the-software-once), and in the app under **📘 Setup guide**.
+
+![Lab network](../../docs/images/ad-lab-network.svg)
+
 | Project | What is seeded in DC01 | What the checker reads |
 |---|---|---|
 | **P01** JML | HR feed `C:\IAM\HR\hr_feed.csv`: a joiner, a mover (Sales → Finance) and a leaver | the accounts, group membership, the Terminated Users OU, the log and script in `C:\IAM\JML` |

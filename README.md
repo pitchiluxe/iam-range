@@ -97,8 +97,15 @@ is tested as a first-class path rather than as a fallback.
 Settings → AI Assistant reports whether Ollama is currently answering, and lets
 you pick any model you have pulled. Every AI feature uses that choice.
 
-The AD Enterprise Lab can also run on two real Windows VMs in VirtualBox. That
-kit, which works on Windows 11 Home, is in `omari-lab/10-AD-ENTERPRISE-VBOX/`.
+The AD Enterprise Lab and the IAM Portfolio can also run on two real Windows VMs
+in VirtualBox (this works on Windows 11 Home). You download two free Microsoft
+evaluation ISOs, Windows Server 2022 and Windows 11 Enterprise, and the kit in
+`omari-lab/10-AD-ENTERPRISE-VBOX/` builds both machines. Links, file names and
+the naming convention are in
+[Get the software](omari-lab/10-AD-ENTERPRISE-VBOX/README.md#get-the-software-once),
+and in the app under **📘 Setup guide**.
+
+![AD Enterprise Lab network](docs/images/ad-lab-network.svg)
 
 ## The landing page
 
