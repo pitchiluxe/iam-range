@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Verify a local Ollama instance is answering before anything else is built.
 

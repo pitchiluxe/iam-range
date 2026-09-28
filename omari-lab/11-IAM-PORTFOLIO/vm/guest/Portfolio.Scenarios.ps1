@@ -1,4 +1,4 @@
-<#
+﻿<#
     Runs INSIDE DC01 (corp.technobiz.local), sent by ..\Set-PortfolioScenario.ps1,
     which prepends:   $Project = 'p01'   (p01 p02 p03 p04 p08 p10)
 

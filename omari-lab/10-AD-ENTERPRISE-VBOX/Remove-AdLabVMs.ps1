@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Delete ADLab-DC01 and ADLab-CLIENT01 and their disks. Asks first.
 

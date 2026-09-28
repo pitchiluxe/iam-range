@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Save, list or restore save points for both lab VMs together. This is how
     a real lab is reset.
@@ -34,14 +34,14 @@ $cfg = Get-AdLabConfig
 function Say([string]$m) { if (-not $Json) { Write-Host $m } }
 
 function Get-SnapshotNames([string]$vm) {
-    $out = & $cfg.vboxManage snapshot $vm list --machinereadable 2>$null
+    $out = Invoke-VBoxManage snapshot $vm list --machinereadable
     return @($out | Where-Object { $_ -match '^SnapshotName[^=]*="(.*)"$' } | ForEach-Object { $Matches[1] })
 }
 
 function Wait-VmState([string]$vm, [string[]]$states, [int]$seconds) {
     $deadline = (Get-Date).AddSeconds($seconds)
     while ((Get-Date) -lt $deadline) {
-        $info = & $cfg.vboxManage showvminfo $vm --machinereadable 2>$null
+        $info = Invoke-VBoxManage showvminfo $vm --machinereadable
         # "$(...)" turns "no such line" (an empty array) into '' so the tests below work.
         $state = "$(($info | Where-Object { $_ -like 'VMState=*' }) -replace '^VMState="(.*)"$', '$1')"
         $session = "$(($info | Where-Object { $_ -like 'SessionState=*' }) -replace '^SessionState="(.*)"$', '$1')"
@@ -57,7 +57,7 @@ function Wait-VmReleased([string]$vm) {
     # its lock; restoring or starting before that fails with "locked by a session".
     $deadline = (Get-Date).AddSeconds(60)
     while ((Get-Date) -lt $deadline) {
-        $running = & $cfg.vboxManage list runningvms 2>$null
+        $running = Invoke-VBoxManage list runningvms
         $proc = Get-CimInstance Win32_Process -Filter "Name='VirtualBoxVM.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -match [regex]::Escape($vm) }
         if (-not ($running -match "^`"$([regex]::Escape($vm))`" ") -and -not $proc) { Start-Sleep 2; return }
@@ -67,7 +67,7 @@ function Wait-VmReleased([string]$vm) {
 
 function Start-VmRetry([string]$vm) {
     for ($i = 1; $i -le 10; $i++) {
-        & $cfg.vboxManage startvm $vm --type gui 2>&1 | Out-Null
+        Invoke-VBoxManage startvm $vm --type gui | Out-Null
         if ($LASTEXITCODE -eq 0) { return }
         Start-Sleep 3
     }
@@ -87,7 +87,7 @@ function Stop-VmCleanly([string]$key) {
         $asked = Wait-VmState $vm @('poweroff') 60
     }
     if (-not $asked) {
-        & $cfg.vboxManage controlvm $vm acpipowerbutton 2>$null | Out-Null
+        Invoke-VBoxManage controlvm $vm acpipowerbutton | Out-Null
         if (-not (Wait-VmState $vm @('poweroff') 300)) { throw "$key did not shut down within 10 minutes." }
     }
 }
@@ -109,7 +109,7 @@ try {
                 # snapshot that later ones branch from; then the old one is
                 # renamed out of the way instead, never lost.
                 if ((Get-SnapshotNames $vm) -contains $Save) {
-                    & $cfg.vboxManage snapshot $vm delete $Save 2>&1 | Out-Null
+                    Invoke-VBoxManage snapshot $vm delete $Save | Out-Null
                     if ($LASTEXITCODE -ne 0) {
                         Invoke-VBox snapshot $vm edit $Save --name "$Save (replaced $(Get-Date -Format 'yyyy-MM-dd HHmm'))" | Out-Null
                     }
@@ -126,13 +126,13 @@ try {
                 $vm = $cfg.vms.$key.vmName
                 if (-not (Test-AdLabVmExists $vm) -or (Get-SnapshotNames $vm) -notcontains $Restore) { $result.missing += $key; continue }
                 if ((Get-AdLabVmState $vm) -notin @('poweroff', 'aborted', 'saved')) {
-                    & $cfg.vboxManage controlvm $vm poweroff 2>$null | Out-Null
+                    Invoke-VBoxManage controlvm $vm poweroff | Out-Null
                 }
                 if (-not (Wait-VmState $vm @('poweroff', 'aborted', 'saved') 90)) { throw "$key did not power off." }
                 Wait-VmReleased $vm
                 $done = $false
                 for ($try = 1; $try -le 3 -and -not $done; $try++) {
-                    & $cfg.vboxManage snapshot $vm restore $Restore 2>&1 | Out-Null
+                    Invoke-VBoxManage snapshot $vm restore $Restore | Out-Null
                     if ($LASTEXITCODE -eq 0) { $done = $true } else { Start-Sleep -Seconds 5 }
                 }
                 if (-not $done) { throw "$key could not be restored to '$Restore'." }

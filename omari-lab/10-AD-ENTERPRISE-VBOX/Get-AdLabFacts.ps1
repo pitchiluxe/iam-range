@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Read-only: collect the facts "Check My Work" needs from the real VMs.
 

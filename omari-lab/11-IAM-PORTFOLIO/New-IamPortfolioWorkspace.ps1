@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Build the IAM-Portfolio-Labs workspace, after verifying local Ollama.
 

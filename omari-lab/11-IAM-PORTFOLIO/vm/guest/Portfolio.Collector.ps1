@@ -1,4 +1,4 @@
-<#
+﻿<#
     Runs INSIDE DC01, sent by ..\Get-PortfolioFacts.ps1. READ-ONLY: every call
     is a Get-*, Get-Acl, Get-WinEvent or a file read. Prints one JSON line.
 

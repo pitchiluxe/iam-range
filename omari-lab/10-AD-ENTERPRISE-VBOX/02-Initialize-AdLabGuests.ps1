@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Finish the build: wait for Windows, name the adapters, snapshot "Lab01-Start".
 

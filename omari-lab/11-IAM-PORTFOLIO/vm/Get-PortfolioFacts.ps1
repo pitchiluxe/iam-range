@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Read-only: collect what the portfolio VM checks grade, from the real DC01.
 
@@ -12,8 +12,7 @@ param([switch]$Json)
 
 . (Join-Path $PSScriptRoot 'PortfolioVm.Common.ps1')
 try {
-    $state = Get-AdLabVmState $(Get-AdLabConfig).vms.DC01.vmName
-    if ($state -ne 'running') { throw "DC01 is $(if ($state) { $state } else { 'missing' }). Start it and try again." }
+    Wait-PortfolioDc
     $raw = Invoke-PortfolioGuest -TimeoutSec 420 -Script (Get-Content -Raw (Join-Path $PSScriptRoot 'guest\Portfolio.Collector.ps1'))
     $line = $raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -Last 1
     if (-not $line) { throw "The collector returned no data: $($raw.Substring(0, [Math]::Min(300, $raw.Length)))" }

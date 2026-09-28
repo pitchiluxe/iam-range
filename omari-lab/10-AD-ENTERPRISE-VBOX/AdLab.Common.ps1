@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Shared helpers for the AD Enterprise Lab VirtualBox kit. Dot-source it.
 
@@ -25,11 +25,24 @@ function Get-AdLabConfig {
     return $cfg
 }
 
+function Invoke-VBoxManage {
+    <#
+        Run VBoxManage and return everything it printed, as text.
+        VBoxManage writes progress bars ("0%...10%...") to stderr. Windows
+        PowerShell 5.1 (powershell.exe, which the desktop app uses) turns redirected
+        stderr into an error record, and under $ErrorActionPreference = 'Stop' that
+        aborts the script mid-operation. Callers check $LASTEXITCODE instead.
+    #>
+    $cfg = Get-AdLabConfig
+    $ErrorActionPreference = 'Continue'
+    & $cfg.vboxManage @args 2>&1 | ForEach-Object { "$_" }
+}
+
 function Invoke-VBox {
     <# Run VBoxManage; throw with its own error text when it fails. #>
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
     $cfg = Get-AdLabConfig
-    $out = & $cfg.vboxManage @Arguments 2>&1
+    $out = Invoke-VBoxManage @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "VBoxManage $($Arguments -join ' ') failed:`n$($out -join "`n")"
     }
@@ -38,14 +51,14 @@ function Invoke-VBox {
 
 function Test-AdLabVmExists([string]$VmName) {
     $cfg = Get-AdLabConfig
-    $list = & $cfg.vboxManage list vms 2>$null
+    $list = Invoke-VBoxManage list vms
     return [bool]($list | Where-Object { $_ -match "^`"$([regex]::Escape($VmName))`" " })
 }
 
 function Get-AdLabVmState([string]$VmName) {
     <# 'running', 'paused', 'poweroff', 'saved', 'aborted'… — from VirtualBox itself. #>
     $cfg = Get-AdLabConfig
-    $line = & $cfg.vboxManage showvminfo $VmName --machinereadable 2>$null | Where-Object { $_ -like 'VMState=*' }
+    $line = Invoke-VBoxManage showvminfo $VmName --machinereadable | Where-Object { $_ -like 'VMState=*' }
     return ($line -replace '^VMState="(.*)"$', '$1')
 }
 
@@ -72,10 +85,10 @@ function Invoke-AdLabGuest {
     $ps = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
     if ($Script.Length -le 1500) {
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
-        $out = & $cfg.vboxManage guestcontrol $vm run --exe $ps `
+        $out = Invoke-VBoxManage guestcontrol $vm run --exe $ps `
             --username $cfg.adminUser --password $cfg.adminPassword `
             --timeout ($TimeoutSec * 1000) --wait-stdout --wait-stderr `
-            -- powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $encoded 2>&1
+            '--' powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $encoded
     } else {
         # Long scripts go in as a file. Passed on the command line they exceed
         # Guest Control's argument buffer (VERR_BUFFER_OVERFLOW) and the guest
@@ -84,14 +97,14 @@ function Invoke-AdLabGuest {
         $local = Join-Path $env:TEMP $name
         Set-Content -Path $local -Value $Script -Encoding UTF8
         try {
-            $copy = & $cfg.vboxManage guestcontrol $vm copyto `
+            $copy = Invoke-VBoxManage guestcontrol $vm copyto `
                 --username $cfg.adminUser --password $cfg.adminPassword `
-                --target-directory 'C:\Windows\Temp\' $local 2>&1
+                --target-directory 'C:\Windows\Temp\' $local
             if ($LASTEXITCODE -ne 0) { throw "Copying the script into $Host_ failed:`n$($copy -join "`n")" }
-            $out = & $cfg.vboxManage guestcontrol $vm run --exe $ps `
+            $out = Invoke-VBoxManage guestcontrol $vm run --exe $ps `
                 --username $cfg.adminUser --password $cfg.adminPassword `
                 --timeout ($TimeoutSec * 1000) --wait-stdout --wait-stderr `
-                -- powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "C:\Windows\Temp\$name" 2>&1
+                '--' powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "C:\Windows\Temp\$name"
         } finally {
             Remove-Item $local -Force -ErrorAction SilentlyContinue
         }
@@ -113,7 +126,7 @@ function Wait-AdLabGuestReady {
         # than a restart; an installed-but-off VM would otherwise be waited on forever.
         if ((Get-AdLabVmState $vm) -in @('poweroff', 'aborted')) {
             Write-Host "  $Host_ powered itself off after setup; starting it again"
-            & $cfg.vboxManage startvm $vm --type gui 2>&1 | Out-Null
+            Invoke-VBoxManage startvm $vm --type gui | Out-Null
         }
         try {
             $name = Invoke-AdLabGuest -Host_ $Host_ -Script 'hostname' -TimeoutSec 30

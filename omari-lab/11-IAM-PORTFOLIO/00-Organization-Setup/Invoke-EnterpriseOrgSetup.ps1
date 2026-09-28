@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Blueprint Part 1 / Directory 1: build the Active Directory organization on DC01.
 
