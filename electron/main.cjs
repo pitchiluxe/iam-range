@@ -559,6 +559,139 @@ ipcMain.handle('capture:sourcePicked', (_event, id) => {
 });
 
 // ---------------------------------------------------------------------------
+// Real PowerShell console (90-Day Challenge)
+// ---------------------------------------------------------------------------
+//
+// The simulated terminal speaks the ActiveDirectory module against the
+// workstation's own directory. The Entra ID and Graph labs need the real thing
+// — Connect-MgGraph, Invoke-RestMethod, Install-Module — so this runs
+// powershell.exe on this computer, as the signed-in Windows user, only when the
+// learner opens the "PowerShell (this PC)" window. Webviews get no preload, so
+// a browsed page can never reach these channels.
+//
+// Protocol: powershell.exe reads commands from stdin (-Command -). Each block
+// the learner submits is sent base64-encoded and dot-sourced, so functions and
+// variables persist between blocks, then a marker line carrying a per-session
+// random nonce reports "finished" and the current directory. A script cannot
+// print the marker by accident, and cannot forge it without the nonce.
+
+const crypto = require('crypto');
+const { spawn } = require('child_process');
+const pwshSessions = new Map();
+let pwshSeq = 0;
+
+/**
+ * Send one block. Command and marker travel on ONE line: anything queued behind
+ * a running command would be read by the next Read-Host as its answer.
+ */
+function pwshRun(session, code) {
+  const b64 = Buffer.from(code, 'utf8').toString('base64');
+  session.child.stdin.write(
+    `. ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))); ` +
+      `[Console]::Out.WriteLine('${session.marker}' + (Get-Location).Path)\n`,
+  );
+}
+
+function pwshSend(sender, id, kind, data) {
+  if (!sender.isDestroyed()) sender.send('pwsh:event', id, kind, data);
+}
+
+ipcMain.handle('pwsh:start', (event) => {
+  if (process.platform !== 'win32') return { error: 'The PowerShell console needs Windows.' };
+  const id = ++pwshSeq;
+  const nonce = crypto.randomBytes(12).toString('hex');
+  const marker = `<<C90-DONE-${nonce}>>`;
+  const askMarker = `<<C90-ASK-${nonce}>>`;
+  const child = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', '-'], {
+    cwd: app.getPath('documents'),
+    windowsHide: true,
+  });
+  const sender = event.sender;
+  let pending = '';
+
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => {
+    pending += chunk;
+    const lines = pending.split(/\r?\n/);
+    pending = lines.pop() ?? '';
+    const out = [];
+    for (const line of lines) {
+      if (line.startsWith(marker)) {
+        if (out.length) pwshSend(sender, id, 'out', out.splice(0).join('\n') + '\n');
+        pwshSend(sender, id, 'done', line.slice(marker.length));
+      } else if (line.startsWith(askMarker)) {
+        // Read-Host is waiting; '1' means the answer is a secret to mask.
+        if (out.length) pwshSend(sender, id, 'out', out.splice(0).join('\n') + '\n');
+        pwshSend(sender, id, 'ask', line.slice(askMarker.length) === '1');
+      } else {
+        out.push(line);
+      }
+    }
+    if (out.length) pwshSend(sender, id, 'out', out.join('\n') + '\n');
+    // A prompt such as Read-Host's has no newline yet: show it now, unless it
+    // could be the start of the marker.
+    if (pending && !marker.startsWith(pending) && !askMarker.startsWith(pending)) {
+      pwshSend(sender, id, 'out', pending);
+      pending = '';
+    }
+  });
+  child.stderr.on('data', (chunk) => pwshSend(sender, id, 'err', chunk));
+  child.on('error', (err) => pwshSend(sender, id, 'err', `Could not start PowerShell: ${err.message}\n`));
+  child.on('exit', (code) => {
+    pwshSessions.delete(id);
+    pwshSend(sender, id, 'exit', code);
+  });
+  sender.once('destroyed', () => child.kill());
+
+  pwshSessions.set(id, { child, marker });
+  // UTF-8 both ways, no progress bars (console-only noise here), and a
+  // Read-Host that works over a pipe. The built-in one reads whatever line is
+  // queued next and, with -AsSecureString, waits on a console that does not
+  // exist. This one tells the window to show an input box, then reads the
+  // answer the learner types.
+  const init = [
+    "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $OutputEncoding=[Text.Encoding]::UTF8; $ProgressPreference='SilentlyContinue'",
+    'function global:Read-Host { param([Parameter(Position=0)][object]$Prompt, [switch]$AsSecureString, [switch]$MaskInput)',
+    `  [Console]::Out.WriteLine('${askMarker}' + [int]($AsSecureString -or $MaskInput))`,
+    "  if ($Prompt) { [Console]::Out.Write([string]$Prompt + ': ') }",
+    '  $line = [Console]::In.ReadLine()',
+    "  [Console]::Out.WriteLine('')",
+    '  if ($AsSecureString) { ConvertTo-SecureString $line -AsPlainText -Force } else { $line } }',
+  ].join('\n');
+  pwshRun(pwshSessions.get(id), init);
+  return { id };
+});
+
+ipcMain.handle('pwsh:run', (_event, id, code) => {
+  const s = pwshSessions.get(id);
+  if (!s || typeof code !== 'string') return false;
+  pwshRun(s, code);
+  return true;
+});
+
+// A line typed while a command is still running: the answer to Read-Host.
+ipcMain.handle('pwsh:input', (_event, id, line) => {
+  const s = pwshSessions.get(id);
+  if (!s || typeof line !== 'string') return false;
+  s.child.stdin.write(line.replace(/\r?\n/g, ' ') + '\n');
+  return true;
+});
+
+ipcMain.handle('pwsh:stop', (_event, id) => {
+  const s = pwshSessions.get(id);
+  if (!s) return false;
+  // /T takes the whole tree: a hung Install-Module or python -m http.server
+  // is a child of powershell.exe and would otherwise outlive it.
+  execFile('taskkill', ['/PID', String(s.child.pid), '/T', '/F'], () => {});
+  return true;
+});
+
+app.on('before-quit', () => {
+  for (const { child } of pwshSessions.values()) child.kill();
+});
+
+// ---------------------------------------------------------------------------
 // Window
 // ---------------------------------------------------------------------------
 

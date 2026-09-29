@@ -70,6 +70,18 @@ contextBridge.exposeInMainWorld('electron', {
     };
   },
 
+  /**
+   * Output from a real PowerShell session started with invoke('pwsh:start').
+   * fn receives (id, kind, data): 'out' | 'err' text, 'done' with the current
+   * directory when a command finishes, 'exit' with the exit code.
+   * @returns {() => void} unsubscribe
+   */
+  onPwshEvent: (fn) => {
+    const handler = (_event, id, kind, data) => fn(id, kind, data);
+    ipcRenderer.on('pwsh:event', handler);
+    return () => ipcRenderer.removeListener('pwsh:event', handler);
+  },
+
   onPickCaptureSource: (fn) => {
     const handler = (_event, sources) => fn(sources);
     ipcRenderer.on('capture:pick-source', handler);

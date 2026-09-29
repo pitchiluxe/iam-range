@@ -26,6 +26,11 @@ const BASELINE_APPS = [
   'ad-lab',
   // The 10-project portfolio trainer, for the same reason.
   'iam-portfolio',
+  // The 90-Day Challenge schedules real-VM and tenant labs; a course too.
+  'challenge-90',
+  // Real PowerShell for the challenge's cloud labs. It is the learner's own
+  // computer, so it is not a departmental entitlement either.
+  'host-powershell',
   // The plan view of the manual. On every desktop for the same reason the
   // manual is: knowing where you are in the course is not a departmental
   // entitlement.

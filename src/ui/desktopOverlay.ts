@@ -39,6 +39,8 @@ import { renderDocumentationWindow } from './consoles/documentationWindow';
 import { renderCareerLabWindow } from './consoles/careerLabWindow';
 import { renderAdLabWindow } from './consoles/adLabWindow';
 import { renderPortfolioWindow } from './consoles/portfolioWindow';
+import { renderChallengeWindow } from './consoles/challengeWindow';
+import { renderHostPowerShellWindow } from './consoles/hostPowerShellWindow';
 import { renderRemoteDesktopWindow } from './consoles/remoteDesktopWindow';
 import type { RemoteAppEntry } from './consoles/remoteSessionDesktop';
 import {
@@ -264,6 +266,27 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 1320,
     height: 800,
     render: (_c, b) => renderPortfolioWindow(b),
+  },
+  {
+    // The 90-Day IAM Job-Ready Challenge: 13 one-week labs on the real
+    // DC01/CLIENT01 estate and an Entra ID tenant, with a feedback form per
+    // lab. Content lives in omari-lab/12-90-DAY-CHALLENGE/labs/.
+    id: 'challenge-90',
+    title: '90-Day Challenge',
+    icon: '📅',
+    width: 1320,
+    height: 800,
+    render: (_c, b) => renderChallengeWindow(b),
+  },
+  {
+    // Real powershell.exe on this PC (desktop app only), for the Entra ID and
+    // Microsoft Graph labs the simulated Terminal cannot do.
+    id: 'host-powershell',
+    title: 'PowerShell (this PC)',
+    icon: '💠',
+    width: 900,
+    height: 560,
+    render: (_c, b) => renderHostPowerShellWindow(b),
   },
   {
     // Not a window: a sheet over the whole desktop with a floating toolbar,

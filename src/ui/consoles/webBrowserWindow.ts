@@ -13,6 +13,7 @@
  */
 import { BROWSER_HOME, IAM_BOOKMARKS, isAllowedUrl, normalizeUrl } from '@/config/webAllowlist';
 import { openExternal } from '@/util/externalLink';
+import { onBrowserOpen, takePendingBrowserUrl } from '@/util/appLauncher';
 
 /** True when running inside the Electron shell, where <webview> is available. */
 function hasWebview(): boolean {
@@ -268,6 +269,18 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
     if (historyPos >= 0) go(history[historyPos]!, false);
   });
 
-  // The browser opens on its home page, like any browser does.
-  go(BROWSER_HOME);
+  // Another window (the 90-Day Challenge) can ask for a specific page: while
+  // this window is open it navigates there; once the window is gone the
+  // subscription removes itself.
+  const unsubscribe = onBrowserOpen((url) => {
+    if (!root.isConnected) {
+      unsubscribe();
+      return;
+    }
+    takePendingBrowserUrl();
+    go(url);
+  });
+
+  // The browser opens on the page it was asked for, or its home page.
+  go(takePendingBrowserUrl() ?? BROWSER_HOME);
 }
