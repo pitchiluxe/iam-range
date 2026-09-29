@@ -36,7 +36,7 @@ const STYLES = `
 .hps-sys{color:#9fb7da;}
 .hps-in{flex-shrink:0;display:flex;gap:6px;align-items:flex-start;padding:6px 10px;border-top:1px solid #0b3b7a;background:#001a3d;}
 .hps-prompt{padding-top:4px;white-space:nowrap;color:#eeedf0;}
-.hps-in textarea,.hps-in input{flex:1;min-height:22px;max-height:180px;resize:vertical;background:#012456;color:#fff;border:1px solid #2a5aa0;border-radius:3px;padding:4px 6px;font:inherit;outline:none;}
+.hps-in textarea,.hps-in input{flex:1;min-height:22px;max-height:180px;resize:vertical;background:#012456;color:#fff;caret-color:#fff;border:1px solid #2a5aa0;border-radius:3px;padding:4px 6px;font:inherit;outline:none;}
 `;
 
 const MAX_OUTPUT_CHARS = 400_000;

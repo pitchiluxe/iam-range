@@ -13,6 +13,13 @@ import { createShellState, dispatch } from '@/terminal/dispatcher';
 import { COMPANY } from '@/config';
 import { notifyEndpointChanged } from '@/util/endpointEvents';
 
+/**
+ * The console's own text colour. The background is always console black, so
+ * the text cannot follow the theme: on the light Daylight theme var(--fg) is
+ * near-black, and both the output and the caret in the prompt disappeared.
+ */
+const CONSOLE_FG = '#e6e6e6';
+
 const BANNER = [
   `${COMPANY.name} — Identity Operations Shell`,
   'Windows PowerShell 5.1 (simulated)',
@@ -77,7 +84,7 @@ export function renderTerminalWindow(
   screen.style.cssText =
     'height:100%;overflow-y:auto;padding:10px 12px;box-sizing:border-box;' +
     "font-family:Consolas,'Cascadia Mono',Menlo,monospace;font-size:12.5px;" +
-    'line-height:1.45;color:var(--fg);background:#0c0c0c;' +
+    `line-height:1.45;color:${CONSOLE_FG};background:#0c0c0c;` +
     'scrollbar-width:thin;scrollbar-color:#333 #0c0c0c;';
   body.appendChild(screen);
 
@@ -86,7 +93,7 @@ export function renderTerminalWindow(
   // Owned per window so `cd` persists across commands in this session.
   const shell = createShellState();
 
-  const write = (text: string, color = 'var(--fg)'): void => {
+  const write = (text: string, color = CONSOLE_FG): void => {
     if (text === '') return;
     const pre = document.createElement('pre');
     pre.textContent = text;
@@ -112,7 +119,9 @@ export function renderTerminalWindow(
     input.autocapitalize = 'off';
     input.setAttribute('autocomplete', 'off');
     input.style.cssText =
-      'flex:1;background:transparent;border:none;outline:none;color:var(--fg);font:inherit;padding:0;';
+      `flex:1;background:transparent;border:none;outline:none;color:${CONSOLE_FG};caret-color:${CONSOLE_FG};font:inherit;padding:0;`;
+    // The prompt line is the caret; a focus ring around it would look like a text box.
+    input.dataset.caretOnly = '';
 
     line.append(ps, input);
     screen.appendChild(line);
@@ -146,7 +155,7 @@ export function renderTerminalWindow(
       const line = input.value;
       // Freeze the submitted line as text so it can't be edited afterwards.
       input.disabled = true;
-      input.style.color = 'var(--fg)';
+      input.style.color = CONSOLE_FG;
       if (line.trim()) {
         history.push(line);
         historyIdx = -1;
@@ -183,7 +192,7 @@ export function renderTerminalWindow(
       return;
     }
 
-    write(res.output, res.ok ? 'var(--fg)' : 'var(--err)');
+    write(res.output, res.ok ? CONSOLE_FG : 'var(--err)');
     write('');
     // A repair on a computer shows in every window open on it.
     for (const e of conductor.endpoints?.list() ?? []) notifyEndpointChanged(e.name);

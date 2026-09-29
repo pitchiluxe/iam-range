@@ -328,6 +328,20 @@ export function currentThemeId(): string {
   return THEME_BY_ID[id] ? id : DEFAULT_THEME_ID;
 }
 
+/**
+ * Every element a learner types into, at zero specificity (:where), so any
+ * window that sets its own caret colour — a console on a fixed black
+ * background — still wins over the theme default.
+ */
+const TEXT_FIELDS =
+  ':where(input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=file], ' +
+  '[type=button], [type=submit], [type=reset], [type=image]), textarea, [contenteditable]:not([contenteditable=false]))';
+
+/** The same fields, focused, minus fields that are their own caret. */
+function focused(selectors: string): string {
+  return `${selectors}:not([data-caret-only]):focus`;
+}
+
 export function currentTheme(): Theme {
   return resolveTheme(currentThemeId());
 }
@@ -375,6 +389,19 @@ export function applyTheme(id: string = currentThemeId()): void {
       color-scheme: ${theme.mode};
     }
     ::selection { background: ${t.accent}; color: ${t.onAccent}; }
+
+    /* Where you are typing. The caret is the field's own text colour — the
+       one colour every field already keeps readable against its background,
+       including white pages (an accent caret was too pale on those). What
+       was missing is a sign of which box has it: many fields set
+       outline:none inline, so the focused field now gets an accent ring
+       (!important beats those inline outlines). A field that is itself the
+       caret, like a terminal prompt, opts out with data-caret-only. */
+    ${TEXT_FIELDS} { caret-color: currentColor; }
+    ${focused(TEXT_FIELDS)} {
+      outline: 2px solid ${t.accent} !important;
+      outline-offset: -1px;
+    }
     ::-webkit-scrollbar { width: 12px; height: 12px; }
     ::-webkit-scrollbar-track { background: ${t.panelAlt}; }
     ::-webkit-scrollbar-thumb {
