@@ -16,6 +16,8 @@
 
 const { app, BrowserWindow, shell, ipcMain, net, desktopCapturer } = require('electron');
 const path = require('path');
+// The in-VM browser's allowlist, the same file the renderer checks.
+const { urlAllowed } = require('../shared/allowlistCheck.cjs');
 const fs = require('fs');
 
 let autoUpdater = null;
@@ -582,13 +584,17 @@ let pwshSeq = 0;
 
 /**
  * Send one block. Command and marker travel on ONE line: anything queued behind
- * a running command would be read by the next Read-Host as its answer.
+ * a running command would be read by the next Read-Host as its answer. The
+ * marker is written in `finally` because a terminating error (`throw`, a
+ * failed -ErrorAction Stop) abandons the rest of the line, and without the
+ * marker the window would wait forever. `try` opens no new scope, so what the
+ * block dot-sources still persists.
  */
 function pwshRun(session, code) {
   const b64 = Buffer.from(code, 'utf8').toString('base64');
   session.child.stdin.write(
-    `. ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))); ` +
-      `[Console]::Out.WriteLine('${session.marker}' + (Get-Location).Path)\n`,
+    `try { . ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))) } ` +
+      `finally { [Console]::Out.WriteLine('${session.marker}' + (Get-Location).Path) }\n`,
   );
 }
 
@@ -725,6 +731,18 @@ function createWindow() {
     delete webPreferences.preload;
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
+  });
+
+  // A page's pop-up (window.open, target=_blank — Microsoft's portals use
+  // them) opens as a new tab in the in-VM browser, never as a separate
+  // window, and only when the allowlist permits the address.
+  mainWindow.webContents.on('did-attach-webview', (_event, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (urlAllowed(url) && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('browser:popup', url);
+      }
+      return { action: 'deny' };
+    });
   });
 
   /**

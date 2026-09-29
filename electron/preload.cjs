@@ -82,6 +82,17 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('pwsh:event', handler);
   },
 
+  /**
+   * A page in the in-VM browser asked for a pop-up; the main process has
+   * already checked the allowlist. fn(url) opens it as a tab.
+   * @returns {() => void} unsubscribe
+   */
+  onBrowserPopup: (fn) => {
+    const handler = (_event, url) => fn(url);
+    ipcRenderer.on('browser:popup', handler);
+    return () => ipcRenderer.removeListener('browser:popup', handler);
+  },
+
   onPickCaptureSource: (fn) => {
     const handler = (_event, sources) => fn(sources);
     ipcRenderer.on('capture:pick-source', handler);

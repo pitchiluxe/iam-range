@@ -47,6 +47,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "shared/**/*",
       "package.json",
       "LICENSE.txt"
     ],
