@@ -16,6 +16,7 @@ import type { EndpointIssueId, UserId } from '@/domain';
 import { VM_HOST } from '@/config/vmHost';
 import type { MockAuditLog } from './mockAuditLog';
 import type { MockDirectory } from './mockDirectory';
+import { emptyDeleted, type MailResult, type OutlookState } from './mailbox';
 
 // ---------------------------------------------------------------------------
 // The estate every computer lives in
@@ -97,13 +98,7 @@ export interface NetworkState {
   dnsCache: Record<string, string>;
 }
 
-export interface OutlookState {
-  profile: 'ok' | 'corrupt';
-  workOffline: boolean;
-  mailboxUsedMb: number;
-  deletedItemsMb: number;
-  quotaMb: number;
-}
+export type { OutlookState } from './mailbox';
 
 export interface StoredCredential {
   target: string;
@@ -689,10 +684,21 @@ export class MockEndpoints {
     const e = this.need(name);
     if (!e) return { ok: false, error: `Cannot find a computer named ${name}.` };
     if (e.outlook.profile === 'corrupt') return this.refused(e, actor, 'Outlook cannot start: the profile is corrupt.');
-    const freed = e.outlook.deletedItemsMb;
-    e.outlook.mailboxUsedMb = Math.max(0, e.outlook.mailboxUsedMb - freed);
-    e.outlook.deletedItemsMb = 0;
-    return this.done(e, actor, `Emptied Deleted Items for ${e.username}: ${(freed / 1024).toFixed(1)} GB freed.`);
+    const r = emptyDeleted(e.outlook);
+    return r.ok ? this.done(e, actor, `${e.username}: ${r.message}`) : this.refused(e, actor, r.error);
+  }
+
+  /**
+   * Any other change Outlook makes to a staff member's mailbox — delete,
+   * archive, send, receive, profiles, options — applied by the shared
+   * mailbox rules and audited like every other repair on the computer.
+   */
+  outlook(name: string, actor: UserId, change: (o: OutlookState) => MailResult, needsProfile = true): EndpointResult {
+    const e = this.need(name);
+    if (!e) return { ok: false, error: `Cannot find a computer named ${name}.` };
+    if (needsProfile && e.outlook.profile === 'corrupt') return this.refused(e, actor, 'Outlook cannot start: the profile is corrupt.');
+    const r = change(e.outlook);
+    return r.ok ? this.done(e, actor, `${e.username}: ${r.message}`) : this.refused(e, actor, r.error);
   }
 
   removeCredential(name: string, target: string, actor: UserId): EndpointResult {
