@@ -107,7 +107,7 @@ const DEPT_APP_NAME: Record<string, string> = {
 const THIS_PC: RemoteAppEntry = { id: 'this-pc', title: 'This PC', icon: '💻' };
 const PORTAL_PREFIX = 'portal:';
 /** Apps pinned to the taskbar, left to right, when the profile has them. */
-const TASKBAR_PINS = ['explorer', 'browser', 'app-portal'];
+const TASKBAR_PINS = ['explorer', 'browser', 'app-portal', 'terminal'];
 
 const TASKBAR_H = 48;
 /** The remote desktop's resolution: a common laptop panel. Smaller windows
@@ -239,7 +239,14 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
 
   // ── What this account's desktop contains ──────────────────────────────────
   const byId = new Map(opts.catalog.map((a) => [a.id, a]));
-  const allowed = appsForDepartment(user.department)
+  const allowed = [
+    ...appsForDepartment(user.department),
+    // Every Windows computer has a terminal. In a session it is the full
+    // shell — every cmdlet the workstation's has — running on this computer,
+    // so ipconfig, ping, net use and the repair cmdlets act on it.
+    'terminal',
+  ]
+    .filter((id, i, all) => all.indexOf(id) === i)
     // No Remote Desktop inside a Remote Desktop session: a connection from
     // the user's computer onwards is not a help-desk step, and a session
     // inside a session is only a way to lose track of which machine you are on.

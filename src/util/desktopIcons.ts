@@ -54,6 +54,65 @@ export function saveIconOrder(order: string[]): void {
   notifyChanged();
 }
 
+/** A grid cell on the desktop: column from the left, row from the top. */
+export interface IconCell {
+  col: number;
+  row: number;
+}
+
+const POSITIONS_KEY = 'desktop_icon_positions';
+
+/** Where the user has placed each icon (Windows keeps icons where you drop them). */
+export function getIconPositions(): Record<string, IconCell> {
+  return readJSON<Record<string, IconCell>>(POSITIONS_KEY, {});
+}
+
+export function saveIconPositions(positions: Record<string, IconCell>): void {
+  writeJSON(POSITIONS_KEY, positions);
+}
+
+/** Forget placements: Sort by, Auto arrange and Refresh-after-reset lay icons out again. */
+export function clearIconPositions(): void {
+  writeJSON(POSITIONS_KEY, {});
+}
+
+/**
+ * Lay icons out on a grid the way Windows does: each icon keeps the cell it
+ * was dropped in; the rest fill the free cells top to bottom, then the next
+ * column. With autoArrange, every icon simply flows in order.
+ */
+export function layoutIcons(
+  ids: string[],
+  rows: number,
+  saved: Record<string, IconCell>,
+  autoArrange: boolean,
+): Record<string, IconCell> {
+  const out: Record<string, IconCell> = {};
+  const taken = new Set<string>();
+  const key = (c: IconCell): string => `${c.col}:${c.row}`;
+  if (!autoArrange) {
+    for (const id of ids) {
+      const c = saved[id];
+      if (c && c.row < rows && c.col >= 0 && c.row >= 0 && !taken.has(key(c))) {
+        out[id] = c;
+        taken.add(key(c));
+      }
+    }
+  }
+  let next = 0;
+  for (const id of ids) {
+    if (out[id]) continue;
+    let cell: IconCell;
+    do {
+      cell = { col: Math.floor(next / rows), row: next % rows };
+      next++;
+    } while (taken.has(key(cell)));
+    out[id] = cell;
+    taken.add(key(cell));
+  }
+  return out;
+}
+
 /** Icons currently in the Recycle Bin. */
 export function getDeletedIcons(): DesktopIconRef[] {
   return readJSON<DesktopIconRef[]>(DELETED_KEY, []);

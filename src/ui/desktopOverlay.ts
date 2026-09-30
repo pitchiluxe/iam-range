@@ -57,6 +57,10 @@ import {
   getDeletedIcons,
   deleteIcon,
   onDesktopIconsChanged,
+  getIconPositions,
+  saveIconPositions,
+  clearIconPositions,
+  layoutIcons,
 } from '@/util/desktopIcons';
 import { currentWallpaper } from '@/util/wallpapers';
 import { VM_HOST } from '@/config/vmHost';
@@ -893,12 +897,42 @@ export function createDesktopOverlay(): DesktopOverlay {
     size: IconSize;
     visible: boolean;
     sort: 'custom' | 'name';
+    /** View > Auto arrange icons: pack them in order, no free placement. */
+    autoArrange: boolean;
   }
-  const ICON_SIZES: Record<IconSize, { box: number; glyph: number; label: number }> = {
-    small: { box: 64, glyph: 22, label: 10.5 },
-    medium: { box: 84, glyph: 30, label: 11.5 },
-    large: { box: 104, glyph: 40, label: 12.5 },
+  /**
+   * Windows' desktop grid, the same cells the Remote Desktop session uses:
+   * medium is a 76 x 74 cell holding a 74 x 72 icon, with no gutter, so every
+   * icon sits the same distance from its neighbours.
+   */
+  const ICON_SIZES: Record<IconSize, { box: number; glyph: number; label: number; cellW: number; cellH: number }> = {
+    small: { box: 62, glyph: 22, label: 10.5, cellW: 64, cellH: 62 },
+    medium: { box: 74, glyph: 30, label: 11, cellW: 76, cellH: 74 },
+    large: { box: 94, glyph: 42, label: 12, cellW: 96, cellH: 96 },
   };
+  const DT_ICON_CSS_ID = 'dt-icon-css';
+  function ensureDesktopIconCss(): void {
+    if (document.getElementById(DT_ICON_CSS_ID)) return;
+    const st = document.createElement('style');
+    st.id = DT_ICON_CSS_ID;
+    st.textContent = `
+      .dt-icon { position:absolute; box-sizing:border-box; border:1px solid transparent; border-radius:2px;
+        background:transparent; display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+        gap:3px; padding:3px 1px 2px; cursor:default; color:#fff; touch-action:none;
+        transition:left .12s ease, top .12s ease; }
+      .dt-icon:hover { background:rgba(255,255,255,0.16); border-color:rgba(255,255,255,0.22); }
+      .dt-icon.sel { background:rgba(255,255,255,0.3); border-color:rgba(255,255,255,0.5); }
+      .dt-icon.drop { background:rgba(120,170,255,0.25); border-color:rgba(160,200,255,0.6); }
+      .dt-icon.drop-bin { background:rgba(255,90,90,0.28); border-color:rgba(255,140,140,0.6); }
+      .dt-icon-glyph { line-height:1; display:flex; align-items:center; justify-content:center;
+        filter:drop-shadow(0 1px 2px rgba(0,0,0,0.35)); pointer-events:none; }
+      .dt-icon-label { line-height:1.2; text-align:center; overflow:hidden; display:-webkit-box;
+        -webkit-line-clamp:2; -webkit-box-orient:vertical; text-shadow:0 1px 2px rgba(0,0,0,0.8);
+        pointer-events:none; overflow-wrap:normal; }
+      .dt-icon:focus-visible { outline:1px dotted #fff; outline-offset:-3px; }
+    `;
+    document.head.appendChild(st);
+  }
 
   function readIconPrefs(): IconPrefs {
     try {
@@ -908,9 +942,10 @@ export function createDesktopOverlay(): DesktopOverlay {
         size: parsed.size ?? 'medium',
         visible: parsed.visible ?? true,
         sort: parsed.sort ?? 'custom',
+        autoArrange: parsed.autoArrange ?? false,
       };
     } catch {
-      return { size: 'medium', visible: true, sort: 'custom' };
+      return { size: 'medium', visible: true, sort: 'custom', autoArrange: false };
     }
   }
 
@@ -1035,10 +1070,10 @@ export function createDesktopOverlay(): DesktopOverlay {
     const iconCol = document.createElement('div');
     // Windows-style layout: fill each column top-to-bottom 6 icons deep,
     // then start a new column to the right, instead of one long strip.
+    // Windows-style layout: icons sit on a grid of cells, filling each
+    // column top to bottom; any icon can be dragged to any free cell.
     iconCol.style.cssText = `
-      position: absolute; top: 20px; left: 16px;
-      display: grid; grid-template-rows: repeat(6, auto); grid-auto-flow: column;
-      gap: 8px; justify-items: center;
+      position: absolute; top: 4px; left: 2px; right: 2px; bottom: 52px;
     `;
     bg.appendChild(iconCol);
 
@@ -1069,6 +1104,29 @@ export function createDesktopOverlay(): DesktopOverlay {
             },
             { separator: true },
             {
+              label: 'Auto arrange icons',
+              checked: prefs.autoArrange,
+              onClick: () => {
+                if (!prefs.autoArrange) {
+                  // Keep the current visual order when packing.
+                  const cur = getIconPositions();
+                  const order = resolveIconOrder().map((i) => i.id).sort((a, b) => {
+                    const ca = cur[a];
+                    const cb = cur[b];
+                    return (ca?.col ?? 999) - (cb?.col ?? 999) || (ca?.row ?? 999) - (cb?.row ?? 999);
+                  });
+                  saveIconOrder(order);
+                }
+                writeIconPrefs({ autoArrange: !prefs.autoArrange });
+              },
+            },
+            {
+              label: 'Align icons to grid',
+              checked: true,
+              onClick: () => iconColEl && renderDesktopIcons(iconColEl),
+            },
+            { separator: true },
+            {
               label: 'Show desktop icons',
               checked: prefs.visible,
               onClick: () => writeIconPrefs({ visible: !prefs.visible }),
@@ -1081,7 +1139,10 @@ export function createDesktopOverlay(): DesktopOverlay {
             {
               label: 'Name',
               checked: prefs.sort === 'name',
-              onClick: () => writeIconPrefs({ sort: 'name' }),
+              onClick: () => {
+                clearIconPositions();
+                writeIconPrefs({ sort: 'name' });
+              },
             },
             {
               label: 'The order I put them in',
@@ -1114,6 +1175,12 @@ export function createDesktopOverlay(): DesktopOverlay {
     iconColEl = iconCol;
     renderDesktopIcons(iconCol);
     onDesktopIconsChanged(() => renderDesktopIcons(iconCol));
+    // The number of rows follows the screen height, as on a real desktop.
+    let resizeTimer = 0;
+    window.addEventListener('resize', () => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => iconCol.isConnected && renderDesktopIcons(iconCol), 150);
+    });
   }
 
   interface DesktopIconEntry {
@@ -1146,49 +1213,71 @@ export function createDesktopOverlay(): DesktopOverlay {
   }
 
   function renderDesktopIcons(iconCol: HTMLElement): void {
-    iconCol.innerHTML = '';
+    iconCol.textContent = '';
     const prefs = readIconPrefs();
 
     // "Show desktop icons" off leaves the desktop bare, as it does in Windows.
     // The icons are still there — the Start menu still lists every app — so
     // this hides them rather than removing anything.
-    iconCol.style.display = prefs.visible ? 'grid' : 'none';
+    iconCol.style.display = prefs.visible ? 'block' : 'none';
     if (!prefs.visible) return;
 
+    ensureDesktopIconCss();
     const size = ICON_SIZES[prefs.size];
-    iconCol.style.gridTemplateRows = `repeat(${prefs.size === 'large' ? 5 : 6}, auto)`;
+    const cellW = size.cellW;
+    const cellH = size.cellH;
+    // As many rows as fit above the taskbar, like the real desktop.
+    const rows = Math.max(3, Math.floor((iconCol.clientHeight || window.innerHeight - 90) / cellH));
 
     const icons = resolveIconOrder();
-    if (prefs.sort === 'name') {
-      icons.sort((a, b) => a.title.localeCompare(b.title));
-    }
-    let draggedId: string | null = null;
+    if (prefs.sort === 'name') icons.sort((a, b) => a.title.localeCompare(b.title));
+    const ids = icons.map((i) => i.id);
+    const cells = layoutIcons(ids, rows, getIconPositions(), prefs.autoArrange || prefs.sort === 'name');
+    const btnById = new Map<string, HTMLElement>();
+    // Centre the icon in its cell, as the session's grid does.
+    const place = (el_: HTMLElement, c: { col: number; row: number }): void => {
+      el_.style.left = `${c.col * cellW + (cellW - size.box) / 2}px`;
+      el_.style.top = `${c.row * cellH + 1}px`;
+    };
+    const select = (id: string | null): void => {
+      for (const [bid, b] of btnById) b.classList.toggle('sel', bid === id);
+    };
 
     for (const entry of icons) {
       const iconBtn = document.createElement('button');
-      // Dragging reorders, which only means something in the order the user
-      // chose — sorting by name and then dragging would silently undo itself.
-      iconBtn.draggable = prefs.sort === 'custom';
       iconBtn.dataset['iconId'] = entry.id;
-      iconBtn.style.cssText = `
-        background: transparent; border: none; cursor: pointer;
-        display: flex; flex-direction: column; align-items: center; gap: 4px;
-        padding: 8px; border-radius: 6px; width: ${size.box}px;
-      `;
-      iconBtn.innerHTML = `
-        <span style="font-size:${size.glyph}px;line-height:1;">${entry.icon}</span>
-        <span style="font-size:${size.label}px;color:var(--glass-text,var(--fg));text-align:center;max-width:${size.box - 8}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,0.6);">${entry.title}</span>
-      `;
-      const activate = () => {
+      iconBtn.className = 'dt-icon';
+      iconBtn.style.width = `${size.box}px`;
+      iconBtn.style.height = `${size.cellH - 2}px`;
+      const glyph = document.createElement('span');
+      glyph.className = 'dt-icon-glyph';
+      glyph.style.cssText = `font-size:${size.glyph}px;height:${size.glyph + 2}px;`;
+      // Some app icons are drawn as markup; they are fixed strings from
+      // DESKTOP_APPS, never user input, exactly as the Start menu renders them.
+      if (entry.icon.includes('<')) glyph.innerHTML = entry.icon;
+      else glyph.textContent = entry.icon;
+      const label = document.createElement('span');
+      label.className = 'dt-icon-label';
+      label.style.cssText = `font-size:${size.label}px;max-width:${size.box - 4}px;`;
+      label.textContent = entry.title;
+      iconBtn.append(glyph, label);
+      place(iconBtn, cells[entry.id]!);
+      btnById.set(entry.id, iconBtn);
+
+      const activate = (): void => {
         const def = APP_BY_ID[entry.id];
         if (def) wmCtx.current?.open(def);
       };
-      iconBtn.title = `Open ${entry.title} (double-click) · drag to reorder or drop on Recycle Bin to remove`;
+      iconBtn.title = `${entry.title} — double-click to open · drag to move it anywhere on the desktop`;
+      // Windows: one click selects, a double-click (or Enter) opens.
       iconBtn.addEventListener('dblclick', activate);
-      iconBtn.addEventListener('click', activate);
+      iconBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') activate();
+      });
 
       // Each icon's own menu, as Windows gives them.
       iconBtn.addEventListener('contextmenu', (e) => {
+        select(entry.id);
         const items: MenuItem[] = [
           { label: 'Open', onClick: activate },
           { separator: true },
@@ -1215,49 +1304,89 @@ export function createDesktopOverlay(): DesktopOverlay {
         openContextMenu(e, items);
       });
 
-      // --- Drag to reorder / drop-on-Recycle-Bin to delete ---
-      iconBtn.addEventListener('dragstart', (e) => {
-        draggedId = entry.id;
-        iconBtn.style.opacity = '0.4';
-        e.dataTransfer?.setData('text/plain', entry.id);
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-      });
-      iconBtn.addEventListener('dragend', () => {
-        iconBtn.style.opacity = '1';
-        draggedId = null;
-      });
-      iconBtn.addEventListener('dragover', (e) => {
-        if (!draggedId || draggedId === entry.id) return;
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        iconBtn.style.background = 'rgba(78,201,176,0.15)';
-      });
-      iconBtn.addEventListener('dragleave', () => {
-        iconBtn.style.background = 'transparent';
-      });
-      iconBtn.addEventListener('drop', (e) => {
-        e.preventDefault();
-        iconBtn.style.background = 'transparent';
-        const sourceId = e.dataTransfer?.getData('text/plain') || draggedId;
-        if (!sourceId || sourceId === entry.id) return;
+      // --- Drag anywhere; it snaps to the grid, as the real desktop does ---
+      iconBtn.addEventListener('pointerdown', (down) => {
+        if (down.button !== 0) return;
+        select(entry.id);
+        iconBtn.focus();
+        const box = iconCol.getBoundingClientRect();
+        const start = { x: down.clientX, y: down.clientY };
+        const origin = { left: iconBtn.offsetLeft, top: iconBtn.offsetTop };
+        let dragging = false;
+        const move = (ev: PointerEvent): void => {
+          const dx = ev.clientX - start.x;
+          const dy = ev.clientY - start.y;
+          if (!dragging && Math.hypot(dx, dy) < 5) return;
+          if (!dragging) {
+            dragging = true;
+            iconBtn.style.transition = 'none';
+            iconBtn.style.zIndex = '5';
+            iconBtn.style.opacity = '0.75';
+          }
+          iconBtn.style.left = `${origin.left + dx}px`;
+          iconBtn.style.top = `${origin.top + dy}px`;
+          // Show which icon a drop would land on (the Recycle Bin deletes).
+          for (const [bid, b] of btnById) {
+            if (bid === entry.id) continue;
+            const r = b.getBoundingClientRect();
+            const over = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+            b.classList.toggle('drop-bin', over && bid === 'recycle-bin');
+            b.classList.toggle('drop', over && bid !== 'recycle-bin');
+          }
+        };
+        const up = (ev: PointerEvent): void => {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          iconBtn.style.transition = '';
+          iconBtn.style.zIndex = '';
+          iconBtn.style.opacity = '1';
+          if (!dragging) return;
+          for (const b of btnById.values()) b.classList.remove('drop', 'drop-bin');
 
-        if (entry.id === 'recycle-bin') {
-          const source = allDesktopIconEntries().find((x) => x.id === sourceId);
-          if (source && source.id !== 'recycle-bin') deleteIcon(source);
-          return;
-        }
+          // Dropped on the Recycle Bin: remove it from the desktop.
+          const bin = btnById.get('recycle-bin');
+          if (bin && entry.id !== 'recycle-bin') {
+            const r = bin.getBoundingClientRect();
+            if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) {
+              deleteIcon(entry);
+              return;
+            }
+          }
 
-        const currentOrder = resolveIconOrder().map((x) => x.id);
-        const from = currentOrder.indexOf(sourceId);
-        if (from === -1) return;
-        currentOrder.splice(from, 1);
-        const to = currentOrder.indexOf(entry.id);
-        currentOrder.splice(to, 0, sourceId);
-        saveIconOrder(currentOrder);
+          // The cell under the pointer, kept on the desktop.
+          const maxCol = Math.max(0, Math.floor(box.width / cellW) - 1);
+          const col = Math.min(maxCol, Math.max(0, Math.floor((ev.clientX - box.left) / cellW)));
+          const row = Math.min(rows - 1, Math.max(0, Math.floor((ev.clientY - box.top) / cellH)));
+          const current = layoutIcons(ids, rows, getIconPositions(), readIconPrefs().autoArrange || readIconPrefs().sort === 'name');
+          const occupant = ids.find((id) => id !== entry.id && current[id]!.col === col && current[id]!.row === row);
+          const was = current[entry.id]!;
+          if (readIconPrefs().autoArrange) {
+            // Auto arrange keeps icons in a packed order: dropping re-orders.
+            const order = [...ids];
+            order.splice(order.indexOf(entry.id), 1);
+            const at = occupant ? order.indexOf(occupant) : order.length;
+            order.splice(at, 0, entry.id);
+            saveIconOrder(order);
+            return;
+          }
+          // Dropping on another icon swaps the two; an empty cell just takes it.
+          current[entry.id] = { col, row };
+          if (occupant) current[occupant] = was;
+          saveIconPositions(current);
+          // Dragging means the user is arranging by hand from now on.
+          if (readIconPrefs().sort === 'name') writeIconPrefs({ sort: 'custom' });
+          else renderDesktopIcons(iconCol);
+        };
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
       });
 
       iconCol.appendChild(iconBtn);
     }
+    // A click on empty desktop clears the selection.
+    iconCol.onpointerdown = (e) => {
+      if (e.target === iconCol) select(null);
+    };
   }
 
   function buildTaskbar(c: HTMLElement, conductor: VmServices): void {
