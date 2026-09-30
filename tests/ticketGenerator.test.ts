@@ -172,6 +172,11 @@ describe('hybrid-identity scenarios', () => {
       const s = new VmSession();
       s.tickets.list().forEach((t) => s.tickets.resolve(t.id, 'system' as never));
       buildTo(s, 'operating');
+      // A few more staff: the queue gives each person one open ticket at a
+      // time, so a one-person domain rarely has anyone left for hybrid work.
+      for (const u of ['mchen', 'rpatel', 'aokafor', 'lsilva', 'nhaddad']) {
+        s.dir.createUser({ username: u, displayName: u, email: `${u}@omari.test`, department: 'HR', title: 'Staff', mfa: 'none' });
+      }
       generateTicketsSync({ ...deps(s), pim: s.pim, cloud: s.cloud }, 10);
       if (s.tickets.list().some((t) => pattern.test(t.subject))) return s;
     }

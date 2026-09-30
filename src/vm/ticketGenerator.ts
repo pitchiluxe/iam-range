@@ -585,7 +585,59 @@ function planAhead(env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
 
 export type GenerateFocus = 'all' | 'helpdesk';
 
+/**
+ * People who must not be the subject of new work.
+ *
+ * A real queue never asks you to offboard someone and, in the next ticket,
+ * transfer the same person to another department. So:
+ *   - anyone with an open ticket already has their one piece of work;
+ *   - anyone who has ever been offboarded (leaver / termination), or whose
+ *     account is disabled, has left: no transfers, MFA resets, admin rights
+ *     or desk-side visits for them any more.
+ */
+export function unavailablePeople(deps: GeneratorDeps): Set<string> {
+  const out = new Set<string>();
+  const nameOf = (id: UserId): string | undefined => deps.dir.getUser(id)?.username;
+  for (const t of deps.tickets.list()) {
+    const departing = t.kind === 'leaver' || t.kind === 'termination';
+    if (t.status === 'resolved' && !departing) continue;
+    const ids = [...t.relatedUserIds, (t.payload as { userId?: UserId } | undefined)?.userId].filter(
+      (x): x is UserId => Boolean(x),
+    );
+    for (const id of ids) {
+      const n = nameOf(id);
+      if (n) out.add(n);
+    }
+  }
+  for (const u of deps.dir.listUsers()) if (u.status === 'disabled') out.add(u.username);
+  return out;
+}
+
+/** The person a scenario is about, read from its id (leaver-jdoe, endpoint-x-jdoe…). */
+function personOf(s: Scenario, env: EnvironmentState): string | undefined {
+  // A new-starter ticket is about someone who does not exist yet.
+  if (s.kind === 'onboarding') return undefined;
+  return env.staffLogons
+    .filter((l) => s.id === l || s.id.endsWith(`-${l}`))
+    .sort((a, b) => b.length - a.length)[0];
+}
+
+/** At most one new ticket per person, and none for someone who is busy or gone. */
+function onePerPerson(scenarios: Scenario[], env: EnvironmentState, deps: GeneratorDeps): Scenario[] {
+  const taken = unavailablePeople(deps);
+  return scenarios.filter((s) => {
+    const who = personOf(s, env);
+    if (!who) return true;
+    if (taken.has(who)) return false;
+    taken.add(who);
+    return true;
+  });
+}
+
 function scenariosFor(env: EnvironmentState, deps: GeneratorDeps, focus: GenerateFocus = 'all'): Scenario[] {
+  // Choose people only from those free for new work.
+  const busy = unavailablePeople(deps);
+  env = { ...env, staffLogons: env.staffLogons.filter((l) => !busy.has(l)) };
   if (focus === 'helpdesk') return endpointScenarios(env, deps);
   const byStage: Record<Stage, () => Scenario[]> = {
     bare: () => bareStageScenarios(),
@@ -596,14 +648,23 @@ function scenariosFor(env: EnvironmentState, deps: GeneratorDeps, focus: Generat
     // desk-side support — one help-desk ticket leads, so a short batch always
     // has one, and the rest follow the identity work.
     operating: () => {
-      const desk = endpointScenarios(env, deps);
-      return [
-        ...desk.slice(0, 1),
-        ...operatingScenarios(env, deps),
-        ...pimScenarios(env, deps),
-        ...cloudScenarios(env, deps),
-        ...desk.slice(1),
-      ];
+      // Each kind of work claims its people before the next kind chooses, so
+      // one person is never picked by two kinds at once (offboarded by one
+      // ticket and transferred by the next) and a small domain still gets a
+      // mix of work rather than the first kind taking everybody.
+      const everyone = env.staffLogons;
+      let free = env;
+      const claim = (list: Scenario[]): Scenario[] => {
+        const taken = new Set(list.map((s) => personOf(s, { ...env, staffLogons: everyone })).filter(Boolean));
+        free = { ...free, staffLogons: free.staffLogons.filter((l) => !taken.has(l)) };
+        return list;
+      };
+      const desk = endpointScenarios(free, deps);
+      claim(desk.slice(0, 1));
+      const ops = claim(operatingScenarios(free, deps));
+      const pim = claim(pimScenarios(free, deps));
+      const cloud = claim(cloudScenarios(free, deps));
+      return [...desk.slice(0, 1), ...ops, ...pim, ...cloud, ...desk.slice(1)];
     },
   };
   return byStage[env.stage]();
@@ -852,7 +913,7 @@ export async function generateTickets(
 ): Promise<GenerateResult> {
   const env = readEnvironment(deps.dir);
   const max = options.max ?? 4;
-  const current = notAlreadyOpen(scenariosFor(env, deps, options.focus), deps);
+  const current = onePerPerson(notAlreadyOpen(scenariosFor(env, deps, options.focus), deps), env, deps);
   const ahead = options.focus === 'helpdesk' ? [] : notAlreadyOpen(planAhead(env, deps), deps);
   const seen = new Set<string>();
   // The next build tickets go first: once the domain is operating there is
@@ -905,6 +966,6 @@ export async function generateTickets(
  *  the first paint. Always uses the built-in scenarios. */
 export function generateTicketsSync(deps: GeneratorDeps, max = 3): number {
   const env = readEnvironment(deps.dir);
-  const candidates = notAlreadyOpen(scenariosFor(env, deps), deps).slice(0, max);
+  const candidates = onePerPerson(notAlreadyOpen(scenariosFor(env, deps), deps), env, deps).slice(0, max);
   return candidates.filter((s) => raise(deps, s) !== null).length;
 }

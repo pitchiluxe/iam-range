@@ -347,7 +347,12 @@ describe('the three tickets in sequence leave a domain that makes sense', () => 
  */
 
 /** Build the domain up to the point where operational work starts arriving. */
-function staffedDomain() {
+/**
+ * `extra` adds more staff. The queue keeps one open ticket per person, so a
+ * three-person company is busy with its day-to-day tickets; the PIM and
+ * hybrid scenarios come to a company with people free for them.
+ */
+function staffedDomain(extra = 0) {
   const w = openWorkstation();
   for (const [name, path] of OU_PLAN) {
     run(w.ctx, 'New-ADOrganizationalUnit', { Name: name, ...(path ? { Path: path } : {}) });
@@ -359,6 +364,12 @@ function staffedDomain() {
     { logon: 'jdoe', name: 'John Doe', dept: 'Help Desk' },
     { logon: 'mchen', name: 'Maya Chen', dept: 'HR' },
     { logon: 'rpatel', name: 'Ravi Patel', dept: 'Finance' },
+    ...[
+      { logon: 'aokafor', name: 'Ada Okafor', dept: 'Engineering' },
+      { logon: 'lsilva', name: 'Luca Silva', dept: 'Sales' },
+      { logon: 'nhaddad', name: 'Nadia Haddad', dept: 'Security' },
+      { logon: 'tkim', name: 'Tara Kim', dept: 'IT' },
+    ].slice(0, extra),
   ]) {
     run(w.ctx, 'New-ADUser', {
       SamAccountName: person.logon,
@@ -459,7 +470,7 @@ describe('the operational tickets', () => {
   });
 
   it('replaces standing privilege with eligibility once a role exists', () => {
-    const { s, ctx, actor } = staffedDomain();
+    const { s, ctx, actor } = staffedDomain(4);
     const role = s.dir.createRole(
       'role-domain-admins',
       'Domain Administrators',
@@ -495,7 +506,7 @@ describe('the operational tickets', () => {
   });
 
   it('closes a hybrid duplicate by reconciling the tenant', () => {
-    const { s, ctx, actor } = staffedDomain();
+    const { s, ctx, actor } = staffedDomain(4);
     const ticket = refreshQueue(s, 20).find((t) => t.scenarioId?.startsWith('cloud-'));
     expect(ticket, 'the operating stage stages a hybrid fault').toBeDefined();
 
