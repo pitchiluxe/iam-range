@@ -89,7 +89,7 @@ function openSheet(aduc: Aduc, key: string, title: string, rows: SheetTab[][], i
     buttons: readOnly
       ? [{ label: 'OK', primary: true }, { label: 'Cancel', cancel: true }, { label: 'Apply', disabled: true }, { label: 'Help', onClick: () => false }]
       : [
-          { label: 'OK', primary: true, onClick: () => (applyBtn?.disabled ? undefined : apply() ? undefined : false) },
+          { label: 'OK', primary: true, onClick: () => (apply() ? undefined : false) },
           { label: 'Cancel', cancel: true },
           { label: 'Apply', disabled: true, onClick: () => void apply() },
           { label: 'Help', onClick: () => false },
@@ -111,24 +111,29 @@ function openSheet(aduc: Aduc, key: string, title: string, rows: SheetTab[][], i
 }
 
 /** A text box that marks the sheet dirty and records its value under `key`. */
-function bound(sheet: Sheet | null, pending: Record<string, string>, key: string, value: string, opts: { width?: string; readOnly?: boolean } = {}): HTMLInputElement {
+/**
+ * `sheet` is a getter, not the sheet: the first tab is built while the sheet
+ * is still being opened, before it exists, and a captured null meant edits on
+ * the General tab never enabled Apply and OK saved nothing.
+ */
+function bound(sheet: () => Sheet | null, pending: Record<string, string>, key: string, value: string, opts: { width?: string; readOnly?: boolean } = {}): HTMLInputElement {
   const t = textbox(value, { width: opts.width, readOnly: opts.readOnly });
   t.style.width = opts.width ?? '100%';
   t.addEventListener('input', () => {
     pending[key] = t.value;
-    sheet?.dirty();
+    sheet()?.dirty();
   });
   return t;
 }
 
-function area(sheet: Sheet | null, onChange: (v: string) => void, value: string, rows = 3): HTMLTextAreaElement {
+function area(sheet: () => Sheet | null, onChange: (v: string) => void, value: string, rows = 3): HTMLTextAreaElement {
   const a = document.createElement('textarea');
   a.value = value;
   a.rows = rows;
   a.style.width = '100%';
   a.addEventListener('input', () => {
     onChange(a.value);
-    sheet?.dirty();
+    sheet()?.dirty();
   });
   return a;
 }
@@ -371,15 +376,15 @@ export function userProperties(aduc: Aduc, u: User, initialTab = 'General'): voi
   const general: SheetTab = {
     label: 'General',
     build: (p) => {
-      const phone = bound(S(), pending, 'OfficePhone', attrs.telephoneNumber ?? '');
-      const web = bound(S(), pending, 'HomePage', attrs.wWWHomePage ?? '');
+      const phone = bound(S, pending, 'OfficePhone', attrs.telephoneNumber ?? '');
+      const web = bound(S, pending, 'HomePage', attrs.wWWHomePage ?? '');
       p.append(
         nameHeader('user', u.displayName),
         hr(),
-        grid('110px 1fr 50px 70px', 'First name:', bound(S(), pending, 'GivenName', firstIn), 'Initials:', bound(S(), pending, 'Initials', attrs.initials ?? '', { width: '70px' })),
-        css(grid('110px 1fr', 'Last name:', bound(S(), pending, 'Surname', lastIn), 'Display name:', bound(S(), pending, 'DisplayName', u.displayName), 'Description:', bound(S(), pending, 'Description', attrs.description ?? ''), 'Office:', bound(S(), pending, 'Office', attrs.physicalDeliveryOfficeName ?? '')), 'margin-top:7px;'),
+        grid('110px 1fr 50px 70px', 'First name:', bound(S, pending, 'GivenName', firstIn), 'Initials:', bound(S, pending, 'Initials', attrs.initials ?? '', { width: '70px' })),
+        css(grid('110px 1fr', 'Last name:', bound(S, pending, 'Surname', lastIn), 'Display name:', bound(S, pending, 'DisplayName', u.displayName), 'Description:', bound(S, pending, 'Description', attrs.description ?? ''), 'Office:', bound(S, pending, 'Office', attrs.physicalDeliveryOfficeName ?? '')), 'margin-top:7px;'),
         hr(),
-        grid('110px 1fr 80px', 'Telephone number:', phone, button('Other...', () => otherValues(aduc, 'Phone Number (Others)', replace.otherTelephone ?? attrs.otherTelephone ?? '', (v) => setReplace('otherTelephone', v))), 'E-mail:', bound(S(), pending, 'EmailAddress', u.email), el('span'), 'Web page:', web, button('Other...', () => otherValues(aduc, 'Web Page Address (Others)', replace.url ?? attrs.url ?? '', (v) => setReplace('url', v)))),
+        grid('110px 1fr 80px', 'Telephone number:', phone, button('Other...', () => otherValues(aduc, 'Phone Number (Others)', replace.otherTelephone ?? attrs.otherTelephone ?? '', (v) => setReplace('otherTelephone', v))), 'E-mail:', bound(S, pending, 'EmailAddress', u.email), el('span'), 'Web page:', web, button('Other...', () => otherValues(aduc, 'Web Page Address (Others)', replace.url ?? attrs.url ?? '', (v) => setReplace('url', v)))),
       );
     },
   };
@@ -387,21 +392,21 @@ export function userProperties(aduc: Aduc, u: User, initialTab = 'General'): voi
   const address: SheetTab = {
     label: 'Address',
     build: (p) => {
-      const street = area(S(), (v) => (pending.StreetAddress = v), attrs.streetAddress ?? '', 3);
+      const street = area(S, (v) => (pending.StreetAddress = v), attrs.streetAddress ?? '', 3);
       const country = select(COUNTRIES, attrs.c ?? '');
       country.style.width = '100%';
       country.addEventListener('change', () => {
         pending.Country = country.value;
         S()?.dirty();
       });
-      p.append(grid('110px 1fr', 'Street:', street, 'P.O. Box:', bound(S(), pending, 'POBox', attrs.postOfficeBox ?? ''), 'City:', bound(S(), pending, 'City', attrs.l ?? ''), 'State/province:', bound(S(), pending, 'State', attrs.st ?? ''), 'Zip/Postal Code:', bound(S(), pending, 'PostalCode', attrs.postalCode ?? ''), 'Country/region:', country));
+      p.append(grid('110px 1fr', 'Street:', street, 'P.O. Box:', bound(S, pending, 'POBox', attrs.postOfficeBox ?? ''), 'City:', bound(S, pending, 'City', attrs.l ?? ''), 'State/province:', bound(S, pending, 'State', attrs.st ?? ''), 'Zip/Postal Code:', bound(S, pending, 'PostalCode', attrs.postalCode ?? ''), 'Country/region:', country));
     },
   };
 
   const account: SheetTab = {
     label: 'Account',
     build: (p) => {
-      const logon = bound(S(), pending, 'SamAccountName', u.username);
+      const logon = bound(S, pending, 'SamAccountName', u.username);
       const suffix = select([`@${DOMAIN}`]);
       const pre = textbox(`${NETBIOS}\\`, { readOnly: true });
       const sam = textbox(u.username);
@@ -510,7 +515,7 @@ export function userProperties(aduc: Aduc, u: User, initialTab = 'General'): voi
     label: 'Profile',
     build: (p) => {
       const upFs = fieldset('User profile');
-      upFs.appendChild(grid('100px 1fr', 'Profile path:', bound(S(), pending, 'ProfilePath', attrs.profilePath ?? ''), 'Logon script:', bound(S(), pending, 'ScriptPath', attrs.scriptPath ?? '')));
+      upFs.appendChild(grid('100px 1fr', 'Profile path:', bound(S, pending, 'ProfilePath', attrs.profilePath ?? ''), 'Logon script:', bound(S, pending, 'ScriptPath', attrs.scriptPath ?? '')));
       const hfFs = fieldset('Home folder');
       const local = textbox(attrs.homeDrive ? '' : attrs.homeDirectory ?? '');
       const drive = select(['Z:', 'Y:', 'X:', 'W:', 'V:', 'U:', 'H:'], attrs.homeDrive ?? 'Z:', '70px');
@@ -557,12 +562,12 @@ export function userProperties(aduc: Aduc, u: User, initialTab = 'General'): voi
       ip.addEventListener('input', () => setReplace('ipPhone', ip.value));
       const fs = fieldset('Telephone numbers');
       fs.appendChild(grid('80px 1fr 80px',
-        'Home:', bound(S(), pending, 'HomePhone', attrs.homePhone ?? ''), other('Home Phone', 'otherHomePhone'),
+        'Home:', bound(S, pending, 'HomePhone', attrs.homePhone ?? ''), other('Home Phone', 'otherHomePhone'),
         'Pager:', pager, other('Pager', 'otherPager'),
-        'Mobile:', bound(S(), pending, 'MobilePhone', attrs.mobile ?? ''), other('Mobile', 'otherMobile'),
-        'Fax:', bound(S(), pending, 'Fax', attrs.facsimileTelephoneNumber ?? ''), other('Fax', 'otherFacsimileTelephoneNumber'),
+        'Mobile:', bound(S, pending, 'MobilePhone', attrs.mobile ?? ''), other('Mobile', 'otherMobile'),
+        'Fax:', bound(S, pending, 'Fax', attrs.facsimileTelephoneNumber ?? ''), other('Fax', 'otherFacsimileTelephoneNumber'),
         'IP phone:', ip, other('IP Phone', 'otherIpPhone')));
-      p.append(fs, css(el('div', undefined, 'Notes:'), 'margin:12px 0 3px;'), area(S(), (v) => (replace.info = v), attrs.info ?? '', 7));
+      p.append(fs, css(el('div', undefined, 'Notes:'), 'margin:12px 0 3px;'), area(S, (v) => (replace.info = v), attrs.info ?? '', 7));
     },
   };
 
@@ -612,7 +617,7 @@ export function userProperties(aduc: Aduc, u: User, initialTab = 'General'): voi
       const reports = listBox<User>([{ label: 'Direct reports:', render: (x) => x.displayName, iconOf: () => 'user' }], { height: '90px', onOpen: (x) => userProperties(aduc, x) });
       reports.setRows(aduc.dir.listUsers().filter((x) => x.attrs?.manager === u.username || (!x.attrs?.manager && x.managerId === u.id)));
       p.append(
-        grid('90px 1fr', 'Job Title:', bound(S(), pending, 'Title', u.title), 'Department:', deptBox, 'Company:', bound(S(), pending, 'Company', attrs.company ?? '')),
+        grid('90px 1fr', 'Job Title:', bound(S, pending, 'Title', u.title), 'Department:', deptBox, 'Company:', bound(S, pending, 'Company', attrs.company ?? '')),
         css(mfs, 'margin-top:12px;'),
         css(el('div', undefined, 'Direct reports:'), 'margin:10px 0 3px;'),
         reports.el,
@@ -1055,7 +1060,7 @@ export function groupProperties(aduc: Aduc, g: Group, initialTab = 'General'): v
         grid('90px 1fr', 'Description:', d_, 'E-mail:', mail),
         cols,
         css(el('div', undefined, 'Notes:'), 'margin:10px 0 3px;'),
-        area(S(), (v) => (replace.info = v), attrs.info ?? '', 4),
+        area(S, (v) => (replace.info = v), attrs.info ?? '', 4),
       );
     },
   };
@@ -1267,15 +1272,15 @@ export function ouProperties(aduc: Aduc, ou: OrganizationalUnit, initialTab = 'G
   const general: SheetTab = {
     label: 'General',
     build: (p) => {
-      const street = area(S(), (v) => (pending.StreetAddress = v), a.street ?? '', 3);
+      const street = area(S, (v) => (pending.StreetAddress = v), a.street ?? '', 3);
       const country = select(COUNTRIES, a.c ?? '');
       country.style.width = '100%';
       country.addEventListener('change', () => { pending.Country = country.value; S()?.dirty(); });
       p.append(
         nameHeader('ou', ou.name),
-        grid('110px 1fr', 'Description:', bound(S(), pending, 'Description', ou.description)),
+        grid('110px 1fr', 'Description:', bound(S, pending, 'Description', ou.description)),
         hr(),
-        grid('110px 1fr', 'Street:', street, 'City:', bound(S(), pending, 'City', a.l ?? ''), 'State/province:', bound(S(), pending, 'State', a.st ?? ''), 'Zip/Postal Code:', bound(S(), pending, 'PostalCode', a.postalCode ?? ''), 'Country/region:', country),
+        grid('110px 1fr', 'Street:', street, 'City:', bound(S, pending, 'City', a.l ?? ''), 'State/province:', bound(S, pending, 'State', a.st ?? ''), 'Zip/Postal Code:', bound(S, pending, 'PostalCode', a.postalCode ?? ''), 'Country/region:', country),
       );
     },
   };

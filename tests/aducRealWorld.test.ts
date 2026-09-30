@@ -9,6 +9,8 @@
  * attributes, protection from accidental deletion, group scope conversion
  * rules, Rename-ADObject, moving OUs, and the Delegation of Control Wizard.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { VmSession } from '@/vm/session';
 import { dispatch, createShellState } from '@/terminal/dispatcher';
@@ -252,5 +254,22 @@ describe('Delegation of Control Wizard', () => {
   it('rejects unknown tasks and trustees', () => {
     expect(cap('ou.delegate', { Trustee: 'nobody', Tasks: '1' }).ok).toBe(false);
     expect(cap('ou.delegate', { Trustee: 'admin', Tasks: '99' }).ok).toBe(false);
+  });
+});
+
+describe('property sheets save edits', () => {
+  // Reported: editing a name on the General tab left Apply greyed out and OK
+  // saved nothing. The first tab is built before the sheet exists, so fields
+  // must reach the sheet through a getter, never a captured value.
+  const src = readFileSync(join(process.cwd(), 'src', 'ui', 'consoles', 'aduc', 'properties.ts'), 'utf8');
+
+  it('marks the sheet dirty through a getter on every tab', () => {
+    expect(src).not.toMatch(/bound\(S\(\)/);
+    expect(src).not.toMatch(/area\(S\(\)/);
+    expect(src).toMatch(/function bound\(sheet: \(\) => Sheet \| null/);
+  });
+
+  it('OK always applies pending changes', () => {
+    expect(src).toMatch(/label: 'OK', primary: true, onClick: \(\) => \(apply\(\) \? undefined : false\)/);
   });
 });
