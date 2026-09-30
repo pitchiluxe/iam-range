@@ -245,6 +245,12 @@ function labSection(lab: AdLab, mode: InstructorMode): string[] {
     if (!lab.ticket) out.push('Requirements:', ...lab.requirements.map((r) => `- ${r}`));
   }
   out.push(`Available tools: ${lab.tools.join(', ')}`);
+  // The Greenfield build's step-by-step guide is teaching material: the
+  // instructor walks the student through it phase by phase.
+  if (lab.guide) {
+    out.push('Build guide (the phases the student follows, in order):');
+    for (const g of lab.guide) out.push(g.phase, ...g.steps.map((st) => `  - ${st}`));
+  }
   return out;
 }
 
@@ -364,6 +370,7 @@ export function offlineInstructor(req: InstructorRequest, ctx: InstructorContext
       lines.push('OBJECTIVES', ...lab.objectives.map((o) => `  • ${o}`), '');
       if (!lab.ticket) lines.push('REQUIREMENTS', ...lab.requirements.map((r) => `  • ${r}`), '');
       lines.push('EXPECTED RESULT', `  ${lab.expectedResult}`, '', 'AVAILABLE TOOLS', `  ${lab.tools.join(', ')}`, '');
+      if (lab.guide) lines.push('BUILD PHASES', ...lab.guide.map((g) => `  • ${g.phase}`), '', 'Open the phases in the brief on the left; ask me about any step.', '');
       lines.push(session.mode === 'guided'
         ? 'Start with the first objective. Look at the current state before you change anything, and ask me about any step.'
         : 'Work through it your way. Click "Check my work" whenever you want the validation engine to examine the lab.');

@@ -23,7 +23,7 @@
  * and grades it with the same validation engine.
  */
 import { openLabSetupGuide } from '@/ui/labSetupGuide';
-import { AD_LABS, type AdLab, hostsForLab, labById, startingState } from '@/vm/adlab/labs';
+import { AD_LABS, BUILD_LAB, type AdLab, hostsForLab, labById, startingState } from '@/vm/adlab/labs';
 import { COMMAND_NAMES, runCommand } from '@/vm/adlab/commands';
 import { type HostName, type LabState, freshState } from '@/vm/adlab/state';
 import { factsToLabState, type RawFactsDocument } from '@/vm/adlab/realVm';
@@ -55,6 +55,8 @@ interface LabSave {
   state: LabState;
   session: InstructorSession;
   notes: string;
+  /** Build-guide steps the learner has ticked ("phase.step"). */
+  guideDone?: string[];
   /** The last reading of the real VMs, when working in Real VMs mode. */
   realState?: LabState | null;
   realAt?: string | null;
@@ -108,6 +110,13 @@ const STYLES = `
 .adl-title{font-weight:650;font-size:13.5px;margin-right:6px;}
 .adl-head select,.adl-btn{padding:5px 9px;border-radius:4px;border:1px solid var(--border);background:var(--panel);color:var(--fg);font:inherit;font-size:12px;cursor:pointer;}
 .adl-btn:hover{background:var(--border);}
+.adl-phase{margin:6px 0;border:1px solid var(--border);border-radius:5px;padding:4px 8px;background:var(--panel-alt);}
+.adl-phase summary{cursor:pointer;font-weight:600;}
+.adl-phase ol{margin:6px 0 4px 18px;padding:0;}
+.adl-phase li{margin:4px 0;line-height:1.45;}
+.adl-ask{font-size:10.5px;padding:1px 6px;border-radius:3px;border:1px solid var(--border);background:var(--panel);color:var(--fg);cursor:pointer;}
+.adl-vm.click{cursor:pointer;}
+.adl-vm.click:hover{outline:1px solid var(--accent);}
 .adl-btn:disabled{opacity:.55;cursor:default;}
 .adl-primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:600;}
 .adl-primary:hover{background:#1d4ed8;}
@@ -246,11 +255,19 @@ export function renderAdLabWindow(body: HTMLElement): void {
 
   function paintLabSelect(): void {
     labSel.innerHTML = '';
+    const series = el('optgroup');
+    series.label = 'The series (scripted VMs)';
     for (const l of AD_LABS) {
       const o = el('option', undefined, `${store.completed.includes(l.id) ? '✓ ' : ''}Lab ${String(l.number).padStart(2, '0')} — ${l.title}`);
       o.value = l.id;
-      labSel.appendChild(o);
+      series.appendChild(o);
     }
+    const build = el('optgroup');
+    build.label = 'Build it yourself (hand-built VMs)';
+    const bo = el('option', undefined, `${store.completed.includes(BUILD_LAB.id) ? '✓ ' : ''}${BUILD_LAB.title}`);
+    bo.value = BUILD_LAB.id;
+    build.appendChild(bo);
+    labSel.append(series, build);
     labSel.value = lab.id;
   }
 
@@ -295,6 +312,42 @@ export function renderAdLabWindow(body: HTMLElement): void {
       section('Objectives', lab.objectives);
       if (!lab.ticket) section('Requirements', lab.requirements);
       brief.append(el('h3', undefined, 'Expected result'), el('div', undefined, lab.expectedResult));
+    }
+    if (lab.guide) {
+      brief.appendChild(el('h3', undefined, 'Build guide — follow the phases in order'));
+      brief.appendChild(el('div', 'muted', 'Every name and address comes from the Setup guide (📘). Tick steps as you go; ask the instructor about any of them.'));
+      const done = new Set(save.guideDone ?? []);
+      const phaseDone = (gi: number): boolean => lab.guide![gi]!.steps.every((_, si) => done.has(`${gi}.${si}`));
+      lab.guide.forEach((g, gi) => {
+        const d = el('details', 'adl-phase');
+        // The first unfinished phase is the one open.
+        d.open = !phaseDone(gi) && lab.guide!.slice(0, gi).every((_, pi) => phaseDone(pi));
+        d.appendChild(el('summary', undefined, `${phaseDone(gi) ? '✓ ' : ''}${g.phase}`));
+        const ol = el('ol');
+        g.steps.forEach((st, si) => {
+          const li = el('li');
+          const cb = el('input');
+          cb.type = 'checkbox';
+          cb.checked = done.has(`${gi}.${si}`);
+          cb.addEventListener('change', () => {
+            const k = `${gi}.${si}`;
+            if (cb.checked) done.add(k);
+            else done.delete(k);
+            save.guideDone = [...done];
+            persist();
+          });
+          const ask = el('button', 'adl-ask', 'Ask');
+          ask.title = 'Ask the instructor to explain this step';
+          ask.addEventListener('click', () => {
+            askInput.value = `Explain this step and how to check I did it right: ${st}`;
+            sendQuestion();
+          });
+          li.append(cb, el('span', undefined, ` ${st} `), ask);
+          ol.appendChild(li);
+        });
+        d.appendChild(ol);
+        brief.appendChild(d);
+      });
     }
     section('Available tools', lab.tools);
     brief.append(el('h3', undefined, 'Troubleshooting method'), el('div', undefined, METHODOLOGY.map((m, i) => `${i + 1}. ${m}`).join('  ')));
@@ -552,12 +605,12 @@ export function renderAdLabWindow(body: HTMLElement): void {
     setBusy(true);
     const note = bubble('sys', 'Reading DC01 and CLIENT01 (read-only)… this takes 20–60 seconds.');
     try {
-      const res = (await b.invoke('adlab:vm-facts')) as { ok: boolean; doc?: RawFactsDocument; error?: string };
+      const res = (await b.invoke('adlab:vm-facts', lab.vmSet)) as { ok: boolean; doc?: RawFactsDocument; error?: string };
       if (!res?.ok || !res.doc) {
         note.textContent = `Could not read the VMs: ${res?.error ?? 'no answer from the desktop app'}`;
         return false;
       }
-      const reading = factsToLabState(res.doc);
+      const reading = factsToLabState(res.doc, lab.vmSet);
       // Only the machines this lab's checks read have to be ready.
       realProblems = hostsForLab(lab).map((h) => reading.problemsByHost[h]).filter((p): p is string => !!p);
       if (realProblems.length) {
@@ -582,7 +635,10 @@ export function renderAdLabWindow(body: HTMLElement): void {
     const report = runValidation(true);
     // Passing a lab on the real VMs is exactly the next lab's starting point.
     // Saving restarts the VMs, so ask rather than surprise.
-    const next = AD_LABS[AD_LABS.indexOf(lab) + 1];
+    const next = lab.vmSet ? undefined : AD_LABS[AD_LABS.indexOf(lab) + 1];
+    if (report.passed && lab.vmSet && env === 'real') {
+      bubble('sys', 'Greenfield build complete. Take a VirtualBox snapshot of both Build VMs now ("Greenfield-Done").');
+    }
     if (env === 'real' && report.passed && next
       && window.confirm(`Lab ${labNo(lab)} passed. Save this as Lab ${labNo(next)}'s start point, so you can restart Lab ${labNo(next)} later? The VMs restart once (about a minute).`)) {
       void saveStartPoint(next, true);
@@ -658,6 +714,7 @@ export function renderAdLabWindow(body: HTMLElement): void {
     renderBrief();
     repaintTranscript();
     switchHost(activeHost);
+    if (env === 'real') paintEnv();
     if (save.session.transcript.length === 0) void instruct({ kind: 'intro' });
     else bubble('sys', 'Lab restored where you left it.');
   }
@@ -772,6 +829,18 @@ export function renderAdLabWindow(body: HTMLElement): void {
         menuItem(`Restart Lab ${labNo(lab)}`, 'Rebuild this lab\'s starting machines and clear its progress.', restartLabSim),
         menuItem('Restart the whole series', 'Clear every lab and go back to Lab 01.', restartSeriesSim),
       );
+    } else if (lab.vmSet) {
+      menu.append(
+        menuItem("Clear this lab's progress", 'Forget ticks, checks and the instructor conversation. Your Build VMs are not changed.', () => {
+          if (window.confirm("Clear this lab's progress in the app? The VMs themselves are not touched.")) {
+            forgetProgress([lab.id]);
+            openLab(lab, true);
+          }
+        }),
+      );
+      menu.appendChild(el('div', 'muted',
+        'To rebuild from scratch, delete Build-DC01 and Build-CLIENT01 in VirtualBox (Remove → Delete all files) and start Phase 1 again. '
+        + 'Take your own VirtualBox snapshots at the end of each phase to rewind.'));
     } else {
       menu.append(
         menuItem(`Restart Lab ${labNo(lab)}`, `Restore both VMs to snapshot "${startPoint(lab)}".`, () => {
@@ -809,7 +878,7 @@ export function renderAdLabWindow(body: HTMLElement): void {
       paintReal();
       return;
     }
-    const res = (await b.invoke('adlab:vm-status')) as { ok: boolean; vms?: Record<string, VmStatus>; error?: string };
+    const res = (await b.invoke('adlab:vm-status', lab.vmSet)) as { ok: boolean; vms?: Record<string, VmStatus>; error?: string };
     statusError = res?.ok ? null : (res?.error ?? 'No answer from the desktop app.');
     vmStatus = res?.vms ?? null;
     paintReal();
@@ -820,13 +889,36 @@ export function renderAdLabWindow(body: HTMLElement): void {
     realPanel.appendChild(el('h2', undefined, 'Real VMs — VirtualBox'));
     realPanel.appendChild(el('p', undefined,
       'Do this lab inside the real machines, in their VirtualBox windows. Nothing is typed here: the consoles are the VMs.'));
-    const guide = el('button', 'adl-btn', '📘 First time? Download Windows Server + Windows 11 and build the VMs');
+    if (lab.vmSet) {
+      realPanel.appendChild(el('p', undefined,
+        'This lab uses its own two VMs, Build-DC01 and Build-CLIENT01 (group /TechnoBiz-Build), which you create by hand in '
+        + 'VirtualBox; the scripted series VMs are never touched. Click a machine below to open it.'));
+    }
+    const guide = el('button', 'adl-btn', lab.vmSet
+      ? '📘 Setup guide — the design, names and ISOs you build to'
+      : '📘 First time? Download Windows Server + Windows 11 and build the VMs');
     guide.addEventListener('click', () => openLabSetupGuide('adlab'));
     realPanel.appendChild(guide);
     const cards = el('div', 'adl-vms');
     for (const key of HOSTS) {
       const st = vmStatus?.[key];
       const card = el('div', 'adl-vm');
+      card.classList.add('click');
+      card.title = st?.exists ? `Open ${st.vmName} in VirtualBox` : 'Not built yet';
+      // Click the server or the client to open the real VM.
+      card.addEventListener('click', async (ev) => {
+        if ((ev.target as HTMLElement).tagName === 'BUTTON') return;
+        const b = bridge();
+        if (!b) {
+          bubble('sys', 'Opening the real VMs needs the IAM Range desktop app.');
+          return;
+        }
+        const r = (await b.invoke('adlab:vm-open', key, lab.vmSet)) as { ok: boolean; started?: boolean; running?: boolean; error?: string };
+        bubble('sys', r?.ok
+          ? (r.started ? `${key} is starting in its own VirtualBox window.` : `${key} is already running — its VirtualBox window is on your taskbar.`)
+          : `Could not open ${key}: ${r?.error ?? 'no answer'}`);
+        await refreshVms();
+      });
       card.appendChild(el('b', undefined, `${key === 'DC01' ? '🖥️' : '💻'} ${key}`));
       const line = el('div', `st ${st?.running ? 'on' : 'off'}`,
         !st ? 'Status unknown' : !st.exists ? `Not built yet (${st.vmName})` : st.running ? `Running — ${st.vmName}` : `Powered off — ${st.vmName}`);
@@ -836,7 +928,7 @@ export function renderAdLabWindow(body: HTMLElement): void {
         start.addEventListener('click', async () => {
           start.disabled = true;
           start.textContent = 'Starting…';
-          await bridge()?.invoke('adlab:vm-start', key);
+          await bridge()?.invoke('adlab:vm-start', key, lab.vmSet);
           await refreshVms();
         });
         card.appendChild(start);

@@ -13,11 +13,16 @@
 
 .PARAMETER Json
     Print compact JSON only (what the app reads). Without it, pretty JSON.
+
+.PARAMETER VmSet
+    Series (default): the kit's ADLab-DC01 / ADLab-CLIENT01.
+    Build: the Greenfield Build lab's hand-made Build-DC01 / Build-CLIENT01.
 #>
 [CmdletBinding()]
-param([switch]$Json)
+param([switch]$Json, [ValidateSet('Series', 'Build')][string]$VmSet = 'Series')
 
 . (Join-Path $PSScriptRoot 'AdLab.Common.ps1')
+$script:AdLabVmSet = $VmSet
 $cfg = Get-AdLabConfig
 
 # ---------------------------------------------------------------------------
@@ -167,7 +172,18 @@ $f | ConvertTo-Json -Depth 8 -Compress
 $result = [ordered]@{ collectedAt = (Get-Date).ToString('o'); vms = [ordered]@{}; networks = [ordered]@{} }
 foreach ($key in 'DC01', 'CLIENT01') {
     $spec = $cfg.vms.$key
-    foreach ($nic in $spec.nics) { $result.networks[(Format-AdLabMac $nic.mac)] = $nic.network }
+    if ($spec.PSObject.Properties['nics']) {
+        foreach ($nic in $spec.nics) { $result.networks[(Format-AdLabMac $nic.mac)] = $nic.network }
+    } elseif (Test-AdLabVmExists $spec.vmName) {
+        # Hand-built VMs have VirtualBox's random MACs: read how each adapter is wired.
+        $info = Invoke-VBoxManage showvminfo $spec.vmName --machinereadable
+        foreach ($i in 1..8) {
+            $mode = ($info | Where-Object { $_ -like "nic$i=*" }) -replace '^nic\d+="(.*)"$', '$1'
+            $mac = ($info | Where-Object { $_ -like "macaddress$i=*" }) -replace '^macaddress\d+="(.*)"$', '$1'
+            if (-not $mac -or -not $mode -or $mode -eq 'none') { continue }
+            $result.networks[(Format-AdLabMac $mac)] = if ($mode -eq 'nat' -or $mode -eq 'natnetwork') { 'internet' } else { 'internal' }
+        }
+    }
     $entry = [ordered]@{ vmName = $spec.vmName; exists = (Test-AdLabVmExists $spec.vmName); running = $false; state = $null; facts = $null; error = $null }
     if ($entry.exists) { $entry.state = Get-AdLabVmState $spec.vmName; $entry.running = ($entry.state -eq 'running') }
     if ($entry.running) {

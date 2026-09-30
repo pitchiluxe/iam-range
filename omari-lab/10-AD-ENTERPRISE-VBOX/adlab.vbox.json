@@ -56,5 +56,17 @@
         }
       ]
     }
+  },
+  "build": {
+    "_comment": "The Greenfield Build lab: two VMs the learner creates by hand in VirtualBox. Only their names are fixed here; the app starts them and reads them (same adminUser/adminPassword).",
+    "group": "/TechnoBiz-Build",
+    "vms": {
+      "DC01": {
+        "vmName": "Build-DC01"
+      },
+      "CLIENT01": {
+        "vmName": "Build-CLIENT01"
+      }
+    }
   }
 }

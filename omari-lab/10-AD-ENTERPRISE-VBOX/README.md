@@ -116,6 +116,35 @@ In the app, open **Start over ▾** and choose **Restart this lab**, **Restart t
 
 Saving shuts Windows down cleanly, takes the snapshot, and starts the VM again, which takes about a minute. Live snapshots, taken while the VM runs, froze the guest and crashed VirtualBox's service on a host like this one, so they are not used. If a save point with the same name already has later snapshots branching from it, VirtualBox won't delete it. In that case the old one is renamed `… (replaced <date>)`, and nothing is ever lost.
 
+## Greenfield Build lab — build it all by hand
+
+The scripts above build `ADLab-DC01` and `ADLab-CLIENT01` for you. **AD
+Enterprise Lab → Greenfield Build — TechnoBiz Infrastructure by Hand** (in the
+lab list under *Build it yourself*) is the opposite: you build the same design
+yourself, from the Setup guide's naming table, on **two separate VMs** so the
+scripted series is never touched:
+
+| Item | Name |
+|---|---|
+| VirtualBox group | `/TechnoBiz-Build` |
+| Domain controller VM | `Build-DC01` (computer name `DC01`) — NAT + Internal Network `TechnoBiz-LAN` |
+| Client VM | `Build-CLIENT01` (computer name `CLIENT01`) — Internal Network `TechnoBiz-LAN` only |
+| Everything inside Windows | exactly as in the naming table above (172.16.0.1/24, `corp.technobiz.local`, scope `TechnoBiz LAN` …) |
+
+The lab's brief walks through seven phases — create the VMs in VirtualBox
+Manager, install Windows and Guest Additions, DC networking, AD DS + DNS,
+RRAS NAT, DHCP, domain join — each step with a tick box and an **Ask**
+button for the Ollama instructor, which is given the whole build guide as
+teaching material. In **Real VMs** mode, click **DC01** or **CLIENT01** to open
+`Build-DC01` / `Build-CLIENT01` in their own VirtualBox windows, and **CHECK MY
+WORK** reads them with the same checker as the series (`Get-AdLabFacts.ps1
+-VmSet Build`; the adapter wiring is read from VirtualBox, so random MACs are
+fine).
+
+Two things the checker needs, both in Phase 2: **Guest Additions** installed
+in both VMs, and the **built-in Administrator enabled with the password in
+`adlab.vbox.json`** (on Windows 11: `net user Administrator /active:yes`).
+
 ## What changes compared with the simulator
 
 - **Internet adapter:** DC01's Internet NIC gets `10.0.2.x` from VirtualBox NAT instead of `192.168.1.x` from a home router. No check depends on that address.

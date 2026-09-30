@@ -22,6 +22,13 @@ function Get-AdLabConfig {
     $cfg.vmFolder = Expand-AdLabPath $cfg.vmFolder
     $cfg.isos.server = Expand-AdLabPath $cfg.isos.server
     $cfg.isos.client = Expand-AdLabPath $cfg.isos.client
+    # The Greenfield Build lab reads the learner's hand-built VMs instead.
+    # A calling script opts in with $script:AdLabVmSet = 'Build'.
+    $set = Get-Variable -Name AdLabVmSet -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    if ($set -eq 'Build' -and $cfg.PSObject.Properties['build']) {
+        $cfg.vms = $cfg.build.vms
+        $cfg.group = $cfg.build.group
+    }
     return $cfg
 }
 

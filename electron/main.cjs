@@ -367,7 +367,16 @@ function run(file, args, timeoutMs) {
   });
 }
 
-ipcMain.handle('adlab:vm-status', async () => {
+/**
+ * The VM set a lab uses: the series' scripted ADLab-* machines, or the
+ * Greenfield Build lab's hand-made Build-* machines. Only these two names
+ * are accepted, so the renderer can never point VBoxManage anywhere else.
+ */
+function vmsFor(kit, set) {
+  return set === 'build' && kit.cfg.build && kit.cfg.build.vms ? kit.cfg.build.vms : kit.cfg.vms;
+}
+
+ipcMain.handle('adlab:vm-status', async (_event, set) => {
   const kit = adlabConfig();
   if (!kit) return { ok: false, error: 'The VirtualBox kit (omari-lab/10-AD-ENTERPRISE-VBOX) was not found.' };
   if (!fs.existsSync(kit.cfg.vboxManage)) return { ok: false, error: 'VirtualBox is not installed (VBoxManage not found).' };
@@ -375,18 +384,45 @@ ipcMain.handle('adlab:vm-status', async () => {
   const running = await run(kit.cfg.vboxManage, ['list', 'runningvms'], 20_000);
   const vms = {};
   for (const key of ADLAB_KEYS) {
-    const name = kit.cfg.vms[key].vmName;
+    const name = vmsFor(kit, set)[key].vmName;
     vms[key] = { vmName: name, exists: all.stdout.includes(`"${name}"`), running: running.stdout.includes(`"${name}"`) };
   }
   return { ok: true, vms };
 });
 
-ipcMain.handle('adlab:vm-start', async (_event, key) => {
+ipcMain.handle('adlab:vm-start', async (_event, key, set) => {
   if (!ADLAB_KEYS.includes(key)) return false;
   const kit = adlabConfig();
   if (!kit) return false;
-  const res = await run(kit.cfg.vboxManage, ['startvm', kit.cfg.vms[key].vmName, '--type', 'gui'], 60_000);
+  const res = await run(kit.cfg.vboxManage, ['startvm', vmsFor(kit, set)[key].vmName, '--type', 'gui'], 60_000);
   return !res.err;
+});
+
+/**
+ * Open a lab machine: start it in its own VirtualBox window when it is off;
+ * when it already runs headless, attach a VirtualBox window to it. A VM that
+ * already has its window open is simply reported as running.
+ */
+ipcMain.handle('adlab:vm-open', async (_event, key, set) => {
+  if (!ADLAB_KEYS.includes(key)) return { ok: false, error: 'Unknown machine.' };
+  const kit = adlabConfig();
+  if (!kit) return { ok: false, error: 'The VirtualBox kit was not found.' };
+  if (!fs.existsSync(kit.cfg.vboxManage)) return { ok: false, error: 'VirtualBox is not installed (VBoxManage not found).' };
+  const name = vmsFor(kit, set)[key].vmName;
+  const all = await run(kit.cfg.vboxManage, ['list', 'vms'], 20_000);
+  if (!all.stdout.includes(`"${name}"`)) return { ok: false, error: `${name} does not exist in VirtualBox yet.` };
+  const running = await run(kit.cfg.vboxManage, ['list', 'runningvms'], 20_000);
+  if (!running.stdout.includes(`"${name}"`)) {
+    const res = await run(kit.cfg.vboxManage, ['startvm', name, '--type', 'gui'], 60_000);
+    return res.err ? { ok: false, error: (res.stderr || String(res.err)).slice(0, 300) } : { ok: true, started: true };
+  }
+  const vboxVm = path.join(path.dirname(kit.cfg.vboxManage), 'VirtualBoxVM.exe');
+  if (fs.existsSync(vboxVm)) {
+    // Attaches a window to a headless VM; for a VM whose window is already open it exits quietly.
+    const child = require('child_process').spawn(vboxVm, ['--startvm', name, '--separate'], { detached: true, stdio: 'ignore', windowsHide: false });
+    child.unref();
+  }
+  return { ok: true, running: true };
 });
 
 // Snapshots are how a real lab is reset: "LabNN-Start" is the moment a lab
@@ -488,11 +524,12 @@ ipcMain.handle('portfolio:vm-setup', (_event, project) => {
 
 ipcMain.handle('portfolio:vm-facts', () => portfolioScript('Get-PortfolioFacts.ps1', [], 900_000));
 
-ipcMain.handle('adlab:vm-facts', async () => {
+ipcMain.handle('adlab:vm-facts', async (_event, set) => {
   const kit = adlabConfig();
   if (!kit) return { ok: false, error: 'The VirtualBox kit (omari-lab/10-AD-ENTERPRISE-VBOX) was not found.' };
   const script = path.join(kit.dir, 'Get-AdLabFacts.ps1');
-  const res = await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Json'], 600_000);
+  const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Json', ...(set === 'build' ? ['-VmSet', 'Build'] : [])];
+  const res = await run('powershell.exe', args, 600_000);
   const line = res.stdout.split(/\r?\n/).filter((l) => l.trim().startsWith('{')).pop();
   if (!line) return { ok: false, error: (res.stderr || res.stdout || String(res.err || 'No output')).slice(0, 800) };
   try {

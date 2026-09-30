@@ -49,6 +49,14 @@ export interface AdLab {
   solution: [HostName, string][];
   /** Faults planted after the previous labs are replayed. */
   plant?: (s: LabState) => void;
+  /**
+   * Which real VirtualBox machines the lab runs on. Absent = the series' own
+   * ADLab-DC01 / ADLab-CLIENT01 that the kit's scripts build. 'build' = the
+   * learner's hand-built Build-DC01 / Build-CLIENT01 (the Greenfield lab).
+   */
+  vmSet?: 'build';
+  /** Step-by-step phases shown in the brief and given to the instructor as material. */
+  guide?: { phase: string; steps: string[] }[];
 }
 
 const DN = 'DC=corp,DC=technobiz,DC=local';
@@ -545,6 +553,156 @@ export const AD_LABS: readonly AdLab[] = [
 ];
 
 /**
+ * Greenfield Build — the whole TechnoBiz estate, by hand, from the Setup
+ * guide's design.
+ *
+ * The series' kit builds ADLab-DC01 and ADLab-CLIENT01 with scripts. This lab
+ * is the opposite: the learner creates two new VMs in VirtualBox's own GUI,
+ * installs Windows from the ISOs, wires the networks and configures every
+ * role, using exactly the names, addresses and domain the Setup guide lists.
+ * Its VMs are separate (Build-DC01, Build-CLIENT01) so the scripted series is
+ * never touched. It stands outside the numbered chain: no other lab replays it.
+ */
+export const BUILD_LAB: AdLab = {
+  id: 'adl-build',
+  number: 0,
+  title: 'Greenfield Build — TechnoBiz Infrastructure by Hand',
+  vmSet: 'build',
+  scenario:
+    "You are TechnoBiz's first IT hire. There is a laptop with VirtualBox, two Microsoft evaluation ISOs and " +
+    "the network design from the Setup guide — nothing else. Build the company's identity infrastructure " +
+    'yourself: a Windows Server 2022 domain controller (DC01) that routes the internal network to the ' +
+    'internet and hands out addresses, and a Windows 11 workstation (CLIENT01) joined to corp.technobiz.local. ' +
+    'Every name and address must match the design, because every later lab and script depends on it.',
+  objectives: [
+    'Create Build-DC01 and Build-CLIENT01 in VirtualBox by hand, wired exactly as the design shows.',
+    'Install Windows Server 2022 (Desktop Experience) and Windows 11 Enterprise, plus Guest Additions.',
+    'Give DC01 its name and static internal address, then promote it: forest corp.technobiz.local, NetBIOS CORP.',
+    'Route the internal network to the internet with RRAS NAT on DC01.',
+    'Serve addresses with an authorized DHCP scope, then join CLIENT01 to the domain.',
+  ],
+  requirements: [
+    'VirtualBox group /TechnoBiz-Build · VMs Build-DC01 and Build-CLIENT01',
+    'Build-DC01: 4 GB RAM, 2 CPUs, 60 GB disk · Adapter 1 NAT (renamed "Internet" in Windows) · Adapter 2 Internal Network "TechnoBiz-LAN" (renamed "Internal")',
+    'Build-CLIENT01: 4 GB RAM, 2 CPUs, 64 GB disk, EFI + TPM 2.0 · Adapter 1 Internal Network "TechnoBiz-LAN" ("Ethernet")',
+    'Built-in Administrator enabled on both, password = adminPassword in adlab.vbox.json (the app signs in with it to check your work)',
+    'DC01: computer name DC01 · Internal 172.16.0.1/24, no gateway, DNS 127.0.0.1 · Internet stays on DHCP',
+    'Domain corp.technobiz.local · NetBIOS CORP · DNS installed with AD DS',
+    'RRAS routing only · NAT: Internet = public, Internal = private',
+    'DHCP scope "TechnoBiz LAN" 172.16.0.100–172.16.0.200 /24 · router 172.16.0.1 · DNS 172.16.0.1 · domain corp.technobiz.local',
+    'CLIENT01: computer name CLIENT01 · DHCP address from the scope · joined to corp.technobiz.local',
+  ],
+  expectedResult:
+    'Check My Work reads both VMs and every check passes: DC01 named and addressed per the design, forest and DNS ' +
+    'up, NAT and DHCP working, CLIENT01 leasing from DC01 and joined to corp.technobiz.local.',
+  tools: [
+    'VirtualBox Manager (New, Settings → Network)', 'Windows Setup', 'Guest Additions CD', 'sconfig', 'ncpa.cpl',
+    'Get-NetAdapter', 'Rename-NetAdapter', 'Rename-Computer', 'New-NetIPAddress', 'Set-DnsClientServerAddress',
+    'Server Manager → Add Roles and Features', 'Install-WindowsFeature', 'Install-ADDSForest', 'Install-RemoteAccess',
+    'netsh routing ip nat', 'Add-DhcpServerInDC', 'Add-DhcpServerv4Scope', 'Set-DhcpServerv4OptionValue',
+    'ipconfig /all', 'nslookup', 'Add-Computer', 'Get-ADComputer',
+  ],
+  checks: [
+    'dc-hostname', 'dc-internal-static', 'dc-internal-ip', 'dc-internal-gateway', 'dc-dns-self', 'dc-internet-dhcp',
+    'adds-installed', 'adds-forest', 'dns-service', 'dns-zone', 'dns-record-internal', 'dc-resolves-domain',
+    'ras-installed', 'ras-configured', 'nat-public', 'nat-private',
+    'dhcp-installed', 'dhcp-authorized', 'dhcp-scope', 'dhcp-scope-active', 'dhcp-router', 'dhcp-dns', 'dhcp-domain',
+    'client-lease', 'client-dns-from-dhcp', 'client-resolves-domain', 'client-joined', 'client-computer-object',
+  ],
+  interviewQuestions: [
+    'Walk me through building a new AD domain from bare metal, in order, and say why the order matters.',
+    'Why is DC01 multi-homed here, and why does only one adapter have a default gateway?',
+    "Why must the DC's DNS point at itself before you promote it?",
+    'CLIENT01 has a 169.254.x.x address. What is wrong and where do you look first?',
+    'What does a domain join create in Active Directory, and why does it need a restart?',
+  ],
+  concepts: [
+    'VirtualBox "NAT" gives a VM internet through the host with its own private DHCP (10.0.2.x). "Internal Network" is a private switch shared only by VMs using the same network name (TechnoBiz-LAN) and has no DHCP until you build one.',
+    'Windows names adapters "Ethernet", "Ethernet 2"… Match them to VirtualBox adapters by MAC (Settings → Network → Advanced vs Get-NetAdapter) before renaming them Internet and Internal.',
+    'Guest Additions (Devices → Insert Guest Additions CD image) provide drivers and the Guest Control channel the app uses to read the VMs; without them Check My Work cannot see inside.',
+    'Windows 11 needs TPM 2.0, EFI/Secure Boot, 4 GB RAM and 64 GB disk; VirtualBox 7 offers them when the OS type is Windows 11.',
+    'The built-in Administrator on Windows 11 is disabled by default: net user Administrator /active:yes, then set its password.',
+    'Rename and address the server before promoting it: renaming a DC afterwards is a multi-step, risky operation.',
+    'Install-ADDSForest (or Server Manager → Promote this server) creates the forest, installs DNS and restarts; afterwards sign in as CORP\\Administrator.',
+    'NAT lives in Routing and Remote Access: install RemoteAccess + Routing, configure routing only, then mark Internet public (full) and Internal private.',
+    'A Windows DHCP server in a domain must be authorized in AD before it leases (Add-DhcpServerInDC).',
+    'A client finds the domain through DNS SRV records, so it must use DC01 (172.16.0.1) as DNS — which the DHCP scope hands out.',
+  ],
+  guide: [
+    {
+      phase: 'Phase 1 — Create the VMs in VirtualBox (on your PC)',
+      steps: [
+        'Open the Setup guide (📘) and put VirtualBox 7 and both ISOs in %USERPROFILE%\\Downloads\\ADLab-ISOs with the exact names.',
+        'VirtualBox Manager → New: Name Build-DC01, ISO WindowsServer2022-Eval.iso, tick "Skip Unattended Installation". 4096 MB, 2 CPUs, 60 GB disk.',
+        'Build-DC01 → Settings → Network: Adapter 1 = NAT. Adapter 2 = Internal Network, name TechnoBiz-LAN (type it exactly). Note both MAC addresses.',
+        'New: Name Build-CLIENT01, ISO Windows11-Enterprise-Eval.iso, skip unattended, 4096 MB, 2 CPUs, 64 GB, EFI + TPM 2.0.',
+        'Build-CLIENT01 → Settings → Network: Adapter 1 = Internal Network TechnoBiz-LAN. No NAT: the client reaches the internet through DC01.',
+        'Select both VMs → right-click → Move to Group → name it TechnoBiz-Build.',
+      ],
+    },
+    {
+      phase: 'Phase 2 — Install Windows (inside each VM)',
+      steps: [
+        'Click DC01 on the right to start Build-DC01. Setup → "Windows Server 2022 Standard Evaluation (Desktop Experience)" → Custom → the empty disk.',
+        'Set the Administrator password to adminPassword from adlab.vbox.json, sign in.',
+        'Devices → Insert Guest Additions CD image → run VBoxWindowsAdditions.exe → restart.',
+        'Click CLIENT01 to start Build-CLIENT01 → Windows 11 Enterprise. With no internet choose "I don\'t have internet" and create a local user (labuser).',
+        'CLIENT01, admin terminal: net user Administrator /active:yes and net user Administrator <adminPassword>. Install Guest Additions, restart.',
+      ],
+    },
+    {
+      phase: 'Phase 3 — DC01 identity and networking',
+      steps: [
+        'Get-NetAdapter: match MACs to the VirtualBox adapters. Rename-NetAdapter the NAT one to Internet and the TechnoBiz-LAN one to Internal.',
+        'Rename-Computer -NewName DC01 -Restart.',
+        'New-NetIPAddress -InterfaceAlias Internal -IPAddress 172.16.0.1 -PrefixLength 24 (no gateway), then Set-DnsClientServerAddress -InterfaceAlias Internal -ServerAddresses 127.0.0.1.',
+        'Leave Internet on DHCP. ipconfig /all must show only one default gateway (10.0.2.2, on Internet).',
+      ],
+    },
+    {
+      phase: 'Phase 4 — Active Directory Domain Services and DNS',
+      steps: [
+        'Install-WindowsFeature AD-Domain-Services -IncludeManagementTools (or Server Manager → Add Roles and Features).',
+        'Install-ADDSForest -DomainName corp.technobiz.local -DomainNetbiosName CORP -InstallDns (or "Promote this server to a domain controller"). Choose a DSRM password; it restarts.',
+        'Sign in as CORP\\Administrator. Get-ADDomain; nslookup corp.technobiz.local must answer 172.16.0.1.',
+      ],
+    },
+    {
+      phase: 'Phase 5 — Routing and NAT',
+      steps: [
+        'Install-WindowsFeature RemoteAccess,Routing -IncludeManagementTools; Install-RemoteAccess -VpnType RoutingOnly.',
+        'netsh routing ip nat install; netsh routing ip nat add interface "Internet" full; netsh routing ip nat add interface "Internal" private.',
+      ],
+    },
+    {
+      phase: 'Phase 6 — DHCP',
+      steps: [
+        'Install-WindowsFeature DHCP -IncludeManagementTools; Add-DhcpServerInDC -DnsName dc01.corp.technobiz.local -IPAddress 172.16.0.1.',
+        'Add-DhcpServerv4Scope -Name "TechnoBiz LAN" -StartRange 172.16.0.100 -EndRange 172.16.0.200 -SubnetMask 255.255.255.0 -State Active.',
+        'Set-DhcpServerv4OptionValue -ScopeId 172.16.0.0 -Router 172.16.0.1 -DnsServer 172.16.0.1 -DnsDomain corp.technobiz.local.',
+      ],
+    },
+    {
+      phase: 'Phase 7 — CLIENT01 joins the domain',
+      steps: [
+        'CLIENT01: ipconfig /renew; ipconfig /all shows 172.16.0.1xx with gateway and DNS 172.16.0.1.',
+        "nslookup corp.technobiz.local answers 172.16.0.1; ping 8.8.8.8 works through DC01's NAT.",
+        'Rename-Computer CLIENT01 if Setup chose another name, then Add-Computer -DomainName corp.technobiz.local -Credential CORP\\Administrator -Restart.',
+        'On DC01: Get-ADComputer CLIENT01. Click CHECK MY WORK. Then snapshot both VMs in VirtualBox as "Greenfield-Done".',
+      ],
+    },
+  ],
+  defaultMode: 'guided',
+  solution: [
+    ...['adl-01', 'adl-02', 'adl-03', 'adl-04'].flatMap((id) => AD_LABS.find((l) => l.id === id)!.solution),
+    ['CLIENT01', 'Add-Computer -DomainName corp.technobiz.local -Credential CORP\\Administrator -Restart'],
+  ],
+};
+
+/** Every lab the window offers: the numbered series, then the Greenfield build. */
+export const ALL_AD_LABS: readonly AdLab[] = [...AD_LABS, BUILD_LAB];
+
+/**
  * The machines a lab's checks read. Lab 01 only needs DC01, so a CLIENT01
  * that is still installing (or switched off to save RAM) must not block it.
  */
@@ -554,7 +712,7 @@ export function hostsForLab(lab: AdLab): HostName[] {
 }
 
 export function labById(id: string): AdLab | undefined {
-  return AD_LABS.find((l) => l.id === id);
+  return ALL_AD_LABS.find((l) => l.id === id);
 }
 
 function replay(s: LabState, lines: readonly [HostName, string][]): void {
@@ -568,6 +726,8 @@ function replay(s: LabState, lines: readonly [HostName, string][]): void {
  */
 export function startingState(labId: string): LabState {
   const s = freshState();
+  // The Greenfield build starts from two freshly installed machines.
+  if (labId === BUILD_LAB.id) return s;
   const idx = AD_LABS.findIndex((l) => l.id === labId);
   if (idx < 0) throw new Error(`Unknown lab: ${labId}`);
   for (const lab of AD_LABS.slice(0, idx)) {

@@ -132,7 +132,7 @@ function shareRights(r: string): ShareAce['rights'] {
 }
 
 /** Turn the collector's JSON into lab state the validation engine understands. */
-export function factsToLabState(doc: RawFactsDocument): RealVmReading {
+export function factsToLabState(doc: RawFactsDocument, vmSet?: 'build'): RealVmReading {
   const s = freshState();
   const problems: string[] = [];
   const problemsByHost: Partial<Record<HostName, string>> = {};
@@ -145,7 +145,9 @@ export function factsToLabState(doc: RawFactsDocument): RealVmReading {
   for (const key of HOSTS) {
     const entry = doc.vms?.[key];
     if (!entry?.exists) {
-      note(key, `${key} does not exist in VirtualBox yet. Build it with omari-lab/10-AD-ENTERPRISE-VBOX/01-New-AdLabVMs.ps1.`);
+      note(key, vmSet === 'build'
+        ? `Build-${key} does not exist in VirtualBox yet. Create it by hand (Phase 1 of the build guide), named exactly Build-${key}.`
+        : `${key} does not exist in VirtualBox yet. Build it with omari-lab/10-AD-ENTERPRISE-VBOX/01-New-AdLabVMs.ps1.`);
       continue;
     }
     if (!entry.running) {
@@ -156,7 +158,8 @@ export function factsToLabState(doc: RawFactsDocument): RealVmReading {
     }
     const f = entry.facts;
     if (!f) {
-      note(key, `${key} could not be read${entry.error ? `: ${entry.error.split('\n')[0]}` : '.'} Is Windows finished installing and signed in?`);
+      note(key, `${key} could not be read${entry.error ? `: ${entry.error.split('\n')[0]}` : '.'} Is Windows finished installing and signed in?` +
+        (vmSet === 'build' ? ' Guest Additions must be installed and the built-in Administrator enabled with the lab password (Phase 2).' : ''));
       continue;
     }
     const h = s.hosts[key];
