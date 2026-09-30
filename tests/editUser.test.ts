@@ -234,20 +234,22 @@ describe('the user.update capability', () => {
   });
 });
 
-describe('Active Directory offers Edit on the object itself', () => {
-  const code = readFileSync(
-    join(process.cwd(), 'src', 'ui', 'consoles', 'activeDirectoryWindow.ts'),
-    'utf8',
-  );
+describe('Active Directory edits the object in place, as ADUC does', () => {
+  const read = (...p: string[]): string => readFileSync(join(process.cwd(), 'src', 'ui', 'consoles', ...p), 'utf8');
+  const menu = read('activeDirectoryWindow.ts');
+  const props = read('aduc', 'properties.ts');
+  const actions = read('aduc', 'actions.ts');
 
-  it('has an Edit item on the right-click menu', () => {
+  it('offers Rename and Properties on the right-click menu, and no Delete-and-recreate path', () => {
     // The reported gap: right-clicking a user offered Delete but no way to fix
-    // a typo, so the only repair was to destroy the account and start again.
-    expect(code).toMatch(/label: 'Edit…'/);
+    // a typo. Real ADUC fixes it in place: Rename, or the Properties sheet.
+    expect(menu).toMatch(/label: 'Rename'/);
+    expect(menu).toMatch(/label: 'Properties', bold: true/);
   });
 
-  it('opens a dialog that can write the change', () => {
-    expect(code).toMatch(/function editUserDialog/);
-    expect(code).toMatch(/'user\.update'/);
+  it('writes Properties and Rename through Set-ADUser', () => {
+    expect(props).toMatch(/'user\.update'/);
+    expect(actions).toMatch(/function renameDialog/);
+    expect(actions).toMatch(/'user\.update'/);
   });
 });

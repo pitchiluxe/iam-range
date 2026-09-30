@@ -28,7 +28,19 @@ Get-PasswordPolicy
 ```
 
 Now try `Set-ADAccountPassword -Identity maria.chen -NewPassword short1` —
-it is refused. Explain which rule refused it, then set a compliant password.
+it is refused. Explain which rule refused it, then set a compliant password —
+this time from the console: **Active Directory** → **Action → Find…** →
+`maria` → **Find Now** → right-click her → **Reset Password…**. A short
+password gets the server's own "does not meet the password policy
+requirements" refusal.
+
+**Attribute check.** **View → Advanced Features**, then open Maria's
+properties → *Attribute Editor*. Read `userAccountControl`, `pwdLastSet` and
+`memberOf`. On the *Account* tab tick *Password never expires* → **Apply**:
+`userAccountControl` gains `DONT_EXPIRE_PASSWORD` (0x10000), and "User must
+change password at next logon" is cleared with the same warning a real DC
+gives. Untick it again — a non-expiring password on a person's account is an
+audit finding, not a fix.
 
 **IAM-2036 · "created but doesn't exist over there".** The app has one domain
 controller, but it has the same problem between AD and the cloud:

@@ -42,7 +42,8 @@ function splitRespectingQuotes(line: string): string[] {
       buf += ch;
       continue;
     }
-    if ((ch === '{' || ch === '(') && buf === '') {
+    // @{ } is a hashtable literal (-Replace @{office='B12'}), grouped the same way.
+    if ((ch === '{' || ch === '(') && (buf === '' || buf === '@')) {
       depth = 1;
       buf += ch;
       continue;

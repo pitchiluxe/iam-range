@@ -27,6 +27,65 @@ The *Hands-on lab* sections keep the real-server versions of every script
 (`corp.technobiz.local`): write them, commit them to GitHub, and run them on a
 real domain controller whenever you have one.
 
+## Active Directory Users and Computers
+
+The **Active Directory** window is built to match the real console
+(`dsa.msc` on Windows Server), so the clicks you learn here are the clicks
+you make at work:
+
+- **Tree:** `Active Directory Users and Computers [OMARI-DC01.omari.test]` →
+  *Saved Queries* and `omari.test` with *Builtin, Computers, Domain
+  Controllers, ForeignSecurityPrincipals, Managed Service Accounts, Users*,
+  plus every OU you create. CN=Users and Builtin hold the default accounts
+  and groups (Domain Admins, Domain Users, krbtgt...).
+- **Menus:** File / Action / View / Help, the MMC toolbar, and the real
+  right-click menus: *Delegate Control…, Find…, New → Organizational Unit /
+  User / Group*, and on a user *Copy…, Add to a group…, Disable Account,
+  Reset Password…, Move…, Cut, Delete, Rename, Properties*.
+- **Dialogs:** the three-page *New Object - User* wizard, *New Object -
+  Group* (scope and type), *New Object - Organizational Unit* (with *Protect
+  container from accidental deletion*), *Select Groups* with **Check
+  Names**, the *Move* container tree, *Find Users, Contacts, and Groups*,
+  and the *Delegation of Control Wizard*.
+- **Properties:** General, Address, Account (Unlock account, account
+  options, Logon Hours, Account expires), Profile, Telephones, Organization,
+  Member Of and the rest. **View → Advanced Features** adds LostAndFound,
+  System and the *Object*, *Security* and *Attribute Editor* tabs.
+- Drag an object onto an OU (or Cut / Paste) to move it; **View →
+  Add/Remove Columns…** and **Action → Export List…** turn the result pane
+  into a report.
+
+Every click runs the same capability as the matching cmdlet (`New-ADUser`,
+`Set-ADUser -Office`, `Set-ADGroup -GroupScope`, `Rename-ADObject`,
+`Move-ADObject`, `Set-ADOrganizationalUnit -ProtectedFromAccidentalDeletion`,
+`Grant-IamDelegation`), so the terminal and the console always agree and
+both land in `Get-IamAuditLog`. Built-in objects (Domain Admins, Builtin
+groups, computers) are shown as a new DC shows them; a CN=Users default group
+becomes a real, manageable group the first time you add someone to it.
+
+## Where the mentor conversation's files live
+
+The mentor's final kit (`IAM-Labs/Lab01-AD-Base/...`) names each script
+after its job. The labs keep the same scripts with the fixes listed in the
+commit history, under a `C90` prefix so no function can be mistaken for a
+cmdlet from Microsoft's ActiveDirectory module, and with approved PowerShell
+verbs (`Invoke-`, not `Process-`). Name them either way in your repo.
+
+| Conversation file | Lab | Here |
+|---|---|---|
+| `Lab01-AD-Base/scripts/create-user-and-group.ps1`, `architecture/ad-base.mmd` | 1 | `scripts/New-C90BaseLab.ps1`, `architecture/ad-base.mmd` |
+| `Lab02/.../AD-Automation.psm1` (`New-ADUserBulk`, `Disable-ADUserBulk`, `Get-ADUserReport`, `Get-ADGroupMembershipReport`, `New-ADDepartmentGroups`), `Run-Onboarding.ps1`, `new-hires.csv`, `terminations.csv` | 2 | `automation/C90.ADToolkit.psm1` (`New-C90UserBulk`, `Disable-C90UserBulk`, `Get-C90UserReport`, `New-C90DepartmentGroup`), same CSVs |
+| `Lab03/.../lockout-investigator.ps1`, `password-policy-check.ps1`, `replication-check.ps1`, `group-access-test.ps1` | 3 | `C90.Diagnostics.ps1`: `Get-C90LockoutReport`, `Get-C90PasswordStatus`, `Test-C90ObjectOnAllDCs`, `Test-C90GroupAccess` |
+| `Lab04/.../create-entra-user.ps1` | 4 | `scripts/New-C90CloudUsers.ps1` |
+| `Lab05/.../mfa-sso-troubleshooter.ps1` | 5 | `mfa-sso/Get-C90MfaStatus.ps1` |
+| `Lab06/.../entra-app-inventory.ps1` | 6 | `apps/Get-C90AppInventory.ps1` |
+| `Lab07/.../ca-policy-inventory.ps1` | 7 | `conditional-access/Export-C90CaPolicies.ps1` |
+| `Lab08/.../Graph-Automation.psm1`, `Assign-Licenses-By-Dept.ps1`, `new-hires.csv` | 8 | `C90.Graph.psm1` (`Get-C90GraphToken`, `Invoke-C90Graph`, `Set-C90License`, `Add-C90GroupMember`, `Get-C90StaleUsers`), `run.ps1` |
+| `Lab09/.../JML-Automation.psm1` (`Process-Joiner/Mover/Leaver`, `Write-JmlLog`), `Process-JML-Feed.ps1`, `jml-feed.csv` | 9 | `C90.Jml.psm1` (`Invoke-C90Joiner/Mover/Leaver`, `Invoke-C90JmlFeed`, `Write-C90JmlLog`), `data/jml-feed.csv` |
+| `Lab10/.../Access-Request.psm1`, `Submit-Access-Request.ps1`, `Approve-Request.ps1`, `Revoke-Expired-JIT.ps1`, `Start-Management-Review.ps1`, `requests.csv`, `reviews.csv` | 10 | `C90.Jit.psm1` (`Grant-C90JitAccess`, `Revoke-C90ExpiredAccess`), `jit-grants.csv`, `reviews/<group>-review.csv` |
+| `Lab11/.../New-Access-Request.ps1`, `Approve-Access-Request.ps1`, `Close-Access-Request.ps1`, `Review-Access.ps1`, `requests.csv` | 11 | `ticketing/C90.Tickets.psm1` (`New-C90Ticket`, `Set-C90TicketState`, `Complete-C90Ticket`, `Get-C90Tickets`, `Get-C90SlaReport`) |
+| `Lab12/dashboards/identity-governance/index.html` (+ date-range filter, print-to-PDF challenge) | 12 | `dashboard/index.html` |
+
 ## Schedule
 
 | Days | Lab | Phase | Repo |

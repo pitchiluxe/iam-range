@@ -18,7 +18,7 @@
  * leave off and nothing else notices.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { escapeHtml } from '@/util/escapeHtml';
 
@@ -109,10 +109,11 @@ describe('the Active Directory console', () => {
   it('builds its rows with textContent, so it never had this problem', () => {
     // Recorded because it is the better pattern and worth not regressing:
     // every value in the snap-in is assigned, never concatenated into markup.
-    const ad = readFileSync(
-      join(process.cwd(), 'src', 'ui', 'consoles', 'activeDirectoryWindow.ts'),
-      'utf8',
-    );
+    const dir = join(process.cwd(), 'src', 'ui', 'consoles', 'aduc');
+    const ad = [
+      readFileSync(join(process.cwd(), 'src', 'ui', 'consoles', 'activeDirectoryWindow.ts'), 'utf8'),
+      ...readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => readFileSync(join(dir, f), 'utf8')),
+    ].join('\n');
     const assignments = ad.match(/\.innerHTML\s*=\s*[^;]+/g) ?? [];
     // The only innerHTML writes are the empty string, used to clear a pane.
     for (const a of assignments) expect(a).toMatch(/innerHTML\s*=\s*''/);

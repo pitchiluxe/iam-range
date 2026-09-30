@@ -15,6 +15,7 @@ import type {
   AppId,
   OuId,
   OrganizationalUnit,
+  Delegation,
 } from '@/domain';
 import { mkUserId, mkGroupId, mkRoleId, mkOuId, SYSTEM_ACTOR } from '@/domain';
 import type { MockAuditLog } from './mockAuditLog';
@@ -43,6 +44,8 @@ export class MockDirectory {
   private ous = new Map<OuId, OrganizationalUnit>();
   /** File shares used for the NTFS-style permission lab. */
   private shares = new Map<string, ShareRecord>();
+  /** What the Delegation of Control Wizard has granted, oldest first. */
+  private delegations: Delegation[] = [];
 
   constructor(private readonly audit: MockAuditLog) {}
 
@@ -54,9 +57,62 @@ export class MockDirectory {
   getOu(id: OuId): OrganizationalUnit | undefined {
     return this.ous.get(id);
   }
+  /**
+   * Find an OU by name, or by its path ("USA/Users", "omari.test/USA/Users").
+   *
+   * Lenient: when a bare name matches several OUs -- Users under USA and Users
+   * under Europe, which real AD allows and the classic ADUC exercise builds --
+   * the first is returned. Anything that writes should use resolveOuRef, which
+   * refuses to guess.
+   */
   getOuByName(name: string): OrganizationalUnit | undefined {
-    const want = name.toLowerCase();
-    return Array.from(this.ous.values()).find((o) => o.name.toLowerCase() === want);
+    const r = this.resolveOuRef(name);
+    return r.ou ?? r.matches?.[0];
+  }
+
+  /**
+   * Resolve an OU reference strictly: a path always, a bare name only when it
+   * is unique. The error names the paths to choose between, because "cannot
+   * find Users" while the tree shows three of them reads as a broken console.
+   */
+  resolveOuRef(ref: string): { ou?: OrganizationalUnit; error?: string; matches?: OrganizationalUnit[] } {
+    const raw = ref.trim();
+    if (!raw) return { error: 'An OU name is required.' };
+    if (raw.includes('/') || raw.includes('\\')) {
+      const segs = raw.split(/[/\\]/).filter(Boolean);
+      let parent: OuId | undefined;
+      let found: OrganizationalUnit | undefined;
+      for (const [i, seg] of segs.entries()) {
+        // A leading domain name ("omari.test/USA") is the root, not an OU.
+        const isOu = this.childOus(parent).some((o) => o.name.toLowerCase() === seg.toLowerCase());
+        if (i === 0 && seg.includes('.') && !isOu) continue;
+        found = this.childOus(parent).find((o) => o.name.toLowerCase() === seg.toLowerCase());
+        if (!found) return { error: `Cannot find an OU at '${raw}'.` };
+        parent = found.id;
+      }
+      return found ? { ou: found } : { error: `Cannot find an OU at '${raw}'.` };
+    }
+    const want = raw.toLowerCase();
+    const matches = this.listOus().filter((o) => o.name.toLowerCase() === want);
+    if (matches.length === 1) return { ou: matches[0]! };
+    if (matches.length === 0) return { error: `Cannot find an OU named '${raw}'.` };
+    return {
+      matches,
+      error:
+        `'${raw}' matches ${matches.length} OUs: ${matches.map((o) => this.ouPath(o.id)).join(', ')}. ` +
+        `Give the full path instead, e.g. "${this.ouPath(matches[0]!.id)}".`,
+    };
+  }
+
+  /** "USA/Users" -- the OU's names from the root down. */
+  ouPath(id: OuId): string {
+    const names: string[] = [];
+    let cur = this.ous.get(id);
+    while (cur) {
+      names.unshift(cur.name);
+      cur = cur.parentId ? this.ous.get(cur.parentId) : undefined;
+    }
+    return names.join('/');
   }
 
   /** OUs directly beneath `parentId`, or beneath the domain root when omitted. */
@@ -69,28 +125,108 @@ export class MockDirectory {
     description = '',
     parentId?: OuId,
     actor: UserId = SYSTEM_ACTOR,
+    opts: { protectedFromDeletion?: boolean } = {},
   ): OrganizationalUnit {
-    // Names are the natural key here as they are for groups, so a duplicate is
-    // a mistake worth reporting rather than a second OU with the same label.
-    if (this.getOuByName(name)) {
-      throw new Error(`[directory] createOu: an OU named '${name}' already exists.`);
+    // Names are unique among siblings, as in AD: USA/Users and Europe/Users
+    // are two different OUs, but two Users directly under USA would share a
+    // distinguished name.
+    if (this.childOus(parentId).some((o) => o.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error(`[directory] createOu: an OU named '${name}' already exists there.`);
     }
+    if (parentId && !this.ous.has(parentId)) {
+      throw new Error(`[directory] createOu: parent OU ${parentId} not found`);
+    }
+    // The id stays the bare name whenever it is free, which is what every
+    // saved session and test already holds; a second OU of the same name
+    // gets its path instead.
+    let id = mkOuId(name);
+    if (this.ous.has(id)) id = mkOuId(`${parentId ? this.ouPath(parentId) + '/' : ''}${name}`);
+    if (this.ous.has(id)) id = mkOuId(`${name}-${nanoid(6)}`);
     const ou: OrganizationalUnit = {
-      id: mkOuId(name),
+      id,
       name,
       description,
       createdAt: Date.now(),
       ...(parentId ? { parentId } : {}),
+      ...(opts.protectedFromDeletion ? { protectedFromDeletion: true } : {}),
     };
     this.ous.set(ou.id, ou);
     this.audit.record({ actorId: actor, action: 'ou.created', targetId: ou.id });
     return ou;
   }
 
+  /**
+   * Set-ADOrganizationalUnit and ADUC's Rename / Move / Properties for an OU.
+   * `parentId: null` moves it to the domain root.
+   */
+  updateOu(
+    id: OuId,
+    changes: {
+      name?: string;
+      description?: string;
+      protectedFromDeletion?: boolean;
+      parentId?: OuId | null;
+      attrs?: Record<string, string | undefined>;
+    },
+    actor: UserId = SYSTEM_ACTOR,
+  ): void {
+    const ou = this.ous.get(id);
+    if (!ou) throw new Error(`[directory] updateOu: OU ${id} not found`);
+    const newParent = changes.parentId === undefined ? ou.parentId : changes.parentId ?? undefined;
+    const newName = changes.name?.trim() || ou.name;
+    if (newParent && !this.ous.has(newParent)) {
+      throw new Error(`[directory] updateOu: OU ${newParent} not found`);
+    }
+    // An OU cannot be moved into itself or anything beneath it.
+    for (let cur = newParent ? this.ous.get(newParent) : undefined; cur; cur = cur.parentId ? this.ous.get(cur.parentId) : undefined) {
+      if (cur.id === id) throw new Error(`[directory] updateOu: cannot move '${ou.name}' inside itself.`);
+    }
+    const clash = this.childOus(newParent).some(
+      (o) => o.id !== id && o.name.toLowerCase() === newName.toLowerCase(),
+    );
+    if (clash) throw new Error(`[directory] updateOu: an OU named '${newName}' already exists there.`);
+
+    ou.name = newName;
+    if (newParent) ou.parentId = newParent;
+    else delete ou.parentId;
+    if (changes.description !== undefined) ou.description = changes.description;
+    if (changes.protectedFromDeletion === true) ou.protectedFromDeletion = true;
+    if (changes.protectedFromDeletion === false) delete ou.protectedFromDeletion;
+    if (changes.attrs) {
+      const merged = mergeAttrs(ou.attrs, changes.attrs);
+      if (merged) ou.attrs = merged;
+      else delete ou.attrs;
+    }
+    this.audit.record({ actorId: actor, action: 'ou.updated', targetId: id });
+  }
+
+  // --- DELEGATION -----------------------------------------------------------
+
+  listDelegations(): Delegation[] {
+    return this.delegations.map((d) => ({ ...d, tasks: [...d.tasks] }));
+  }
+
+  /** Record one run of the Delegation of Control Wizard. */
+  delegate(ouId: OuId | undefined, trustee: string, tasks: string[], actor: UserId = SYSTEM_ACTOR): Delegation {
+    if (ouId && !this.ous.has(ouId)) throw new Error(`[directory] delegate: OU ${ouId} not found`);
+    const d: Delegation = { trustee, tasks: [...tasks], at: Date.now(), ...(ouId ? { ouId } : {}) };
+    this.delegations.push(d);
+    this.audit.record({ actorId: actor, action: 'ou.delegated', targetId: ouId ?? 'domain' });
+    return d;
+  }
+
   /** Remove an OU. Refuses while anything still lives in it, as AD does. */
   deleteOu(id: OuId, actor: UserId = SYSTEM_ACTOR): void {
     const ou = this.ous.get(id);
     if (!ou) throw new Error(`[directory] deleteOu: OU ${id} not found`);
+    // The same refusal, word for word, that ADUC gives: the checkbox has to be
+    // cleared on the Object tab (View > Advanced Features) first.
+    if (ou.protectedFromDeletion) {
+      throw new Error(
+        `[directory] deleteOu: You do not have sufficient privileges to delete ${ou.name}, ` +
+          'or this object is protected from accidental deletion.',
+      );
+    }
     // Groups count. Deleting an OU out from under one would leave it pointing
     // at an OU that no longer exists, which is the drift this project keeps
     // being bitten by.
@@ -102,6 +238,7 @@ export class MockDirectory {
       throw new Error(`[directory] deleteOu: '${ou.name}' is not empty.`);
     }
     this.ous.delete(id);
+    this.delegations = this.delegations.filter((d) => d.ouId !== id);
     this.audit.record({ actorId: actor, action: 'ou.deleted', targetId: id });
   }
 
@@ -313,6 +450,28 @@ export class MockDirectory {
     this.audit.record({ actorId: actor, action: 'user.updated', targetId: id });
   }
 
+  /**
+   * Write Properties-sheet attributes. An undefined or empty value clears the
+   * attribute, which is what Set-ADUser -Clear and an emptied text box do.
+   */
+  setUserAttributes(id: UserId, changes: Record<string, string | undefined>, actor: UserId = SYSTEM_ACTOR): void {
+    const u = this.users.get(id);
+    if (!u) throw new Error(`[directory] setUserAttributes: user ${id} not found`);
+    const merged = mergeAttrs(u.attrs, changes);
+    if (merged) u.attrs = merged;
+    else delete u.attrs;
+    this.audit.record({ actorId: actor, action: 'user.updated', targetId: id });
+  }
+
+  /** Set-ADUser -ChangePasswordAtLogon, without touching the password. */
+  setMustChangePassword(id: UserId, must: boolean, actor: UserId = SYSTEM_ACTOR): void {
+    const u = this.users.get(id);
+    if (!u) throw new Error(`[directory] setMustChangePassword: user ${id} not found`);
+    if (must) u.mustChangePassword = true;
+    else delete u.mustChangePassword;
+    this.audit.record({ actorId: actor, action: 'user.updated', targetId: id });
+  }
+
   deleteUser(id: UserId, actor: UserId = SYSTEM_ACTOR): void {
     const u = this.users.get(id);
     if (!u) throw new Error(`[directory] deleteUser: user ${id} not found`);
@@ -401,13 +560,29 @@ export class MockDirectory {
 
   updateGroup(
     id: GroupId,
-    changes: Partial<Pick<Group, 'name' | 'description'>>,
+    changes: Partial<Pick<Group, 'name' | 'description' | 'scope' | 'category'>> & {
+      attrs?: Record<string, string | undefined>;
+    },
     actor: UserId = SYSTEM_ACTOR,
   ): void {
     const g = this.groups.get(id);
     if (!g) throw new Error(`[directory] updateGroup: group ${id} not found`);
+    if (
+      changes.name !== undefined &&
+      changes.name.toLowerCase() !== g.name.toLowerCase() &&
+      this.getGroupByName(changes.name)
+    ) {
+      throw new Error(`[directory] updateGroup: a group named '${changes.name}' already exists.`);
+    }
     if (changes.name !== undefined) g.name = changes.name;
     if (changes.description !== undefined) g.description = changes.description;
+    if (changes.scope !== undefined) g.scope = changes.scope;
+    if (changes.category !== undefined) g.category = changes.category;
+    if (changes.attrs) {
+      const merged = mergeAttrs(g.attrs, changes.attrs);
+      if (merged) g.attrs = merged;
+      else delete g.attrs;
+    }
     this.audit.record({ actorId: actor, action: 'group.updated', targetId: id });
   }
 
@@ -638,5 +813,19 @@ export class MockDirectory {
     this.appIndex.clear();
     this.ous.clear();
     this.shares.clear();
+    this.delegations = [];
   }
+}
+
+/** Apply attribute changes; an empty or undefined value removes the attribute. */
+function mergeAttrs(
+  base: Record<string, string> | undefined,
+  changes: Record<string, string | undefined>,
+): Record<string, string> | undefined {
+  const out: Record<string, string> = { ...(base ?? {}) };
+  for (const [k, v] of Object.entries(changes)) {
+    if (v === undefined || v === '') delete out[k];
+    else out[k] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
 }

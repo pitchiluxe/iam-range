@@ -122,18 +122,21 @@ export function resolveOuPath(dir: MockDirectory, raw: string): OuTarget {
     return matchChain(dir, segs.reverse(), notFound);
   }
 
-  const ou = dir.getOuByName(path);
-  return ou ? { ok: true, ouId: ou.id } : { ok: false, error: `Directory object not found: '${path}'.` };
+  const r = dir.resolveOuRef(path);
+  return r.ou ? { ok: true, ouId: r.ou.id } : { ok: false, error: r.matches ? r.error! : `Directory object not found: '${path}'.` };
 }
 
-/** names: leaf first. The leaf must exist and sit under exactly those parents. */
+/**
+ * names: leaf first. The leaf must exist and sit under exactly those parents.
+ * Every OU of that name is tried: USA/Users and Europe/Users share a leaf name.
+ */
 function matchChain(dir: MockDirectory, names: string[], notFound: OuTarget): OuTarget {
-  const leaf = dir.listOus().find((o) => o.name.toLowerCase() === names[0]!.toLowerCase());
-  if (!leaf) return notFound;
-  const chain = ouChain(dir, leaf.id).map((o) => o.name.toLowerCase());
   const want = names.map((n) => n.toLowerCase());
-  if (chain.length !== want.length || chain.some((n, i) => n !== want[i])) return notFound;
-  return { ok: true, ouId: leaf.id };
+  for (const leaf of dir.listOus().filter((o) => o.name.toLowerCase() === want[0])) {
+    const chain = ouChain(dir, leaf.id).map((o) => o.name.toLowerCase());
+    if (chain.length === want.length && chain.every((n, i) => n === want[i])) return { ok: true, ouId: leaf.id };
+  }
+  return notFound;
 }
 
 // ---------------------------------------------------------------------------

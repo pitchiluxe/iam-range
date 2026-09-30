@@ -101,7 +101,7 @@ export function renderCapabilityForm(
 
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;';
-  const readers = cap.params.map((p) => {
+  const readers = cap.params.filter((p) => !p.consoleHidden).map((p) => {
     const f = buildField(p, deps.dir);
     row.appendChild(f.el);
     return { name: p.name, read: f.read, required: p.required, label: p.label };

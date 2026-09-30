@@ -170,6 +170,14 @@ export interface User {
   /** Roles granted straight to the user, outside any group. Optional so the
    *  seed-data literal needs no change; readers treat undefined as empty. */
   directRoleIds?: RoleId[];
+  /**
+   * Everything else the Properties sheet holds, keyed by LDAP attribute name
+   * (givenName, sn, physicalDeliveryOfficeName, telephoneNumber, streetAddress,
+   * profilePath, company, manager...). Kept as one bag so the Attribute Editor
+   * can list it exactly as the real one does, and so Set-ADUser -Office and the
+   * General tab's Office box write the same attribute.
+   */
+  attrs?: Record<string, string>;
 }
 
 /**
@@ -183,6 +191,21 @@ export interface OrganizationalUnit {
   parentId?: OuId;
   description: string;
   createdAt: number;
+  /** "Protect container from accidental deletion" — on by default in the
+   *  console, as in ADUC. Delete refuses until it is cleared. */
+  protectedFromDeletion?: boolean;
+  /** Address / Managed By attributes, keyed by LDAP name. */
+  attrs?: Record<string, string>;
+}
+
+/** One run of the Delegation of Control Wizard. */
+export interface Delegation {
+  /** The OU the permission is granted on; undefined = the domain root. */
+  ouId?: OuId;
+  /** Group or user name the tasks are delegated to. */
+  trustee: string;
+  tasks: string[];
+  at: number;
 }
 
 export interface Group {
@@ -202,6 +225,8 @@ export interface Group {
   scope?: 'DomainLocal' | 'Global' | 'Universal';
   /** New-ADGroup -GroupCategory. Absent means Security. */
   category?: 'Security' | 'Distribution';
+  /** mail, info (Notes), managedBy, sAMAccountName (pre-Windows 2000). */
+  attrs?: Record<string, string>;
 }
 
 export interface RoleRecord {
@@ -383,6 +408,8 @@ export interface AuditEvent {
     | 'pim.removed'
     | 'ou.created'
     | 'ou.deleted'
+    | 'ou.updated'
+    | 'ou.delegated'
     | 'share.created'
     | 'share.deleted'
     | 'share.permission'
@@ -550,6 +577,14 @@ export type ValidatorKind =
   | 'ou-deleted'
   /** A security group was removed, and its memberships with it. */
   | 'group-deleted'
+  /** A group's description, scope, type or manager was changed (Set-ADGroup). */
+  | 'group-updated'
+  /** A user, group or OU was renamed in place (Rename-ADObject). */
+  | 'object-renamed'
+  /** An OU's description, address or deletion protection was changed. */
+  | 'ou-updated'
+  /** Tasks on an OU were delegated to a group (Delegation of Control Wizard). */
+  | 'control-delegated'
   /** A directory sync cycle was run against a cloud tenant. */
   | 'cloud-synced'
   /** SCIM provisioning was switched on for an application. */

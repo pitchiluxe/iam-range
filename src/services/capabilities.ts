@@ -16,7 +16,7 @@
  * Lives in services/ rather than domain/ because it needs live service
  * instances; domain/ is pure types and must stay that way.
  */
-import type { MfaMethod, TicketKind, UserId, ValidatorKind } from '@/domain';
+import type { MfaMethod, OrganizationalUnit, TicketKind, UserId, ValidatorKind } from '@/domain';
 import { COMPANY } from '@/config';
 import type { MockAuditLog } from './mockAuditLog';
 import type { MockDirectory, ShareAccess } from './mockDirectory';
@@ -26,6 +26,11 @@ import type { MockPim } from './mockPim';
 import type { MockCloudTenant, CloudVendor } from './mockCloudTenant';
 import type { MockEndpoints } from './mockEndpoints';
 import { ENDPOINT_CAPABILITIES, targetEndpoint } from './endpointCapabilities';
+import { USER_ATTR_PARAMS, USER_FLAG_PARAMS, isTrue, parseHashtable } from './adAttributes';
+
+/** ADUC's refusal when the Object tab's protection box is ticked. */
+const PROTECTED = (name: string): string =>
+  `You do not have sufficient privileges to delete ${name}, or this object is protected from accidental deletion.`;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,6 +71,13 @@ export interface CapabilityParam {
   kind: ParamKind;
   required: boolean;
   options?: readonly string[];
+  /**
+   * Accepted from the terminal and from Active Directory Users and Computers,
+   * but left out of the IAM Console's generated form. Set-ADUser has thirty
+   * attribute parameters; a form with thirty boxes buries the four that the
+   * console is for.
+   */
+  consoleHidden?: boolean;
 }
 
 export type CapabilityResult =
@@ -122,6 +134,37 @@ const ok = (message: string, rows?: Record<string, unknown>[]): CapabilityResult
  *  the terminal passes what the learner typed. */
 function findUser(ctx: CapabilityContext, ident: string) {
   return ctx.dir.getUserByUsername(ident) ?? ctx.dir.getUser(ident as UserId);
+}
+
+/** The Delegation of Control Wizard's "common tasks", in the wizard's order. */
+export const DELEGATION_TASKS: readonly string[] = [
+  'Create, delete, and manage user accounts',
+  'Reset user passwords and force password change at next logon',
+  'Read all user information',
+  'Create, delete and manage groups',
+  'Modify the membership of a group',
+  'Manage Group Policy links',
+  'Generate Resultant Set of Policy (Planning)',
+  'Generate Resultant Set of Policy (Logging)',
+  'Create, delete, and manage inetOrgPerson accounts',
+  'Reset inetOrgPerson passwords and force password change at next logon',
+  'Read all inetOrgPerson information',
+];
+
+type Scope = 'Global' | 'DomainLocal' | 'Universal';
+/** AD's group scope conversions: anything to/from Universal, never Global <-> Domain Local. */
+export function scopeChangeAllowed(from: Scope, to: Scope): boolean {
+  if (from === to) return true;
+  return from === 'Universal' || to === 'Universal';
+}
+
+/**
+ * Resolve an -Path / -TargetPath value to an OU, refusing to guess when a bare
+ * name matches more than one (USA/Users and Europe/Users).
+ */
+function ouRef(ctx: CapabilityContext, ref: string): { ou: OrganizationalUnit } | { error: string } {
+  const r = ctx.dir.resolveOuRef(ref);
+  return r.ou ? { ou: r.ou } : { error: r.error ?? `Cannot find an OU named '${ref}'.` };
 }
 
 function findGroup(ctx: CapabilityContext, ident: string) {
@@ -242,8 +285,9 @@ export const CAPABILITIES: readonly IamCapability[] = [
         return err(`A user named '${a.SamAccountName}' already exists.`);
       // Resolved before anything is written, so a typo in the OU name fails
       // the whole provision rather than half of it.
-      const target = a.Path ? ctx.dir.getOuByName(a.Path) : undefined;
-      if (a.Path && !target) return err(`Cannot find an OU named '${a.Path}'.`);
+      const found = a.Path ? ouRef(ctx, a.Path) : undefined;
+      if (found && 'error' in found) return err(found.error);
+      const target = found?.ou;
       const u = ctx.dir.createUser({
         username: a.SamAccountName,
         displayName: a.Name,
@@ -305,6 +349,16 @@ export const CAPABILITIES: readonly IamCapability[] = [
       { name: 'DisplayName', label: 'Display name', kind: 'text', required: false },
       { name: 'Title', label: 'Job title', kind: 'text', required: false },
       { name: 'EmailAddress', label: 'E-mail', kind: 'text', required: false },
+      // The rest of Set-ADUser: what the ADUC Properties sheet writes.
+      ...Object.keys(USER_ATTR_PARAMS).map(
+        (name): CapabilityParam => ({ name, label: name, kind: 'text', required: false, consoleHidden: true }),
+      ),
+      ...USER_FLAG_PARAMS.map(
+        (name): CapabilityParam => ({ name, label: name, kind: 'bool', required: false, consoleHidden: true }),
+      ),
+      { name: 'ChangePasswordAtLogon', label: 'Must change at next logon', kind: 'bool', required: false, consoleHidden: true },
+      { name: 'Replace', label: 'Replace @{attribute=value}', kind: 'text', required: false, consoleHidden: true },
+      { name: 'Clear', label: 'Clear attribute[,attribute]', kind: 'text', required: false, consoleHidden: true },
     ],
     // A correction is not a workflow: nothing in the queue is asking for it.
     resolvesTicketKinds: [],
@@ -345,21 +399,55 @@ export const CAPABILITIES: readonly IamCapability[] = [
       const display = (a.DisplayName ?? '').trim() || u.displayName;
       const title = (a.Title ?? '').trim() || u.title;
 
+      // Properties-sheet attributes: named parameters, then -Replace, then
+      // -Clear, the order in which Set-ADUser applies them.
+      const attrChanges: Record<string, string | undefined> = {};
+      for (const [param, ldap] of Object.entries(USER_ATTR_PARAMS)) {
+        if (a[param] !== undefined) attrChanges[ldap] = a[param]!.trim();
+      }
+      for (const flag of USER_FLAG_PARAMS) {
+        if (a[flag] !== undefined) attrChanges[flag] = truthy(a[flag]) ? 'TRUE' : undefined;
+      }
+      if (a.Replace !== undefined) {
+        const table = parseHashtable(a.Replace);
+        if (!table) return err(`Cannot bind parameter 'Replace'. Use -Replace @{attribute='value'}.`);
+        Object.assign(attrChanges, table);
+      }
+      for (const name of (a.Clear ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+        attrChanges[name] = undefined;
+      }
+      if (attrChanges.manager) {
+        const mgr = findUser(ctx, attrChanges.manager);
+        if (!mgr) return err(`Cannot find an object with identity '${attrChanges.manager}'.`);
+        attrChanges.manager = mgr.username;
+      }
+      const attrsDiffer = Object.entries(attrChanges).some(
+        ([k, v]) => (u.attrs?.[k] ?? '') !== (v ?? ''),
+      );
+      const mustChange = a.ChangePasswordAtLogon === undefined ? undefined : truthy(a.ChangePasswordAtLogon);
+      const mustChangeDiffers = mustChange !== undefined && mustChange !== !!u.mustChangePassword;
+
       if (
         !renaming &&
         display === u.displayName &&
         title === u.title &&
-        email === u.email
+        email === u.email &&
+        !attrsDiffer &&
+        !mustChangeDiffers
       ) {
         return ok(`Nothing to change on ${u.username}.`);
       }
 
       try {
-        ctx.dir.updateUser(
-          u.id,
-          { username: newUsername, displayName: display, email, title },
-          ctx.actor,
-        );
+        if (renaming || display !== u.displayName || title !== u.title || email !== u.email) {
+          ctx.dir.updateUser(
+            u.id,
+            { username: newUsername, displayName: display, email, title },
+            ctx.actor,
+          );
+        }
+        if (attrsDiffer) ctx.dir.setUserAttributes(u.id, attrChanges, ctx.actor);
+        if (mustChangeDiffers) ctx.dir.setMustChangePassword(u.id, mustChange!, ctx.actor);
       } catch (e) {
         // The directory throws on a clash; the console shows a message.
         return err(e instanceof Error ? e.message.replace(/^\[directory\] \w+: /, '') : String(e));
@@ -422,6 +510,7 @@ export const CAPABILITIES: readonly IamCapability[] = [
     run(ctx, a) {
       const u = findUser(ctx, a.Identity ?? '');
       if (!u) return err(`Cannot find an object with identity '${a.Identity}'.`);
+      if (isTrue(u.attrs?.ProtectedFromAccidentalDeletion)) return err(PROTECTED(u.displayName));
       ctx.dir.deleteUser(u.id, ctx.actor);
       return ok(`Removed ${u.username}.`);
     },
@@ -447,8 +536,40 @@ export const CAPABILITIES: readonly IamCapability[] = [
       // An OU move applies to any object, so groups are resolved too -- a
       // group is a directory object placed in an OU exactly as an account is.
       if (a.TargetPath) {
-        const ou = ctx.dir.getOuByName(a.TargetPath);
-        if (!ou) return err(`Cannot find an OU named '${a.TargetPath}'.`);
+        // CN=Users is a container, not an OU, and moving an object back there
+        // is as ordinary as moving it out.
+        const toRoot = /^(CN=Users|DC=)/i.test(a.TargetPath.trim());
+        // An OU moves under another OU, or to the top of the domain.
+        const movingOu =
+          !findUser(ctx, a.Identity ?? '') && !ctx.dir.getGroupByName(a.Identity ?? '')
+            ? ctx.dir.resolveOuRef(a.Identity ?? '').ou
+            : undefined;
+        if (movingOu) {
+          const dest = toRoot ? undefined : ouRef(ctx, a.TargetPath);
+          if (dest && 'error' in dest) return err(dest.error);
+          try {
+            ctx.dir.updateOu(movingOu.id, { parentId: dest?.ou.id ?? null }, ctx.actor);
+          } catch (e) {
+            return err(e instanceof Error ? e.message.replace(/^\[directory\] \w+: /, '') : String(e));
+          }
+          return ok(`Moved OU ${movingOu.name} to ${dest ? dest.ou.name : COMPANY.domain}.`);
+        }
+        if (toRoot) {
+          const user = findUser(ctx, a.Identity ?? '');
+          if (user) {
+            ctx.dir.setUserOu(user.id, undefined, ctx.actor);
+            return ok(`Moved ${user.username} to CN=Users.`);
+          }
+          const group = ctx.dir.getGroupByName(a.Identity ?? '');
+          if (group) {
+            ctx.dir.setGroupOu(group.id, undefined, ctx.actor);
+            return ok(`Moved ${group.name} to CN=Users.`);
+          }
+          return err(`Cannot find an object with identity '${a.Identity}'.`);
+        }
+        const found = ouRef(ctx, a.TargetPath);
+        if ('error' in found) return err(found.error);
+        const ou = found.ou;
 
         const user = findUser(ctx, a.Identity ?? '');
         if (user) {
@@ -659,8 +780,9 @@ export const CAPABILITIES: readonly IamCapability[] = [
     params: [{ name: 'Name', label: 'OU name', kind: 'text', required: true }],
     resolvesTicketKinds: [],
     run(ctx, a) {
-      const ou = ctx.dir.getOuByName(a.Name ?? '');
-      if (!ou) return err(`Cannot find an OU named '${a.Name}'.`);
+      const found = ouRef(ctx, a.Name ?? '');
+      if ('error' in found) return err(found.error);
+      const ou = found.ou;
       try {
         // deleteOu refuses while accounts, groups or child OUs are still in
         // there. Surfacing that refusal is the point: in AD you empty an OU
@@ -683,14 +805,24 @@ export const CAPABILITIES: readonly IamCapability[] = [
       { name: 'Name', label: 'OU name', kind: 'text', required: true },
       { name: 'Path', label: 'Parent OU', kind: 'text', required: false },
       { name: 'Description', label: 'Description', kind: 'text', required: false },
+      {
+        name: 'ProtectedFromAccidentalDeletion',
+        label: 'Protect from accidental deletion',
+        kind: 'bool',
+        required: false,
+        consoleHidden: true,
+      },
     ],
     resolvesTicketKinds: [],
     run(ctx, a) {
       if (!a.Name) return err('Name is required.');
-      const parent = a.Path ? ctx.dir.getOuByName(a.Path) : undefined;
-      if (a.Path && !parent) return err(`Cannot find an OU named '${a.Path}'.`);
+      const found = a.Path ? ouRef(ctx, a.Path) : undefined;
+      if (found && 'error' in found) return err(found.error);
+      const parent = found?.ou;
       try {
-        const ou = ctx.dir.createOu(a.Name, a.Description ?? '', parent?.id, ctx.actor);
+        const ou = ctx.dir.createOu(a.Name, a.Description ?? '', parent?.id, ctx.actor, {
+          protectedFromDeletion: truthy(a.ProtectedFromAccidentalDeletion),
+        });
         return ok(`Created OU ${ou.name}${parent ? ` under ${parent.name}` : ''}.`);
       } catch (e) {
         return err(e instanceof Error ? e.message : String(e));
@@ -976,8 +1108,9 @@ export const CAPABILITIES: readonly IamCapability[] = [
     run(ctx, a) {
       if (!a.Name) return err('Name is required.');
       if (ctx.dir.getGroupByName(a.Name)) return err(`The specified group already exists: '${a.Name}'.`);
-      const target = a.Path ? ctx.dir.getOuByName(a.Path) : undefined;
-      if (a.Path && !target) return err(`Cannot find an OU named '${a.Path}'.`);
+      const found = a.Path ? ouRef(ctx, a.Path) : undefined;
+      if (found && 'error' in found) return err(found.error);
+      const target = found?.ou;
       const scope = ({ global: 'Global', domainlocal: 'DomainLocal', universal: 'Universal' } as const)[
         (a.GroupScope ?? 'Global').toLowerCase() as 'global'
       ];
@@ -1005,6 +1138,7 @@ export const CAPABILITIES: readonly IamCapability[] = [
     run(ctx, a) {
       const g = ctx.dir.getGroupByName(a.Name ?? '');
       if (!g) return err(`Cannot find a group named '${a.Name}'.`);
+      if (isTrue(g.attrs?.ProtectedFromAccidentalDeletion)) return err(PROTECTED(g.name));
       // Members are removed first by deleteGroup, so every membership loss is
       // audited rather than vanishing with the group.
       ctx.dir.deleteGroup(g.id, ctx.actor);
@@ -1047,6 +1181,223 @@ export const CAPABILITIES: readonly IamCapability[] = [
       if (!g) return err(`Cannot find a group named '${a.Group}'.`);
       ctx.dir.removeFromGroup(u.id, g.id, ctx.actor);
       return ok(`Removed ${u.username} from ${g.name}.`);
+    },
+  },
+
+  {
+    /*
+     * The group's General and Managed By tabs.
+     *
+     * Scope changes follow AD's conversion rules, the ones ADUC enforces by
+     * greying out a radio button: Global and Domain Local can each become
+     * Universal, Universal can become either, but Global and Domain Local
+     * cannot become each other in one step.
+     */
+    id: 'group.update',
+    label: 'Edit Group',
+    synopsis: 'Change a group’s description, scope, type, e-mail, notes or manager.',
+    consoleSection: 'groups',
+    cmdlet: 'Set-ADGroup',
+    validator: 'group-updated',
+    params: [
+      { name: 'Identity', label: 'Group', kind: 'group', required: true },
+      { name: 'Description', label: 'Description', kind: 'text', required: false },
+      { name: 'GroupScope', label: 'Scope (Global, DomainLocal, Universal)', kind: 'text', required: false },
+      { name: 'GroupCategory', label: 'Type (Security, Distribution)', kind: 'text', required: false },
+      { name: 'ManagedBy', label: 'Managed by (user)', kind: 'text', required: false },
+      { name: 'Replace', label: 'Replace @{attribute=value}', kind: 'text', required: false, consoleHidden: true },
+      { name: 'Clear', label: 'Clear attribute[,attribute]', kind: 'text', required: false, consoleHidden: true },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const g = findGroup(ctx, a.Identity ?? '');
+      if (!g) return err(`Cannot find an object with identity '${a.Identity}'.`);
+      const changes: Parameters<MockDirectory['updateGroup']>[1] = {};
+      if (a.Description !== undefined && a.Description !== '') changes.description = a.Description;
+
+      const current = g.scope ?? 'Global';
+      if (a.GroupScope) {
+        const scope = ({ global: 'Global', domainlocal: 'DomainLocal', universal: 'Universal' } as const)[
+          a.GroupScope.replace(/\s+/g, '').toLowerCase() as 'global'
+        ];
+        if (!scope) return err(`GroupScope must be Global, DomainLocal or Universal (got '${a.GroupScope}').`);
+        if (!scopeChangeAllowed(current, scope)) {
+          return err(
+            `Cannot change the scope of ${g.name} from ${current} to ${scope} directly. ` +
+              'Change it to Universal first, then to ' + scope + '.',
+          );
+        }
+        if (scope !== current) changes.scope = scope;
+      }
+      if (a.GroupCategory) {
+        const category = ({ security: 'Security', distribution: 'Distribution' } as const)[
+          a.GroupCategory.toLowerCase() as 'security'
+        ];
+        if (!category) return err(`GroupCategory must be Security or Distribution (got '${a.GroupCategory}').`);
+        if (category !== (g.category ?? 'Security')) changes.category = category;
+      }
+
+      const attrs: Record<string, string | undefined> = {};
+      if (a.ManagedBy !== undefined) {
+        const who = a.ManagedBy.trim();
+        if (who && !findUser(ctx, who)) return err(`Cannot find an object with identity '${who}'.`);
+        attrs.managedBy = who ? findUser(ctx, who)!.username : undefined;
+      }
+      if (a.Replace !== undefined) {
+        const table = parseHashtable(a.Replace);
+        if (!table) return err(`Cannot bind parameter 'Replace'. Use -Replace @{attribute='value'}.`);
+        Object.assign(attrs, table);
+      }
+      for (const name of (a.Clear ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+        if (name.toLowerCase() === 'description') changes.description = '';
+        else attrs[name] = undefined;
+      }
+      if (Object.keys(attrs).length) changes.attrs = attrs;
+
+      if (Object.keys(changes).length === 0) return ok(`Nothing to change on ${g.name}.`);
+      ctx.dir.updateGroup(g.id, changes, ctx.actor);
+      return ok(`Updated ${g.name}.`);
+    },
+  },
+  {
+    /*
+     * Rename an object in place. For an account that is its name (CN); the
+     * logon name is a separate attribute and stays as it is, which is exactly
+     * the confusion ADUC's Rename User dialog exists to clear up.
+     */
+    id: 'object.rename',
+    label: 'Rename Object',
+    synopsis: 'Rename a user, group or organisational unit.',
+    consoleSection: 'users',
+    cmdlet: 'Rename-ADObject',
+    validator: 'object-renamed',
+    params: [
+      { name: 'Identity', label: 'Object (user, group or OU path)', kind: 'text', required: true },
+      { name: 'NewName', label: 'New name', kind: 'text', required: true },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const id = (a.Identity ?? '').trim();
+      const name = (a.NewName ?? '').trim();
+      if (!name) return err('NewName is required.');
+      const u = findUser(ctx, id);
+      if (u) {
+        if (u.displayName === name) return ok(`Nothing to change on ${u.username}.`);
+        ctx.dir.updateUser(u.id, { displayName: name }, ctx.actor);
+        return ok(`Renamed ${u.username} to '${name}'.`);
+      }
+      const g = findGroup(ctx, id);
+      if (g) {
+        try {
+          ctx.dir.updateGroup(g.id, { name }, ctx.actor);
+        } catch (e) {
+          return err(e instanceof Error ? e.message.replace(/^\[directory\] \w+: /, '') : String(e));
+        }
+        return ok(`Renamed group to ${name}.`);
+      }
+      const found = ouRef(ctx, id);
+      if ('error' in found) return err(`Cannot find an object with identity '${id}'.`);
+      try {
+        ctx.dir.updateOu(found.ou.id, { name }, ctx.actor);
+      } catch (e) {
+        return err(e instanceof Error ? e.message.replace(/^\[directory\] \w+: /, '') : String(e));
+      }
+      return ok(`Renamed OU to ${name}.`);
+    },
+  },
+  {
+    id: 'ou.update',
+    label: 'Edit Organizational Unit',
+    synopsis: 'Change an OU’s description, address, manager or deletion protection.',
+    consoleSection: 'users',
+    cmdlet: 'Set-ADOrganizationalUnit',
+    validator: 'ou-updated',
+    params: [
+      { name: 'Identity', label: 'OU (name or path)', kind: 'text', required: true },
+      { name: 'Description', label: 'Description', kind: 'text', required: false },
+      {
+        name: 'ProtectedFromAccidentalDeletion',
+        label: 'Protect from accidental deletion (true/false)',
+        kind: 'text',
+        required: false,
+      },
+      { name: 'StreetAddress', label: 'Street', kind: 'text', required: false, consoleHidden: true },
+      { name: 'City', label: 'City', kind: 'text', required: false, consoleHidden: true },
+      { name: 'State', label: 'State/province', kind: 'text', required: false, consoleHidden: true },
+      { name: 'PostalCode', label: 'ZIP/Postal Code', kind: 'text', required: false, consoleHidden: true },
+      { name: 'Country', label: 'Country/region', kind: 'text', required: false, consoleHidden: true },
+      { name: 'ManagedBy', label: 'Managed by (user)', kind: 'text', required: false, consoleHidden: true },
+      { name: 'Clear', label: 'Clear attribute[,attribute]', kind: 'text', required: false, consoleHidden: true },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const found = ouRef(ctx, a.Identity ?? '');
+      if ('error' in found) return err(found.error);
+      const ou = found.ou;
+      const attrs: Record<string, string | undefined> = {};
+      const map: Record<string, string> = {
+        StreetAddress: 'street', City: 'l', State: 'st', PostalCode: 'postalCode', Country: 'c',
+      };
+      for (const [param, ldap] of Object.entries(map)) if (a[param] !== undefined) attrs[ldap] = a[param]!.trim();
+      if (a.ManagedBy !== undefined) {
+        const who = a.ManagedBy.trim();
+        if (who && !findUser(ctx, who)) return err(`Cannot find an object with identity '${who}'.`);
+        attrs.managedBy = who ? findUser(ctx, who)!.username : undefined;
+      }
+      const prot = a.ProtectedFromAccidentalDeletion;
+      const clear = (a.Clear ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      for (const name of clear) if (name !== 'description') attrs[name] = undefined;
+      ctx.dir.updateOu(
+        ou.id,
+        {
+          ...(a.Description !== undefined && a.Description !== '' ? { description: a.Description } : {}),
+          ...(clear.includes('description') ? { description: '' } : {}),
+          ...(prot !== undefined && prot !== '' ? { protectedFromDeletion: truthy(prot) } : {}),
+          ...(Object.keys(attrs).length ? { attrs } : {}),
+        },
+        ctx.actor,
+      );
+      return ok(`Updated OU ${ou.name}.`);
+    },
+  },
+  {
+    /*
+     * The Delegation of Control Wizard's commit step. On a real DC the wizard
+     * writes ACEs to the OU's security descriptor (what dsacls shows); here it
+     * records which trustee may do which of the wizard's common tasks on which
+     * OU, and the Security tab reads it back.
+     */
+    id: 'ou.delegate',
+    label: 'Delegate Control',
+    synopsis: 'Delegate common tasks on an OU to a group, as the Delegation of Control Wizard does.',
+    consoleSection: 'access',
+    cmdlet: 'Grant-IamDelegation',
+    validator: 'control-delegated',
+    params: [
+      { name: 'Path', label: 'OU (blank = the domain)', kind: 'text', required: false },
+      { name: 'Trustee', label: 'Group or user', kind: 'text', required: true },
+      { name: 'Tasks', label: 'Tasks (numbers or names, comma-separated)', kind: 'text', required: true },
+    ],
+    resolvesTicketKinds: [],
+    run(ctx, a) {
+      const found = a.Path ? ouRef(ctx, a.Path) : undefined;
+      if (found && 'error' in found) return err(found.error);
+      const trustee = (a.Trustee ?? '').trim();
+      const principal = findGroup(ctx, trustee)?.name ?? findUser(ctx, trustee)?.username;
+      if (!principal) return err(`Cannot find a group or user named '${trustee}'.`);
+      const tasks: string[] = [];
+      for (const t of (a.Tasks ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+        const n = Number(t);
+        const task = Number.isInteger(n) ? DELEGATION_TASKS[n - 1] : DELEGATION_TASKS.find((d) => d.toLowerCase() === t.toLowerCase());
+        if (!task) return err(`'${t}' is not one of the wizard's tasks (1-${DELEGATION_TASKS.length}).`);
+        if (!tasks.includes(task)) tasks.push(task);
+      }
+      if (tasks.length === 0) return err('Choose at least one task to delegate.');
+      const ou = found?.ou;
+      ctx.dir.delegate(ou?.id, principal, tasks, ctx.actor);
+      return ok(
+        `Delegated ${tasks.length} task(s) on ${ou ? ctx.dir.ouPath(ou.id) : COMPANY.domain} to ${principal}.`,
+      );
     },
   },
 

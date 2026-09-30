@@ -59,8 +59,14 @@ Move-ADObject -Identity james.wilson -TargetPath "OU=Disabled,OU=Challenge90,DC=
 Get-ADUser -Filter * -SearchBase "OU=Challenge90,DC=omari,DC=test" -Properties Department, Enabled | Select-Object SamAccountName, Department, Enabled
 ```
 
-4. Copy the report into **Sheets** and save it as your onboarding report.
-5. Write the full `C90.ADToolkit.psm1` module from the reference below in
+4. Verify in **Active Directory**, as the mentor's run-book says ("Verify in
+   ADUC"): `Challenge90 → Employees` lists the new hires; `Groups` lists
+   the department groups (double-click one → *Members*); `Disabled` holds
+   James with the disabled-account arrow on his icon. **View → Add/Remove
+   Columns…** → add *Department* and *Job Title* so the result pane doubles as
+   a report, then **Action → Export List…** to save it as a text file.
+5. Copy the report into **Sheets** and save it as your onboarding report.
+6. Write the full `C90.ADToolkit.psm1` module from the reference below in
    **PowerShell ISE** or Notepad and commit it to GitHub — it is the version
    you would run on a real domain controller.
 

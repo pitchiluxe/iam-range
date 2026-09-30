@@ -29,6 +29,7 @@ import {
   looksLikeDn,
   notFoundMessage,
   ouDn,
+  USERS_CONTAINER_DN,
   ouObject,
   parseFilter,
   project,
@@ -267,23 +268,39 @@ function samOf(ctx: CapabilityContext, id: string | undefined): string | undefin
   return findUser(ctx.dir, clean)?.username ?? clean;
 }
 
+/** An OU given as a DN, canonical name or bare name, as its path ("USA/Users"). */
+function ouRefOf(ctx: CapabilityContext, id: string | undefined): string | undefined {
+  if (id === undefined) return undefined;
+  const clean = id.replace(/^["']|["']$/g, '');
+  const r = resolveOuPath(ctx.dir, clean);
+  return r.ok && r.ouId ? ctx.dir.ouPath(r.ouId) : clean;
+}
+
 function groupNameOf(ctx: CapabilityContext, id: string | undefined): string | undefined {
   if (id === undefined) return undefined;
   const clean = id.replace(/^["']|["']$/g, '');
   return findGroup(ctx.dir, clean)?.name ?? clean;
 }
 
-/** -Path / -TargetPath: a DN or canonical name becomes the OU's name; the domain root drops it. */
+/**
+ * -Path / -TargetPath: a DN or canonical name becomes the OU's path
+ * ("USA/Users"), which stays unambiguous when two OUs share a name; the domain
+ * root drops it, except for Move-ADObject, where it means CN=Users.
+ */
 function pathArg(ctx: CapabilityContext, cmdlet: string, a: Record<string, string>, key: 'Path' | 'TargetPath'): string | null {
   const raw = a[key];
   if (raw === undefined) return '';
   const r = resolveOuPath(ctx.dir, raw);
   if (!r.ok) return null;
   if (r.ouId === undefined) {
+    if (key === 'TargetPath') {
+      a[key] = USERS_CONTAINER_DN;
+      return a[key];
+    }
     delete a[key];
     return '';
   }
-  a[key] = ctx.dir.getOu(r.ouId)!.name;
+  a[key] = ctx.dir.ouPath(r.ouId);
   void cmdlet;
   return a[key];
 }
@@ -361,12 +378,37 @@ export function adaptAdWrite(name: string, rawArgs: Record<string, string>, posi
       const id = a.Name ?? a.Identity ?? pos.shift();
       if (id && looksLikeDn(id)) {
         const r = resolveOuPath(ctx.dir, id);
-        a.Name = r.ok && r.ouId ? ctx.dir.getOu(r.ouId)!.name : id;
+        a.Name = r.ok && r.ouId ? ctx.dir.ouPath(r.ouId) : id;
       } else if (id) a.Name = id;
       return one();
     }
+    case 'set-adgroup': {
+      a.Identity = groupNameOf(ctx, a.Identity ?? pos.shift())!;
+      if (a.Identity === undefined) delete a.Identity;
+      if (a.ManagedBy !== undefined) a.ManagedBy = samOf(ctx, a.ManagedBy)!;
+      return one();
+    }
+    case 'set-adorganizationalunit': {
+      a.Identity = ouRefOf(ctx, a.Identity ?? pos.shift())!;
+      if (a.Identity === undefined) delete a.Identity;
+      if (a.ManagedBy !== undefined) a.ManagedBy = samOf(ctx, a.ManagedBy)!;
+      return one();
+    }
+    case 'rename-adobject': {
+      const raw = a.Identity ?? pos.shift();
+      const clean = raw?.replace(/^["']|["']$/g, '');
+      a.Identity = (clean && (findUser(ctx.dir, clean)?.username ?? findGroup(ctx.dir, clean)?.name)) ?? ouRefOf(ctx, raw)!;
+      setIf(a, 'NewName', a.NewName ?? pos.shift());
+      return one();
+    }
     case 'move-adobject': {
-      a.Identity = samOf(ctx, a.Identity ?? pos.shift())!;
+      const raw = a.Identity ?? pos.shift();
+      const clean = raw?.replace(/^["']|["']$/g, '');
+      // An OU given by its DN travels as its path, which stays unambiguous.
+      a.Identity =
+        clean && !findUser(ctx.dir, clean) && !findGroup(ctx.dir, clean) && looksLikeDn(clean)
+          ? ouRefOf(ctx, clean)!
+          : samOf(ctx, raw)!;
       setIf(a, 'TargetPath', a.TargetPath ?? pos.shift());
       if (pathArg(ctx, 'Move-ADObject', a, 'TargetPath') === null) return pathError('Move-ADObject', 'TargetPath');
       return one();

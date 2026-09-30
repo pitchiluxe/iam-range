@@ -21,8 +21,30 @@ Add-ADGroupMember -Identity Sales-Team -Members alex.rivera
 Get-ADUser alex.rivera -Properties Department, MemberOf
 ```
 
+   **Or do step 1 by clicks, the way you will on a real server** (do one or
+   the other, not both — the second run finds everything already there).
+   **Active Directory** is laid out like *Active Directory Users and
+   Computers* (dsa.msc):
+   - Right-click `omari.test` → **New → Organizational Unit** → `Challenge90`
+     (leave *Protect container from accidental deletion* ticked). Right-click
+     `Challenge90` → **New → Organizational Unit** three times: `Employees`,
+     `Groups`, `Disabled`.
+   - Right-click `Groups` → **New → Group** → `Sales-Team`, scope *Global*,
+     type *Security*. Double-click it → *General* → Description
+     `Sales department access` → **OK**.
+   - Right-click `Employees` → **New → User** → First name `Alex`, Last name
+     `Rivera`, logon name `alex.rivera` → **Next** → password `Lab1-Welcome!`
+     twice, *User must change password at next logon* ticked → **Next** →
+     **Finish**.
+   - Double-click Alex → *Organization* → Job Title `Sales Representative`,
+     Department `Sales` → *Member Of* → **Add…** → type `Sales` →
+     **Check Names** → **OK** → **OK**.
+
 2. Open **Active Directory**, expand `Challenge90`, open Alex's properties and
-   screenshot the *Member Of* tab.
+   screenshot the *Member Of* tab. Then **View → Advanced Features**, open Alex
+   again and look at the *Attribute Editor* tab: `memberOf`, `department`,
+   `userAccountControl` and `distinguishedName` are what the boxes you just
+   filled are called in the directory.
 3. Check and set the lockout policy:
 
 ```powershell
@@ -33,13 +55,38 @@ Set-AccountLockoutPolicy -Threshold 5 -Duration 15
 4. **Start → Sign out.** On the sign-in screen pick `alex.rivera`, sign in with
    the temporary password: you are forced to set a new one. Sign out again.
 5. Pick `alex.rivera` and enter a wrong password five times: the account locks.
-6. Sign back in as `admin`, then investigate and unlock:
+6. Sign back in as `admin`, then investigate and unlock. The help desk usually
+   unlocks from the console: **Active Directory** → `Challenge90` →
+   `Employees` → double-click Alex → *Account* → tick **Unlock account** →
+   **OK** (or right-click Alex → **Reset Password…**, which shows the lockout
+   status and can unlock too). The terminal does the same:
 
 ```powershell
 Get-ADUser alex.rivera -Properties LockedOut
 Get-IamAuditLog -Last 20
 Unlock-ADAccount -Identity alex.rivera
 ```
+
+7. Delegate, so the help desk can reset passwords without being Domain Admins
+   (quick-review question 4). Right-click `Groups` → **New → Group** →
+   `Helpdesk-Tier1`. Right-click `Challenge90` → **Delegate Control…** →
+   **Next** → **Add…** → `Helpdesk-Tier1` → **Check Names** → **OK** →
+   **Next** → tick *Reset user passwords and force password change at next
+   logon* and *Read all user information* → **Next** → **Finish**. With
+   **View → Advanced Features** on, Alex's *Security* tab now lists
+   `Helpdesk-Tier1` with *Reset password*.
+
+**Bonus — the classic ADUC build.** Most AD courses start with this exercise;
+do it by hand once so the clicks are automatic. Inside `Challenge90`, create
+the OUs `USA`, `Europe` and `Asia`; inside each of them `Users`, `Computers`
+and `Servers` (the same names under different parents is fine — AD only
+requires names to be unique among siblings). Inside `USA\Users` create an OU
+per department — `IT`, `Accounting`, `HR`, `Sales`, `Management` — and three
+people in each (right-click a user → **Copy…** is the fast way: it carries
+the groups and department over). Leave the other two regions for Lab 2's
+bulk script. Then **Move…** one person to another department, rename one
+(**Rename** → *Rename User*), disable one (**Disable Account**), and use
+**Action → Find…** to find someone by name.
 
 `Lab1-Welcome!` is a practice password for the simulated domain only. The
 "Hands-on lab" section below is the same work on a real Windows Server — keep
@@ -174,6 +221,8 @@ No 4740 events? Check auditing:
 - Lockout policy set: threshold 5, duration 15 minutes
 - First sign-in as Alex forced a password change
 - Alex locked after five wrong passwords, found in `Get-IamAuditLog`, then unlocked
+- `Helpdesk-Tier1` delegated *Reset user passwords* on `Challenge90` (Delegate Control…)
+- Attribute Editor screenshot of Alex showing `memberOf` and `userAccountControl`
 
 ## Challenge
 

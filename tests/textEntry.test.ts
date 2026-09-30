@@ -116,7 +116,8 @@ describe('the Screen Pen can always be got off the screen', () => {
 });
 
 describe('Active Directory dialogs are ready to be typed into', () => {
-  const code = src('ui', 'consoles', 'activeDirectoryWindow.ts');
+  // The dialogs are built by the shared ADUC controls.
+  const code = src('ui', 'consoles', 'aduc', 'ui.ts');
 
   it('focuses the first field when the dialog opens', () => {
     // Every text box in Active Directory lives in one of these dialogs, and
