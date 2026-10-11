@@ -1,0 +1,11 @@
+SamAccountName,Name,Department,Title,Path,Group
+ana.smith,Ana Smith,HR,HR Staff,"OU=Users,OU=Corp,DC=omari,DC=test",grp-hr-readers
+cara.reid,Cara Reid,HR,HR Staff,"OU=Users,OU=Corp,DC=omari,DC=test",grp-hr-readers
+ben.okafor,Ben Okafor,IT,IT Admin,"OU=Users,OU=Corp,DC=omari,DC=test",grp-iam-admins
+dan.rivera,Dan Rivera,IT,IT Admin,"OU=Users,OU=Corp,DC=omari,DC=test",grp-iam-admins
+elena.voss,Elena Voss,Finance,Finance Analyst,"OU=Users,OU=Corp,DC=omari,DC=test",grp-finance-payroll
+finn.muller,Finn Muller,Finance,Finance Analyst,"OU=Users,OU=Corp,DC=omari,DC=test",grp-finance-payroll
+greta.olsen,Greta Olsen,Sales,Sales Rep,"OU=Users,OU=Corp,DC=omari,DC=test",grp-sales-readers
+henry.tan,Henry Tan,Sales,Sales Rep,"OU=Users,OU=Corp,DC=omari,DC=test",grp-sales-readers
+isabel.martinez,Isabel Martinez,Help Desk,Service Desk Analyst,"OU=Users,OU=Corp,DC=omari,DC=test",grp-helpdesk-tier1
+james.nguyen,James Nguyen,Help Desk,Service Desk Analyst,"OU=Users,OU=Corp,DC=omari,DC=test",grp-helpdesk-tier1

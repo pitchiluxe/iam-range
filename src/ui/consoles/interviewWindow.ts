@@ -112,6 +112,7 @@ const STYLES = `
 `;
 
 export function renderInterviewWindow(body: HTMLElement): void {
+  body.classList.add('iam-reading');
   if (!document.getElementById('interview-css')) {
     const style = document.createElement('style');
     style.id = 'interview-css';

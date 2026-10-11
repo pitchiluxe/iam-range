@@ -1,3 +1,4 @@
+import bulkProvisionScript from '../../docs/bulk-provision-new-hires.ps1?raw';
 /**
  * config/scriptTemplates.ts — the PowerShell automation library.
  *
@@ -203,78 +204,15 @@ Get-UserSession
   {
     id: 'bulk-onboarding-csv',
     name: 'Bulk onboarding from a CSV list',
-    purpose: 'Create 10 fictional employees from a list and place them in department OUs and groups.',
+    purpose: 'Read Documents/new-hires.csv and create 10 fictional employees in the Users OU and their role groups.',
     category: 'provisioning',
-    body: `# Bulk onboarding from a CSV-style list.
-# In production this data would come from Import-Csv. Here it is split by
-# department so the simulated shell can create the accounts in the right
-# OU and assign the right role group. Add or remove names as needed.
-
-$hrUsers = @(
-  'ana.smith'
-  'cara.reid'
-)
-
-$itUsers = @(
-  'ben.okafor'
-  'dan.rivera'
-)
-
-$financeUsers = @(
-  'elena.voss'
-  'finn.muller'
-)
-
-$salesUsers = @(
-  'greta.olsen'
-  'henry.tan'
-)
-
-$helpdeskUsers = @(
-  'isabel.martinez'
-  'james.nguyen'
-)
-
-# Create the role groups in the Groups OU. Run the analyst-env lesson first
-# so the Groups OU exists.
-New-ADGroup -Name grp-hr-readers -Description "HR read access" -Path Groups
-New-ADGroup -Name grp-iam-admins -Description "IT admin access" -Path Groups
-New-ADGroup -Name grp-finance-payroll -Description "Finance payroll access" -Path Groups
-New-ADGroup -Name grp-sales-readers -Description "Sales read access" -Path Groups
-New-ADGroup -Name grp-helpdesk-tier1 -Description "Help Desk tier 1" -Path Groups
-
-foreach ($n in $hrUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department HR -Title "HR Staff" -Path Users -AccountPassword "TempPass!2026##" -ChangePasswordAtLogon
-  Add-ADGroupMember -Identity $n -Group grp-hr-readers
-}
-
-foreach ($n in $itUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department IT -Title "IT Admin" -Path Users -AccountPassword "TempPass!2026#" -ChangePasswordAtLogon
-  Add-ADGroupMember -Identity $n -Group grp-iam-admins
-}
-
-foreach ($n in $financeUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department Finance -Title "Finance Analyst" -Path Users -AccountPassword "TempPass!2026#" -ChangePasswordAtLogon
-  Add-ADGroupMember -Identity $n -Group grp-finance-payroll
-}
-
-foreach ($n in $salesUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department Sales -Title "Sales Rep" -Path Users -AccountPassword "TempPass!2026#" -ChangePasswordAtLogon
-  Add-ADGroupMember -Identity $n -Group grp-sales-readers
-}
-
-foreach ($n in $helpdeskUsers) {
-  New-ADUser -SamAccountName $n -Name $n -Department "Help Desk" -Title "Service Desk Analyst" -Path Users -AccountPassword "TempPass!2026#" -ChangePasswordAtLogon
-  Add-ADGroupMember -Identity $n -Group grp-helpdesk-tier1
-}
-
-Get-ADUser
-Get-ADGroup
-`,
+    body: bulkProvisionScript,
   },
 ];
 
-/** Templates the learner saved themselves, kept in the browser. */
+/** Templates the learner saved themselves, also visible on the workstation disk. */
+import { FS } from '@/terminal/shellIntrinsics';
+import { VM_HOST } from './vmHost';
 const SAVED_KEY = 'script_templates_saved';
 
 export interface SavedScript {
@@ -282,36 +220,54 @@ export interface SavedScript {
   name: string;
   body: string;
   savedAt: number;
+  path?: string;
 }
 
 export function loadSavedScripts(): SavedScript[] {
   try {
     const raw = localStorage.getItem(SAVED_KEY);
-    return raw ? (JSON.parse(raw) as SavedScript[]) : [];
+    const scripts = raw ? (JSON.parse(raw) as SavedScript[]) : [];
+    if (!Array.isArray(scripts)) return [];
+    for (const script of scripts) {
+      const path = script.path ?? `C:\\Users\\${VM_HOST.user}\\Scripts\\${script.name}`;
+      if (!FS.exists(path)) FS.writeFile(path, script.body);
+    }
+    return scripts;
   } catch {
     return [];
   }
 }
 
 export function saveScript(name: string, body: string): SavedScript {
+  const input = name.trim() || 'Untitled.ps1';
+  const withExtension = /\.ps1$/i.test(input) ? input : `${input}.ps1`;
+  const path = FS.resolvePath(withExtension, `C:\\Users\\${VM_HOST.user}\\Scripts`);
+  const all = loadSavedScripts();
+  const previous = all.find(s => (s.path ?? `C:\\Users\\${VM_HOST.user}\\Scripts\\${s.name}`).toLowerCase() === path.toLowerCase());
+  const result = FS.writeFile(path, body);
+  if (!result.ok) throw new Error(result.error);
   const entry: SavedScript = {
-    id: `saved-${Date.now().toString(36)}`,
-    name,
+    id: previous?.id ?? `saved-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    name: path.split('\\').at(-1)!,
+    path,
     body,
     savedAt: Date.now(),
   };
-  const all = [...loadSavedScripts(), entry];
+  const updated = [...all.filter(s => s.id !== previous?.id), entry];
   try {
-    localStorage.setItem(SAVED_KEY, JSON.stringify(all));
+    localStorage.setItem(SAVED_KEY, JSON.stringify(updated));
   } catch {
-    /* quota — the script stays usable in the editor regardless */
+    throw new Error(`Saved to ${path}, but persistent storage is full or unavailable. Export a copy to keep it after closing the app.`);
   }
   return entry;
 }
 
 export function deleteSavedScript(id: string): void {
   try {
-    localStorage.setItem(SAVED_KEY, JSON.stringify(loadSavedScripts().filter((s) => s.id !== id)));
+    const scripts = loadSavedScripts();
+    const script = scripts.find(s => s.id === id);
+    if (script) FS.remove(script.path ?? `C:\\Users\\${VM_HOST.user}\\Scripts\\${script.name}`);
+    localStorage.setItem(SAVED_KEY, JSON.stringify(scripts.filter((s) => s.id !== id)));
   } catch {
     /* ignore */
   }

@@ -27,6 +27,7 @@ import { onEndpointChanged } from '@/util/endpointEvents';
 import { renderDrivesPanel } from './endpointApps';
 import { notifyEndpointChanged } from '@/util/endpointEvents';
 import { wallpaperGradient } from '@/util/wallpapers';
+import { restoreWindowTextFocus } from '@/ui/textFocus';
 import { CORP_WIFI, GUEST_WIFI } from '@/services/mockEndpoints';
 import {
   SESSION_DEFAULT_WALLPAPER_ID,
@@ -512,6 +513,8 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
     if (!w) return;
     activeId = id;
     w.el.style.zIndex = String(++zTop);
+    const body = w.el.querySelector<HTMLElement>('.apex-window-body');
+    if (body) restoreWindowTextFocus(body);
     for (const [otherId, other] of wins) other.el.classList.toggle('inactive', otherId !== id);
     renderTaskbarApps();
   }

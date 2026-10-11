@@ -13,6 +13,8 @@ import { formatTable } from './format';
 import { FS, INTRINSIC_HELP, runIntrinsic } from './shellIntrinsics';
 import { adaptAdWrite, normaliseArgs, runAdRead, unwrapSecureStrings } from './adCmdlets';
 import { objectStage, renderRows, type Row, type View } from './objectPipeline';
+import { runScript } from './script';
+import { parseCsv } from './csv';
 
 export interface DispatchResult {
   ok: boolean;
@@ -77,6 +79,7 @@ function helpForOne(cmdletName: string): DispatchResult {
 /** Shell state the caller owns, so `cd` persists between commands. */
 export interface ShellState {
   cwd: { path: string };
+  scriptStack?: string[];
 }
 
 export function createShellState(): ShellState {
@@ -217,6 +220,19 @@ export function dispatch(
   ctx: CapabilityContext,
   shell: ShellState = createShellState(),
 ): DispatchResult {
+  const scriptCall = /^(?:&\s+|\.\s+)?(?:"([^"]+\.ps1)"|'([^']+\.ps1)'|([^\s]+\.ps1))\s*$/i.exec(line.trim());
+  if (scriptCall) {
+    const path = FS.resolvePath(scriptCall[1] ?? scriptCall[2] ?? scriptCall[3]!, shell.cwd.path);
+    const content = FS.readFile(path);
+    if (content === null) return fail(`Cannot find script '${path}'. Save or import the .ps1 file first.`);
+    const stack = shell.scriptStack ??= [];
+    if (stack.includes(path.toLowerCase()) || stack.length >= 16) return fail(`Recursive script invocation refused: ${path}`);
+    stack.push(path.toLowerCase());
+    try {
+      const result = runScript(content, ctx, shell);
+      return { ok: result.ok, output: result.parseError ?? result.results.map(r => r.result.output).filter(Boolean).join('\n') + `\n${result.succeeded} succeeded, ${result.failed} failed.` };
+    } finally { stack.pop(); }
+  }
   const statements = splitStatements(line);
   if (statements.length === 0) return ok('');
 
@@ -294,6 +310,17 @@ function dispatchOne(
   if (!cmdlet) return ok('');
 
   const name = cmdlet.toLowerCase();
+  if (name === 'import-csv') {
+    const a = normaliseArgs(args, ['Path', 'LiteralPath']);
+    const input = a.Path ?? a.LiteralPath ?? positional[0];
+    if (!input) return fail('Import-Csv: specify -Path to a CSV file.');
+    const content = FS.readFile(FS.resolvePath(input, shell.cwd.path));
+    if (content === null) return fail(`Import-Csv: cannot find '${input}'.`);
+    try {
+      const rows = parseCsv(content);
+      return ok(renderRows(rows, 'table'), { rows, view: 'table' });
+    } catch (error) { return fail(error instanceof Error ? error.message : String(error)); }
+  }
 
   // Windows/PowerShell built-ins are tried first: they are shell commands, not
   // IAM capabilities, and a terminal that rejects `dir` or `whoami` reads as

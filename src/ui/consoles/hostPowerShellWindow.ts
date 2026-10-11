@@ -14,6 +14,8 @@
  * field — masked when the script asked for a secret.
  */
 
+import { HOST_SCRIPT_EVENT, takeHostScript, type HostScript } from '@/util/hostScriptOpener';
+
 type Bridge = {
   invoke: (cmd: string, ...args: unknown[]) => Promise<unknown>;
   onPwshEvent?: (fn: (id: number, kind: string, data: unknown) => void) => () => void;
@@ -30,7 +32,7 @@ const STYLES = `
 .hps-bar span{color:#9fb7da;margin-right:auto;}
 .hps-bar button{padding:3px 10px;border-radius:3px;border:1px solid #2a5aa0;background:#07306a;color:#fff;font:inherit;cursor:pointer;}
 .hps-bar button:hover{background:#0b3f8a;}
-.hps-out{flex:1;min-height:0;overflow:auto;padding:8px 10px;white-space:pre-wrap;word-break:break-word;line-height:1.4;}
+.hps-out{flex:1;min-height:0;overflow:auto;padding:8px 10px;white-space:pre-wrap;word-break:break-word;line-height:1.4;user-select:text;-webkit-user-select:text;}
 .hps-err{color:#ff8a8a;}
 .hps-cmd{color:#ffff8a;}
 .hps-sys{color:#9fb7da;}
@@ -64,7 +66,9 @@ export function renderHostPowerShellWindow(body: HTMLElement): void {
   clearBtn.textContent = 'Clear';
   const restartBtn = document.createElement('button');
   restartBtn.textContent = 'New session';
-  bar.append(info, stopBtn, clearBtn, restartBtn);
+  const runScriptBtn = document.createElement('button');
+  runScriptBtn.textContent = 'Run script';
+  bar.append(info, runScriptBtn, stopBtn, clearBtn, restartBtn);
 
   const out = document.createElement('div');
   out.className = 'hps-out';
@@ -81,6 +85,19 @@ export function renderHostPowerShellWindow(body: HTMLElement): void {
   inRow.append(prompt, editor, answer);
   root.append(bar, out, inRow);
   body.appendChild(root);
+  const loadScript = (script: HostScript): void => {
+    editor.value = script.content;
+    editor.rows = Math.min(10, script.content.split('\n').length);
+    info.textContent = `${script.name} · Runs on this PC · Review paths and modules, then Run script`;
+  };
+  const initialScript = takeHostScript();
+  if (initialScript) loadScript(initialScript);
+  const onScript = (event: Event): void => {
+    if (!root.isConnected) { document.removeEventListener(HOST_SCRIPT_EVENT, onScript); return; }
+    takeHostScript();
+    loadScript((event as CustomEvent<HostScript>).detail);
+  };
+  document.addEventListener(HOST_SCRIPT_EVENT, onScript);
 
   const write = (text: string, cls?: string): void => {
     const span = document.createElement('span');
@@ -103,7 +120,7 @@ export function renderHostPowerShellWindow(body: HTMLElement): void {
     );
     editor.disabled = true;
     inRow.style.display = 'none';
-    for (const btn of [stopBtn, clearBtn, restartBtn]) btn.style.display = 'none';
+    for (const btn of [runScriptBtn, stopBtn, clearBtn, restartBtn]) btn.style.display = 'none';
     return;
   }
 
@@ -116,6 +133,7 @@ export function renderHostPowerShellWindow(body: HTMLElement): void {
   const setBusy = (v: boolean): void => {
     busy = v;
     editor.disabled = v;
+    runScriptBtn.disabled = v;
     prompt.textContent = v ? '…' : `PS ${cwd}>`;
     if (!v) {
       answer.style.display = 'none';
@@ -174,6 +192,7 @@ export function renderHostPowerShellWindow(body: HTMLElement): void {
     setBusy(true);
     void b.invoke('pwsh:run', sessionId, code);
   };
+  runScriptBtn.addEventListener('click', () => runBlock(editor.value));
 
   editor.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

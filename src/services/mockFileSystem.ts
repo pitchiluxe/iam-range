@@ -18,6 +18,8 @@
  */
 import { VM_HOST } from '@/config/vmHost';
 import { PRODUCT } from '@/config/product';
+import newHiresCsv from '../../docs/new-hires.csv?raw';
+import bulkProvisionScript from '../../docs/bulk-provision-new-hires.ps1?raw';
 
 export type NodeKind = 'dir' | 'file';
 
@@ -273,6 +275,9 @@ export class MockFileSystem {
     const home = mk(`Users\\${VM_HOST.user}`);
     home.readonly = true;
     for (const folder of ['Desktop', 'Documents', 'Downloads', 'Scripts']) mk(`Users\\${VM_HOST.user}\\${folder}`);
+    this.writeFile(`${DRIVE}\\Users\\${VM_HOST.user}\\Documents\\new-hires.csv`, newHiresCsv);
+
+    this.writeFile(`${DRIVE}\\Users\\${VM_HOST.user}\\Documents\\bulk-provision-new-hires.ps1`, bulkProvisionScript);
 
     // A couple of files, so `type` has something to show and the learner can
     // see that files and folders are different things here.

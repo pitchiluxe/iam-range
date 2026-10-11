@@ -29,9 +29,11 @@ analyst checks the container before creating the object.
 
 1. Open the **PowerShell ISE**.
 2. Load the **Bulk onboarding from a CSV list** script template.
-3. The template splits the list by department and creates accounts in `Users`, sets a
-temporary password with `ChangePasswordAtLogon`, and adds each person to the right
-group.
+3. Open **File Explorer → Documents**. The app supplies [new-hires.csv](new-hires.csv)
+   and [bulk-provision-new-hires.ps1](bulk-provision-new-hires.ps1) in
+   `C:\Users\admin\Documents`. The CSV contains ten fictional employees and their
+   roles. The script uses `Import-Csv`, creates accounts in `OU=Users,OU=Corp`, sets
+   a temporary lab password with `ChangePasswordAtLogon`, and assigns each role group.
 4. Run the script, then verify with:
 
    ```powershell
@@ -39,7 +41,29 @@ group.
    Get-ADPrincipalGroupMembership -Identity ana.smith
    ```
 
-5. Fix any duplicate-name errors and re-run the affected lines.
+5. Fix any duplicate-name errors and re-run the affected lines. `ana.smith` exists
+   only after provisioning succeeds; a membership query does not create the account.
+
+You can also run the supplied file from **Terminal** after completing Phase 1:
+
+```powershell
+Import-Csv -Path "C:\Users\admin\Documents\new-hires.csv" | Select-Object SamAccountName,Department,Group
+& "C:\Users\admin\Documents\bulk-provision-new-hires.ps1"
+Get-ADPrincipalGroupMembership -Identity ana.smith
+```
+
+In PowerShell ISE, **New** starts a script, **Save** creates or updates its `.ps1`
+file in `C:\Users\admin\Scripts` (or the full path you enter), and **Open** loads
+that file. **Import .ps1** loads a file from your computer; **Export .ps1** keeps a
+copy outside the lab. F5 or Ctrl+Enter runs; Ctrl+S saves. Saved scripts also appear
+in **My scripts** and File Explorer.
+
+**IAM Range directory** runs supported lab cmdlets, scalar variables, arrays,
+`foreach`, and CSV record properties against the simulated directory. For functions,
+modules and the full PowerShell language, choose **Windows PowerShell on this PC**;
+review the transferred script and click **Run script**. That mode uses the real
+computer, its files and installed modules. Export virtual files and use their
+actual paths before running them there; it does not administer the simulated AD.
 
 ## Phase 3 — Enforce RBAC
 

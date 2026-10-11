@@ -58,6 +58,7 @@ export function openDocumentation(articleId: string): void {
 }
 
 export function renderDocumentationWindow(body: HTMLElement): void {
+  body.classList.add('iam-reading');
   body.style.cssText =
     'display:flex;height:100%;background:var(--panel);font-family:"Segoe UI",system-ui,sans-serif;' +
     'color:var(--fg);';
@@ -174,6 +175,38 @@ export function renderDocumentationWindow(body: HTMLElement): void {
     pane.append(topic, h, sub);
 
     for (const block of a.body.split(/\n\s*\n/)) {
+      if (/^#{1,3} /.test(block)) {
+        const heading = document.createElement('h2');
+        heading.textContent = block.replace(/^#{1,3} /, '');
+        heading.style.cssText = 'font-size:17px;margin:22px 0 10px;';
+        pane.appendChild(heading);
+        continue;
+      }
+      if (block.trim() === '---') continue;
+      if (block.startsWith('|')) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'overflow-x:auto;margin-bottom:18px;';
+        const table = document.createElement('table');
+        table.style.cssText = 'border-collapse:collapse;font-size:12px;line-height:1.6;';
+        for (const [index, line] of block.trim().split('\n').entries()) {
+          if (/^\|[\s:|\-]+\|$/.test(line.trim())) continue;
+          const row = document.createElement('tr');
+          for (const text of line.trim().replace(/^\||\|$/g, '').split('|')) {
+            const cell = document.createElement(index === 0 ? 'th' : 'td');
+            for (const [i, part] of text.trim().split(/\*\*/).entries()) {
+              const fragment = document.createElement(i % 2 ? 'strong' : 'span');
+              fragment.textContent = part;
+              cell.appendChild(fragment);
+            }
+            cell.style.cssText = 'padding:8px;border:1px solid var(--border);text-align:left;vertical-align:top;';
+            row.appendChild(cell);
+          }
+          table.appendChild(row);
+        }
+        wrap.appendChild(table);
+        pane.appendChild(wrap);
+        continue;
+      }
       const el = document.createElement(block.startsWith('    ') ? 'pre' : 'p');
       el.style.cssText =
         block.startsWith('    ')
@@ -191,7 +224,7 @@ export function renderDocumentationWindow(body: HTMLElement): void {
           if (i % 2 === 1) {
             const s = document.createElement('strong');
             s.textContent = part;
-            s.style.color = '#fff';
+            s.style.color = 'var(--reading-emphasis)';
             el.appendChild(s);
           } else {
             el.appendChild(document.createTextNode(part));

@@ -565,11 +565,13 @@ export function renderSettingsWindow(
         const card = document.createElement('button');
         const isSel = wp.id === current;
         card.style.cssText = `
-          width:120px;height:72px;border-radius:8px;cursor:pointer;
+          width:180px;height:104px;border-radius:8px;cursor:pointer;
           background:${wp.gradient};border:2px solid ${isSel ? 'var(--accent)' : 'transparent'};
           display:flex;align-items:flex-end;padding:6px;position:relative;
         `;
-        card.innerHTML = `<span style="font-size:11px;color:var(--fg);text-shadow:0 1px 3px rgba(0,0,0,0.8);">${wp.label}</span>${isSel ? '<span style="position:absolute;top:6px;right:6px;color:var(--accent);font-size:14px;">✓</span>' : ''}`;
+        card.setAttribute('aria-label', `Desktop wallpaper: ${wp.label}`);
+        card.setAttribute('aria-pressed', String(isSel));
+        card.innerHTML = `<span style="font-size:11px;color:#fff;background:rgba(0,0,0,.76);padding:3px 6px;border-radius:4px;">${wp.label}</span>${isSel ? '<span style="position:absolute;top:6px;right:6px;color:#fff;background:rgba(0,0,0,.76);border-radius:50%;padding:2px 4px;font-size:14px;">✓</span>' : ''}`;
         card.addEventListener('click', () => {
           look.setWallpaper(wp.id, wp.gradient);
           renderContent();
@@ -597,14 +599,16 @@ export function renderSettingsWindow(
         const card = document.createElement('button');
         const isSel = ls.id === currentLock;
         card.style.cssText = `
-          width:120px;height:72px;border-radius:8px;cursor:pointer;
+          width:180px;height:104px;border-radius:8px;cursor:pointer;
           background:${ls.gradient};border:2px solid ${isSel ? 'var(--accent)' : 'transparent'};
           display:flex;align-items:flex-end;padding:6px;position:relative;
         `;
         const name = document.createElement('span');
+        card.setAttribute('aria-label', `Lock screen: ${ls.label}`);
+        card.setAttribute('aria-pressed', String(isSel));
         name.textContent = ls.label;
         name.style.cssText =
-          'font-size:11px;color:var(--fg);text-shadow:0 1px 3px rgba(0,0,0,0.8);';
+          'font-size:11px;color:#fff;background:rgba(0,0,0,.76);padding:3px 6px;border-radius:4px;';
         card.appendChild(name);
         if (isSel) {
           const tick = document.createElement('span');

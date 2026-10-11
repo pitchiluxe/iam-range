@@ -2,9 +2,18 @@
  * tests/wallpapers.test.ts — built-in wallpaper and lock screen registry.
  */
 import { describe, it, expect } from 'vitest';
-import { WALLPAPERS, LOCK_SCREENS, WALLPAPER_BY_ID, LOCK_SCREEN_BY_ID } from '@/util/wallpapers';
+import { WALLPAPERS, LOCK_SCREENS, WALLPAPER_BY_ID, LOCK_SCREEN_BY_ID, CYBER_WALLPAPERS, wallpaperGradient, lockScreenGradient } from '@/util/wallpapers';
 
 describe('wallpaper collection', () => {
+  it('resolves the offline cybersecurity artwork for desktops and lock screens', () => {
+    expect(CYBER_WALLPAPERS).toHaveLength(3);
+    for (const wallpaper of CYBER_WALLPAPERS) {
+      expect(wallpaper.gradient).toContain('.webp');
+      expect(wallpaper.gradient).toContain('center/cover no-repeat');
+      expect(wallpaperGradient(wallpaper.id)).toBe(wallpaper.gradient);
+      expect(lockScreenGradient(wallpaper.id)).toBe(wallpaper.gradient);
+    }
+  });
   it('has a set of IAMLab watermarked desktop wallpapers in several colors', () => {
     const iamlab = WALLPAPERS.filter((w) => w.label.startsWith('IAMLab'));
     expect(iamlab.length).toBeGreaterThanOrEqual(6);

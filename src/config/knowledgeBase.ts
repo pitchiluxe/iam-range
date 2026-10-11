@@ -1,3 +1,7 @@
+import roadmapGuide from '../../docs/iam-lab-5-step-roadmap.md?raw';
+import bootcampGuide from '../../docs/bootcamp-syllabus.md?raw';
+import pathwaysGuide from '../../docs/lab-pathways.md?raw';
+
 /**
  * config/knowledgeBase.ts — the written IAM/PIM reference.
  *
@@ -26,6 +30,9 @@ export interface Article {
 }
 
 export const ARTICLES: readonly Article[] = [
+  { id: 'career-roadmap-guide', title: '5-Step IAM Career Roadmap', summary: 'Build an IT foundation, specialize, publish evidence, rehearse and apply.', topic: 'operations', keywords: ['career roadmap', 'portfolio', 'job search'], body: roadmapGuide },
+  { id: 'bootcamp-guide', title: '12-Week Bootcamp Syllabus', summary: 'Eight projects with weekly milestones and program requirements.', topic: 'operations', keywords: ['bootcamp', 'syllabus', 'career accelerator'], body: bootcampGuide },
+  { id: 'lab-pathways-guide', title: 'IAM Range Lab Pathways', summary: 'Lesson crosswalk, prerequisites, environment choices and evidence.', topic: 'operations', keywords: ['lab pathways', 'prerequisites', 'environment'], body: pathwaysGuide },
   {
     id: 'ou-design',
     title: 'Organisational units and why structure comes first',

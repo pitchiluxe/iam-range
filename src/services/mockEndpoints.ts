@@ -521,6 +521,24 @@ export class MockEndpoints {
   }
 
   /** Resolve a name the way this client would: cache first, then its DNS server. */
+  webAccess(name: string, url: string): { ok: true } | { ok: false; error: string } {
+    const endpoint = this.get(name);
+    if (!endpoint) return { ok: false, error: `Computer ${name} is unavailable.` };
+    const network = endpoint.network;
+    if (!network.adapterEnabled) return { ok: false, error: 'Wi-Fi is off. Turn on the adapter and connect to a network.' };
+    if (!network.ssid) return { ok: false, error: 'No Wi-Fi connection. Connect to an available network.' };
+    if (!hasAddress(network.ipv4) || !network.gateway) return { ok: false, error: 'No usable DHCP lease or gateway. Renew the IP address.' };
+    let host: string;
+    try { host = new URL(url).hostname.toLowerCase(); } catch { return { ok: false, error: 'Enter a valid website address.' }; }
+    const internal = host === VM_HOST.domain || host.endsWith(`.${VM_HOST.domain}`) || host.startsWith('10.20.');
+    if (internal && !this.onCorpNetwork(endpoint) && !endpoint.vpn.connected) return { ok: false, error: 'This internal site requires the corporate network or VPN.' };
+    if (internal && host === INTRANET_HOST && network.dnsCache[host] && network.dnsCache[host] !== CORP_DNS[host]) {
+      return { ok: false, error: 'This site cannot be reached: the cached DNS address is incorrect. Flush the DNS cache.' };
+    }
+    return { ok: true };
+  }
+
+  /** Resolve a name the way this client would: cache first, then its DNS server. */
   resolveName(name: string, host: string): { ip: string; fromCache: boolean } | { error: string } {
     const e = this.get(name);
     if (!e) return { error: `No computer named ${name}.` };

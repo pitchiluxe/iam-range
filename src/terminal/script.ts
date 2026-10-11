@@ -21,7 +21,10 @@
  * as doing the work by hand in the console.
  */
 import type { CapabilityContext } from '@/services';
-import { dispatch, createShellState, type DispatchResult } from './dispatcher';
+import { dispatch, createShellState, type DispatchResult, type ShellState } from './dispatcher';
+import { FS } from './shellIntrinsics';
+import { tokenize } from './tokenizer';
+import { parseCsv } from './csv';
 
 /** `$name = @('a', "b", c)` — the whole literal on one line. */
 const ARRAY_ASSIGN = /^\$([A-Za-z_]\w*)\s*=\s*@\((.*)\)\s*$/;
@@ -55,8 +58,33 @@ function parseArrayBody(body: string): string[] {
  * silently emptying it would turn a typo into a subtly wrong command that still
  * runs, which is the worst outcome for a learner.
  */
-function substitute(line: string, vars: Map<string, string>): string {
-  return line.replace(/\$([A-Za-z_]\w*)/g, (whole, name: string) => vars.get(name) ?? whole);
+type ScriptValue = string | Record<string, string>;
+function substitute(line: string, vars: Map<string, ScriptValue>): string {
+  let quote: string | null = null;
+  let result = '';
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (ch === "'" || ch === '"') {
+      if (!quote) quote = ch;
+      else if (quote === ch) quote = null;
+      result += ch; continue;
+    }
+    if (ch !== '$' || quote === "'") { result += ch; continue; }
+    const match = /^\$([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?/.exec(line.slice(i));
+    if (!match) { result += ch; continue; }
+    let value = vars.get(match[1]!.toLowerCase());
+    if (match[2] && value && typeof value === 'object') {
+      const key = Object.keys(value).find(k => k.toLowerCase() === match[2]!.toLowerCase());
+      if (!key) throw new Error(`CSV column '${match[2]}' does not exist. Check the CSV headers.`);
+      value = value[key]!;
+    }
+    if (typeof value !== 'string') { result += match[0]; i += match[0].length - 1; continue; }
+    // Substitute as one argument; a CSV value can never become another command.
+    if (/["'`\r\n]/.test(value)) throw new Error('This directory script contains a value with quotes or newlines. Use Windows PowerShell on this PC for this script.');
+    result += quote === '"' ? value : /[\s;|&]/.test(value) ? `"${value}"` : value;
+    i += match[0].length - 1;
+  }
+  return result;
 }
 
 /**
@@ -65,18 +93,34 @@ function substitute(line: string, vars: Map<string, string>): string {
  * @throws if a foreach is unterminated or iterates an undeclared variable —
  *   better to refuse the whole script than to run half of a bulk operation.
  */
-export function parseScript(source: string): string[] {
+export function parseScript(source: string, cwd = FS.getCwd()): string[] {
   const lines = source.split('\n').map((l) => l.trim());
-  const arrays = new Map<string, string[]>();
+  const arrays = new Map<string, ScriptValue[]>();
+  const vars = new Map<string, ScriptValue>();
   const out: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     if (line === '' || line.startsWith('#')) continue;
+    const csv = /^\$([A-Za-z_]\w*)\s*=\s*(Import-Csv\b.*)$/i.exec(line);
+    if (csv) {
+      const parsed = tokenize(substitute(csv[2]!, vars));
+      const path = parsed.args.Path ?? parsed.args.path ?? parsed.args.LiteralPath ?? parsed.positional[0];
+      if (!path) throw new Error('Import-Csv: specify -Path to the CSV file.');
+      const content = FS.readFile(FS.resolvePath(path, cwd));
+      if (content === null) throw new Error(`Import-Csv: cannot find '${path}'. No commands were run.`);
+      arrays.set(csv[1]!.toLowerCase(), parseCsv(content));
+      continue;
+    }
+    const scalar = /^\$([A-Za-z_]\w*)\s*=\s*(['"])(.*)\2\s*$/.exec(line);
+    if (scalar) { vars.set(scalar[1]!.toLowerCase(), scalar[3]!); continue; }
+    const secure = /^\$([A-Za-z_]\w*)\s*=\s*ConvertTo-SecureString\s+(['"])(.*?)\2\s+-AsPlainText\s+-Force\s*$/i.exec(line);
+    if (secure) { vars.set(secure[1]!.toLowerCase(), secure[3]!); continue; }
+    if (/^Import-Module\s+ActiveDirectory\s*$/i.test(line)) continue;
 
     const assign = ARRAY_ASSIGN.exec(line);
     if (assign) {
-      arrays.set(assign[1]!, parseArrayBody(assign[2]!));
+      arrays.set(assign[1]!.toLowerCase(), parseArrayBody(assign[2]!));
       continue;
     }
 
@@ -99,7 +143,7 @@ export function parseScript(source: string): string[] {
           `$${openAssign[1]}: missing closing ")" on the list — the script was not run.`,
         );
       }
-      arrays.set(openAssign[1]!, parseArrayBody(parts.join(',')));
+      arrays.set(openAssign[1]!.toLowerCase(), parseArrayBody(parts.join(',')));
       i = j;
       continue;
     }
@@ -107,7 +151,7 @@ export function parseScript(source: string): string[] {
     const loop = FOREACH_OPEN.exec(line);
     if (loop) {
       const [, itemVar, listVar] = loop as unknown as [string, string, string];
-      const list = arrays.get(listVar);
+      const list = arrays.get(listVar.toLowerCase());
       if (!list) {
         throw new Error(
           `foreach: '$${listVar}' is not defined. Declare it first, e.g. $${listVar} = @('a','b').`,
@@ -133,7 +177,8 @@ export function parseScript(source: string): string[] {
       }
 
       for (const value of list) {
-        const scope = new Map<string, string>([[itemVar, value]]);
+        const scope = new Map(vars);
+        scope.set(itemVar.toLowerCase(), value);
         for (const bodyLine of body) out.push(substitute(bodyLine, scope));
       }
       i = j;
@@ -142,7 +187,10 @@ export function parseScript(source: string): string[] {
 
     // A plain cmdlet line. Only scalar substitution applies here; arrays have
     // no meaning outside a foreach.
-    out.push(substitute(line, new Map()));
+    if (/^(?:function|if|while|try|param)\b|^\$[\w]+\s*=/i.test(line)) {
+      throw new Error('This script needs the full PowerShell language. Select Windows PowerShell on this PC. No commands were run.');
+    }
+    out.push(substitute(line, vars));
   }
 
   return out;
@@ -164,10 +212,10 @@ export interface ScriptRunResult {
  * through a 20-user intake must not abandon the remaining 10. The result
  * reports which lines failed so the learner can fix and re-run just those.
  */
-export function runScript(source: string, ctx: CapabilityContext): ScriptRunResult {
+export function runScript(source: string, ctx: CapabilityContext, shell: ShellState = createShellState()): ScriptRunResult {
   let commands: string[];
   try {
-    commands = parseScript(source);
+    commands = parseScript(source, shell.cwd.path);
   } catch (e) {
     return {
       ok: false,
@@ -179,7 +227,6 @@ export function runScript(source: string, ctx: CapabilityContext): ScriptRunResu
   }
 
   // One shell state for the whole run, so `cd` and friends persist across lines.
-  const shell = createShellState();
   const results = commands.map((command) => ({ command, result: dispatch(command, ctx, shell) }));
 
   const failed = results.filter((r) => !r.result.ok).length;

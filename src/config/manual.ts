@@ -1,3 +1,5 @@
+import { LEARNING_PATHS } from './learningPaths';
+
 /**
  * config/manual.ts — the course, as opposed to the reference.
  *
@@ -42,6 +44,10 @@ export interface Lesson {
   interview: string;
   /** Documentation article to read alongside it. */
   reading?: string;
+  scriptTemplate?: string;
+  /** Supporting lessons opened directly from a pathway. */
+  lessonLinks?: string[];
+  appLinks?: { label: string; app: string }[];
   /** Application to open for this lesson. */
   app?: string;
 }
@@ -575,6 +581,7 @@ export const MANUAL: readonly Chapter[] = [
       },
       {
         id: 'analyst-provision',
+        scriptTemplate: 'bulk-onboarding-csv',
         title: 'Bulk-provision from a CSV-style list',
         objective: 'Create ten accounts in one script and place each in the right OU and group.',
         why:
@@ -583,13 +590,14 @@ export const MANUAL: readonly Chapter[] = [
           'groups. Doing this by hand for ten people is a mistake waiting to happen.',
         steps: [
           { do: 'Open the PowerShell ISE and load the "Bulk onboarding from a CSV list" template.', app: 'script-editor' } as ManualStep,
-          { do: 'Read the list of employees and the department groups it will use.' },
+          { do: 'Open File Explorer → Documents. The supplied new-hires.csv contains ten fictional employees; bulk-provision-new-hires.ps1 reads that file.' },
+          { do: 'Preview the CSV before creating anything.', cmdlet: 'Import-Csv', example: 'Import-Csv -Path "C:\\Users\\admin\\Documents\\new-hires.csv" | Select-Object SamAccountName,Name,Department,Group' },
           { do: 'Run the script and watch for any failures or duplicate-name errors.' },
           { do: 'List the new accounts.', cmdlet: 'Get-ADUser', example: 'Get-ADUser -Filter * -SearchBase "OU=Users,OU=Corp,DC=omari,DC=test" | Select-Object Name,SamAccountName,Enabled' },
           { do: 'Check that a sample account is in its role group.', cmdlet: 'Get-ADPrincipalGroupMembership', example: 'Get-ADPrincipalGroupMembership -Identity ana.smith' },
         ],
         verify:
-          'Get-ADUser shows ten new accounts, one per department. Get-ADPrincipalGroupMembership ' +
+          'Get-ADUser shows ten new accounts, two per department. Get-ADPrincipalGroupMembership ' +
           'on a sample shows the role group matching their department.',
         interview:
           '"How do you bulk-provision accounts?" From a CSV or HR feed, generating usernames, ' +
@@ -1337,6 +1345,7 @@ export const MANUAL: readonly Chapter[] = [
       },
     ],
   },
+  ...LEARNING_PATHS,
 ];
 
 export const ALL_LESSONS: readonly Lesson[] = MANUAL.flatMap((c) => c.lessons);

@@ -46,6 +46,36 @@ export interface Theme {
 
 export const THEMES: readonly Theme[] = [
   {
+    id: 'windows-light', label: 'Windows Light',
+    note: 'Soft white windows, frosted chrome and familiar blue accents.', mode: 'light',
+    tokens: {
+      panel: '#fafafa', panelAlt: '#f0f0f0', bg: '#e8eef5', fg: '#1b1b1b', muted: '#565656',
+      border: '#c8c8c8', accent: '#005fb8', onAccent: '#ffffff', err: '#b42318', warn: '#835b00',
+      glassTop: 'rgba(249,249,249,0.94)', glassBottom: 'rgba(238,241,246,0.94)',
+      glassBorder: 'rgba(0,0,0,0.15)', glassText: '#1b1b1b', glassHover: 'rgba(0,0,0,0.07)',
+    },
+  },
+  {
+    id: 'windows-dark', label: 'Windows Dark',
+    note: 'Charcoal windows, understated borders and a clear blue accent.', mode: 'dark',
+    tokens: {
+      panel: '#202020', panelAlt: '#292929', bg: '#141414', fg: '#f5f5f5', muted: '#b6b6b6',
+      border: '#454545', accent: '#60baff', onAccent: '#062239', err: '#ffb4ab', warn: '#f5cc78',
+      glassTop: 'rgba(42,42,42,0.93)', glassBottom: 'rgba(28,28,28,0.94)',
+      glassBorder: 'rgba(255,255,255,0.16)', glassText: '#f5f5f5', glassHover: 'rgba(255,255,255,0.09)',
+    },
+  },
+  {
+    id: 'security-operations', label: 'Security Operations',
+    note: 'Graphite surfaces with crisp emerald accents for your security workstation.', mode: 'dark',
+    tokens: {
+      panel: '#121c20', panelAlt: '#1c292e', bg: '#091114', fg: '#eaf4f3', muted: '#a0b6b4',
+      border: '#385251', accent: '#5ee6b4', onAccent: '#06251d', err: '#ffb4ab', warn: '#f5cc78',
+      glassTop: 'rgba(28,46,48,0.94)', glassBottom: 'rgba(13,25,28,0.95)',
+      glassBorder: 'rgba(94,230,180,0.24)', glassText: '#eaf4f3', glassHover: 'rgba(94,230,180,0.10)',
+    },
+  },
+  {
     id: 'midnight',
     label: 'Midnight',
     note: 'The default. Dark chrome, teal accent.',
@@ -374,6 +404,9 @@ export function applyTheme(id: string = currentThemeId()): void {
       --muted: ${t.muted};
       --border: ${t.border};
       --accent: ${t.accent};
+      --reading-title: ${theme.mode === 'light' ? '#075985' : '#7dd3fc'};
+      --reading-section: ${theme.mode === 'light' ? '#6b21a8' : '#d8b4fe'};
+      --reading-emphasis: ${theme.mode === 'light' ? '#92400e' : '#fcd34d'};
       --on-accent: ${t.onAccent};
       --err: ${t.err};
       --warn: ${t.warn};

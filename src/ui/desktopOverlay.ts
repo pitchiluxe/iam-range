@@ -18,6 +18,7 @@ import { renderStickyNotesWindow } from './consoles/stickyNotesWindow';
 import { renderFileExplorerWindow } from './consoles/fileExplorerWindow';
 import { renderAppPortalWindow } from './consoles/appPortalWindow';
 import { renderWebBrowserWindow } from './consoles/webBrowserWindow';
+import { login } from '@/vm/loginSession';
 import { renderTerminalWindow } from './consoles/terminalWindow';
 import { renderScriptEditorWindow } from './consoles/scriptEditorWindow';
 import { renderSettingsWindow } from './consoles/settingsWindow';
@@ -63,6 +64,7 @@ import {
   layoutIcons,
 } from '@/util/desktopIcons';
 import { currentWallpaper } from '@/util/wallpapers';
+import { restoreWindowTextFocus } from './textFocus';
 import { VM_HOST } from '@/config/vmHost';
 import { PRODUCT } from '@/config/product';
 
@@ -207,7 +209,10 @@ const DESKTOP_APPS: WindowDef[] = [
     icon: '🌐',
     width: 900,
     height: 640,
-    render: (_c, b) => renderWebBrowserWindow(b),
+    render: (c, b) => {
+      const computer = login.user ? c.endpoints.ensureFor(login.user.id) : undefined;
+      renderWebBrowserWindow(b, computer ? { services: c, computer: computer.name } : undefined);
+    },
   },
   {
     id: 'settings',
@@ -240,6 +245,22 @@ const DESKTOP_APPS: WindowDef[] = [
     width: 900,
     height: 660,
     render: (_c, b) => renderManualWindow(b),
+  },
+  {
+    id: 'bootcamp-12',
+    title: '12-Week Bootcamp',
+    icon: '🗓️',
+    width: 1000,
+    height: 700,
+    render: (_c, b) => renderManualWindow(b, 'bootcamp-project-1'),
+  },
+  {
+    id: 'career-roadmap',
+    title: '5-Step Career Roadmap',
+    icon: '🧭',
+    width: 1000,
+    height: 700,
+    render: (_c, b) => renderManualWindow(b, 'roadmap-step-1'),
   },
   {
     id: 'career-lab',
@@ -470,6 +491,7 @@ export function remoteCatalog(c: VmServices): RemoteAppEntry[] {
           });
         else if (a.id === 'terminal')
           renderTerminalWindow(body, c, ctx.endpoint ? { host: ctx.endpoint } : {});
+        else if (a.id === 'browser') renderWebBrowserWindow(body, onEndpoint);
         else if (a.id === 'outlook') renderOutlookWindow(body, c, ctx.endpoint);
         else if (a.id === 'vpn-client') renderVpnClientWindow(body, c, ctx.endpoint);
         else if (a.id === 'software-center') renderSoftwareCenterWindow(body, c, ctx.endpoint);
@@ -672,6 +694,7 @@ class WindowManager {
   focus(id: string): void {
     const w = this.windows.get(id);
     if (!w) return;
+    restoreWindowTextFocus(w.body);
 
     // Restack inside a bounded band rather than incrementing forever. The old
     // counter started at 200 and only ever went up, so a long session would

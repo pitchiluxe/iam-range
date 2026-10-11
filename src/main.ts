@@ -17,6 +17,7 @@ import type { VmSession } from '@/vm/session';
 import { logoffChime } from '@/ui/sounds';
 import { applyTheme } from '@/ui/themes';
 import { installAppChrome } from '@/ui/appChrome';
+import { installTextFocus } from '@/ui/textFocus';
 import { startUpdateNotifier } from '@/ui/updateNotifier';
 import { installCaptureSourcePicker } from '@/ui/captureSourcePicker';
 
@@ -29,6 +30,7 @@ applyTheme();
 // does not exist, and the baseline it carries fixes typography in every window
 // without any of them being edited.
 installAppChrome();
+installTextFocus();
 
 const appEl = document.getElementById('app');
 if (!appEl) throw new Error('[vm] #app container is missing from index.html');

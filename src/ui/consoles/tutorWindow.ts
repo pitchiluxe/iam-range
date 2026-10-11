@@ -32,6 +32,7 @@ import { ENDPOINT_ISSUES } from '@/vm/endpointIssues';
 const MODES: TutorMode[] = ['socratic', 'explain', 'walkthrough'];
 
 export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
+  body.classList.add('iam-reading');
   body.style.cssText =
     'display:flex;flex-direction:column;height:100%;background:var(--panel);' +
     'font-family:"Segoe UI",system-ui,sans-serif;color:var(--fg);';

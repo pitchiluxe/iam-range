@@ -187,6 +187,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 }
 
 export function renderAdLabWindow(body: HTMLElement): void {
+  body.classList.add('iam-reading');
   if (!document.getElementById('adl-css')) {
     const style = document.createElement('style');
     style.id = 'adl-css';

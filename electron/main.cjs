@@ -14,7 +14,7 @@
 //
 // The renderer stays sandboxed. Everything it needs crosses through preload.
 
-const { app, BrowserWindow, shell, ipcMain, net, desktopCapturer } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, net, desktopCapturer, clipboard } = require('electron');
 const path = require('path');
 // The in-VM browser's allowlist, the same file the renderer checks.
 const { urlAllowed } = require('../shared/allowlistCheck.cjs');
@@ -38,6 +38,11 @@ let updateInfo = null;
 let updateError = null;
 
 let mainWindow = null;
+ipcMain.handle('clipboard:writeText', (event, text) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || typeof text !== 'string' || text.length > 4_000_000) return false;
+  clipboard.writeText(text);
+  return true;
+});
 
 // ---------------------------------------------------------------------------
 // Auto-update

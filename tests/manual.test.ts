@@ -17,7 +17,7 @@ import { articleById } from '@/config/knowledgeBase';
 import { appsForDepartment } from '@/config/desktopProfiles';
 
 /** Cmdlets the shell provides that are not capabilities — the intrinsics. */
-const SHELL_INTRINSICS = new Set(['Get-SignInLog', 'Get-Help', 'Get-Date', 'Clear-Host']);
+const SHELL_INTRINSICS = new Set(['Get-SignInLog', 'Get-Help', 'Get-Date', 'Clear-Host', 'Import-Csv']);
 
 function cmdletExists(name: string): boolean {
   return Boolean(CAPABILITY_BY_CMDLET[name.toLowerCase()]) || SHELL_INTRINSICS.has(name);
@@ -105,6 +105,8 @@ describe('manual integrity', () => {
       'year-2',
       'year-3',
       'year-4',
+      'career-roadmap',
+      'bootcamp',
     ]);
   });
 });

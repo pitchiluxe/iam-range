@@ -20,6 +20,8 @@
 import { BROWSER_HOME, IAM_BOOKMARKS, isAllowedUrl, normalizeUrl } from '@/config/webAllowlist';
 import { openExternal } from '@/util/externalLink';
 import { onBrowserOpen, takePendingBrowserUrl } from '@/util/appLauncher';
+import type { VmServices } from '@/vm/session';
+import { onEndpointChanged } from '@/util/endpointEvents';
 
 /** True when running inside the Electron shell, where <webview> is available. */
 function hasWebview(): boolean {
@@ -66,7 +68,7 @@ interface Tab {
   historyPos: number;
 }
 
-export function renderWebBrowserWindow(body: HTMLElement): void {
+export function renderWebBrowserWindow(body: HTMLElement, endpoint?: { services: VmServices; computer: string }): void {
   body.innerHTML = '';
   // Additive — see the note in terminalWindow.ts about cssText and flex sizing.
   Object.assign(body.style, { overflow: 'hidden', flex: '1', minHeight: '0' });
@@ -77,6 +79,8 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;" +
     'font-size:12px;color:var(--fg);';
   body.appendChild(root);
+  const access = (url: string): { ok: boolean; error?: string } =>
+    endpoint ? endpoint.services.endpoints.webAccess(endpoint.computer, url) : { ok: true };
 
   // ── Tab strip ─────────────────────────────────────────────────────────────
   const strip = document.createElement('div');
@@ -136,7 +140,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   openExt.addEventListener('click', () => {
     const target = normalizeUrl(urlBar.value);
     // Re-check: the allowlist governs what leaves the lab, however it leaves.
-    if (isAllowedUrl(target)) window.open(target, '_blank', 'noopener,noreferrer');
+    if (access(target).ok && isAllowedUrl(target)) window.open(target, '_blank', 'noopener,noreferrer');
   });
 
   chrome.append(backBtn, fwdBtn, reloadBtn, homeBtn, urlBar, goBtn, openExt);
@@ -304,7 +308,7 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
     open.style.cssText =
       'padding:8px 16px;border-radius:5px;border:1px solid var(--accent);background:var(--accent);' +
       'color:var(--on-accent);font-size:12px;cursor:pointer;font-family:inherit;';
-    open.addEventListener('click', () => openExternal(target));
+    open.addEventListener('click', () => { if (access(target).ok) openExternal(target); });
 
     wrap.append(h, p, open);
     tab.view.appendChild(wrap);
@@ -339,6 +343,13 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
       tab.history.push(target);
       tab.historyPos = tab.history.length - 1;
     }
+    const connection = access(target);
+    if (!connection.ok) {
+      showMessage(tab, 'No network connection', connection.error ?? 'This computer is offline.', 'block');
+      setTitle(tab, 'Offline');
+      setStatus(tab, connection.error ?? 'Offline');
+      return;
+    }
 
     tab.view.innerHTML = '';
     // <webview> in Electron can render sites that refuse framing; the web build
@@ -363,10 +374,11 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
     setStatus(tab, `Loading ${host}…`);
 
     if (hasWebview()) {
-      frame.addEventListener('did-finish-load', () => setStatus(tab, `Loaded ${host}`));
-      frame.addEventListener('page-title-updated', (e) => setTitle(tab, (e as Event & { title?: string }).title ?? host));
+      frame.addEventListener('did-finish-load', () => { if (tab.view.contains(frame)) setStatus(tab, `Loaded ${host}`); });
+      frame.addEventListener('page-title-updated', (e) => { if (tab.view.contains(frame)) setTitle(tab, (e as Event & { title?: string }).title ?? host); });
       // Sign-in redirects move the page on its own; keep the address bar honest.
       frame.addEventListener('did-navigate', (e) => {
+        if (!tab.view.contains(frame)) return;
         const url = (e as Event & { url?: string }).url;
         if (url) {
           tab.url = url;
@@ -468,5 +480,16 @@ export function renderWebBrowserWindow(body: HTMLElement): void {
   });
 
   // The browser opens on the page it was asked for, or its home page.
+  if (endpoint) {
+    const fingerprint = (): string => JSON.stringify(endpoint.services.endpoints.get(endpoint.computer)?.network);
+    let previous = fingerprint();
+    onEndpointChanged(root, endpoint.computer, () => {
+      const next = fingerprint();
+      if (next === previous) return;
+      previous = next;
+      // Removing each frame also stops background sites and embedded navigation.
+      for (const tab of tabs) load(tab, tab.url, false);
+    });
+  }
   newTab(takePendingBrowserUrl() ?? BROWSER_HOME);
 }

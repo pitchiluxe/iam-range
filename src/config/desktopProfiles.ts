@@ -20,6 +20,8 @@ const BASELINE_APPS = [
   // Learning is not a departmental entitlement.
   'tutor',
   'manual',
+  'bootcamp-12',
+  'career-roadmap',
   'career-lab',
   // The AD Enterprise Lab Series runs on its own simulated estate, so it is a
   // course like the Career Lab rather than an administrative entitlement.

@@ -84,6 +84,7 @@ function openTerminal(): void {
 }
 
 export function renderCareerLabWindow(body: HTMLElement): void {
+  body.classList.add('iam-reading');
   if (!document.getElementById('career-lab-css')) {
     const style = document.createElement('style');
     style.id = 'career-lab-css';

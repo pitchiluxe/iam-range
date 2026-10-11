@@ -4,6 +4,9 @@
  * reads the persisted choice on VM open).
  */
 import { generateWallpaper, idToSeed } from './wallpaperGenerator';
+import blueShield from '@/assets/wallpapers/blue-shield.webp';
+import networkConstellation from '@/assets/wallpapers/network-constellation.webp';
+import emeraldCore from '@/assets/wallpapers/emerald-core.webp';
 
 export interface Wallpaper {
   id: string;
@@ -22,7 +25,54 @@ function wordmarkWallpaper(bgColor: string, word: string, textColor: string): st
   return `${bgColor} url("data:image/svg+xml,${encodeURIComponent(svg)}") center/cover no-repeat`;
 }
 
+const COLOR_WALLPAPERS: Wallpaper[] = [
+  {
+    id: 'deep-blue',
+    label: 'Deep Blue',
+    gradient: 'linear-gradient(150deg,#0b3a5e 0%,#123f63 40%,#0e2438 100%)',
+  },
+  {
+    id: 'slate',
+    label: 'Slate',
+    gradient: 'linear-gradient(150deg,#141a21 0%,#1e262f 45%,#0d1117 100%)',
+  },
+  {
+    id: 'dusk',
+    label: 'Dusk',
+    gradient: 'linear-gradient(160deg,#2a1b3d 0%,#44318d 45%,#1b1032 100%)',
+  },
+  {
+    id: 'forest',
+    label: 'Forest',
+    gradient: 'linear-gradient(150deg,#0d2818 0%,#14432a 45%,#08170f 100%)',
+  },
+  {
+    id: 'magenta',
+    label: 'Magenta',
+    gradient: 'linear-gradient(160deg,#2a0d1e 0%,#5a1e42 45%,#2a0d1e 100%)',
+  },
+  {
+    id: 'obsidian',
+    label: 'Obsidian',
+    gradient: 'linear-gradient(150deg,#0c0c0c 0%,#1f1f1f 45%,#0c0c0c 100%)',
+  },
+  {
+    id: 'copper',
+    label: 'Copper',
+    gradient: 'linear-gradient(160deg,#2a1b0e 0%,#5a3a1e 45%,#2a1b0e 100%)',
+  },
+];
+
+/** Bundled original artwork: available offline in desktop and remote sessions. */
+export const CYBER_WALLPAPERS: Wallpaper[] = [
+  { id: 'cyber-blue-shield', label: 'Blue Glass Shield', gradient: `#07121f url("${blueShield}") center/cover no-repeat` },
+  { id: 'cyber-network', label: 'Network Constellation', gradient: `#06121a url("${networkConstellation}") center/cover no-repeat` },
+  { id: 'cyber-emerald', label: 'Emerald Secure Core', gradient: `#061411 url("${emeraldCore}") center/cover no-repeat` },
+];
+
 export const WALLPAPERS: Wallpaper[] = [
+  ...CYBER_WALLPAPERS,
+  ...COLOR_WALLPAPERS,
   {
     id: 'teal',
     label: 'Apex Teal',
@@ -131,41 +181,8 @@ export const WALLPAPER_STORAGE_KEY = 'settings_wallpaper';
  * on a signed-in user's preferences.
  */
 export const LOCK_SCREENS: Wallpaper[] = [
-  {
-    id: 'deep-blue',
-    label: 'Deep Blue',
-    gradient: 'linear-gradient(150deg,#0b3a5e 0%,#123f63 40%,#0e2438 100%)',
-  },
-  {
-    id: 'slate',
-    label: 'Slate',
-    gradient: 'linear-gradient(150deg,#141a21 0%,#1e262f 45%,#0d1117 100%)',
-  },
-  {
-    id: 'dusk',
-    label: 'Dusk',
-    gradient: 'linear-gradient(160deg,#2a1b3d 0%,#44318d 45%,#1b1032 100%)',
-  },
-  {
-    id: 'forest',
-    label: 'Forest',
-    gradient: 'linear-gradient(150deg,#0d2818 0%,#14432a 45%,#08170f 100%)',
-  },
-  {
-    id: 'magenta',
-    label: 'Magenta',
-    gradient: 'linear-gradient(160deg,#2a0d1e 0%,#5a1e42 45%,#2a0d1e 100%)',
-  },
-  {
-    id: 'obsidian',
-    label: 'Obsidian',
-    gradient: 'linear-gradient(150deg,#0c0c0c 0%,#1f1f1f 45%,#0c0c0c 100%)',
-  },
-  {
-    id: 'copper',
-    label: 'Copper',
-    gradient: 'linear-gradient(160deg,#2a1b0e 0%,#5a3a1e 45%,#2a1b0e 100%)',
-  },
+  ...CYBER_WALLPAPERS,
+  ...COLOR_WALLPAPERS,
   {
     id: 'iamlab',
     label: 'OMARI',

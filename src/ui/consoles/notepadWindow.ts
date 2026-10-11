@@ -4,6 +4,10 @@
  * A simple text editor with line numbers, auto-save to localStorage,
  * and a word-count status bar.
  */
+import { FS } from '@/terminal/shellIntrinsics';
+import { showToast } from '@/ui/toast';
+import { LOAD_TEXT_FILE_EVENT, takePendingTextFile, type TextFile } from '@/util/textFileOpener';
+
 const NOTEPAD_KEY = 'notepad_content';
 
 export function renderNotepadWindow(body: HTMLElement): void {
@@ -12,6 +16,17 @@ export function renderNotepadWindow(body: HTMLElement): void {
 
   // Load saved content
   const saved = localStorage.getItem(NOTEPAD_KEY) ?? '';
+  let filePath: string | null = null;
+  let dirty = false;
+  const toolbar = document.createElement('div');
+  toolbar.className = 'app-toolbar';
+  const save = document.createElement('button');
+  save.className = 'app-btn';
+  save.textContent = 'Save';
+  const filename = document.createElement('span');
+  filename.textContent = 'Untitled';
+  toolbar.append(save, filename);
+  body.appendChild(toolbar);
 
   const editorWrap = document.createElement('div');
   editorWrap.style.cssText = 'display:flex;flex:1;overflow:hidden;min-height:0;';
@@ -28,6 +43,7 @@ export function renderNotepadWindow(body: HTMLElement): void {
   // Textarea
   const ta = document.createElement('textarea');
   ta.id = 'np-editor';
+  ta.setAttribute('aria-label', 'File contents');
   ta.value = saved;
   ta.style.cssText = `
     flex:1;border:none;outline:none;resize:none;background:var(--panel);
@@ -75,6 +91,7 @@ export function renderNotepadWindow(body: HTMLElement): void {
   // Auto-save
   let saveTimer: number | null = null;
   function scheduleSave(): void {
+    if (filePath) return; // Files save explicitly, like Windows Notepad.
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
       localStorage.setItem(NOTEPAD_KEY, ta.value);
@@ -89,6 +106,8 @@ export function renderNotepadWindow(body: HTMLElement): void {
   }
 
   ta.addEventListener('input', () => {
+    dirty = true;
+    filename.textContent = `${filePath ?? 'Untitled'} *`;
     updateMeta();
     scheduleSave();
   });
@@ -96,5 +115,36 @@ export function renderNotepadWindow(body: HTMLElement): void {
     lineNums.scrollTop = ta.scrollTop;
   });
 
+  function saveFile(): void {
+    const path = filePath ?? window.prompt('Save file as', 'C:\\Users\\admin\\Documents\\New text document.txt');
+    if (!path) return;
+    const result = FS.writeFile(path, ta.value);
+    if (!result.ok) { showToast(result.error ?? 'Could not save the file.', { kind: 'error' }); return; }
+    filePath = path;
+    dirty = false;
+    filename.textContent = path;
+    showToast('File saved.', { kind: 'success' });
+  }
+  save.addEventListener('click', saveFile);
+  ta.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); }
+  });
+  function loadFile(file: TextFile): void {
+    if (dirty && !window.confirm('Discard unsaved edits and open this file?')) return;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    filePath = file.path;
+    ta.value = file.content;
+    dirty = false;
+    filename.textContent = file.path;
+    updateMeta();
+  }
+  const listener = (event: Event): void => {
+    if (!body.isConnected) { document.removeEventListener(LOAD_TEXT_FILE_EVENT, listener); return; }
+    const file = takePendingTextFile() ?? (event as CustomEvent<TextFile>).detail;
+    loadFile(file);
+  };
+  document.addEventListener(LOAD_TEXT_FILE_EVENT, listener);
+  const file = takePendingTextFile();
+  if (file) loadFile(file);
   updateMeta();
 }

@@ -181,6 +181,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 const STATUS_ICON: Record<LabStatus, string> = { 'not-started': '○', 'in-progress': '◐', done: '●' };
 
 export function renderChallengeWindow(body: HTMLElement): void {
+  body.classList.add('iam-reading');
   if (!document.getElementById('c90-css')) {
     const style = document.createElement('style');
     style.id = 'c90-css';

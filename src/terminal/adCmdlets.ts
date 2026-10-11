@@ -230,7 +230,7 @@ export function runAdRead(
       const id = (a.Identity ?? positional[0])?.replace(/^["']|["']$/g, '');
       if (!id) return { ok: false, error: 'Get-ADPrincipalGroupMembership : Cannot process command because of one or more missing mandatory parameters: Identity.' };
       const u = findUser(ctx.dir, id);
-      if (!u) return { ok: false, error: `Get-ADPrincipalGroupMembership : ${notFoundMessage(id)}` };
+      if (!u) return { ok: false, error: `Get-ADPrincipalGroupMembership : ${notFoundMessage(id)}\nList existing accounts with Get-ADUser -Filter * and use an existing SamAccountName.\nFor the analyst sample ana.smith, complete Prepare the domain, then run "Bulk onboarding from a CSV list" in PowerShell ISE before checking membership.` };
       const rows = ctx.dir
         .listGroups()
         .filter((g) => g.memberIds.includes(u.id))

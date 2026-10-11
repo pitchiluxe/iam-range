@@ -39,6 +39,19 @@ The lab is mapped to an entry-level IAM Analyst job description. See
 `docs/iam-analyst-lab.md` for the full curriculum and `docs/interview-prep.md`
 for sample answers.
 
+## Structured IAM career paths
+
+Two full curricula ship with the app, based on the "Break Into IAM" roadmap
+and the Technobiz IT & IAM Career Accelerator syllabus:
+
+- **`docs/iam-lab-5-step-roadmap.md`** — A five-step roadmap: IT foundation →
+  IAM specialization → LinkedIn portfolio → interview prep → apply in volume.
+  Each step maps to the IAM Range manual lessons and portfolio labs.
+- **`docs/bootcamp-syllabus.md`** — The full 12-week cohort-paced bootcamp
+  curriculum (Phase I: IT operations foundation, Phase II: IAM specialization,
+  Run Phase placement program) with weekly milestones, project specs, and
+  assessment requirements.
+
 To build a portfolio from it, open `docs/portfolio.md`. It lists the exact
 artifacts to capture:
 

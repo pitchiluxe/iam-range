@@ -32,6 +32,34 @@ const STYLE_ID = 'app-chrome-css';
  * the point.
  */
 const CSS = `
+  @keyframes iam-caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  #iam-steady-caret { animation: iam-caret-blink 1s steps(1, end) infinite; }
+  [data-stable-caret] { caret-color: transparent !important; }
+  /* Control Panel keeps its white Windows surface in every desktop theme. */
+  .cp-pane {
+    --reading-title: #075985;
+    --reading-section: #6b21a8;
+    --reading-emphasis: #92400e;
+  }
+  /* Shared reading hierarchy. Override legacy white inline headings, while
+     preserving authored document formatting, code and control/status colours. */
+  .apex-window-body :is(h1, h2):not([contenteditable] *) {
+    color: var(--reading-title) !important;
+  }
+  .apex-window-body :is(h3, h4, h5, h6):not([contenteditable] *) {
+    color: var(--reading-section) !important;
+  }
+  .apex-window-body :is(strong, b):not([contenteditable] *):not(pre *):not(code *):not(button *) {
+    color: var(--reading-emphasis) !important;
+  }
+  .iam-reading :is(div, span, p)[style*="font-weight:600"],
+  .iam-reading :is(div, span, p)[style*="font-weight:700"],
+  .iam-reading :is(div, span, p)[style*="font-weight: 600"],
+  .iam-reading :is(div, span, p)[style*="font-weight: 700"],
+  .iam-reading .app-label, .iam-reading .reading-section, .iam-reading th,
+  .iam-reading [class$="-title"] {
+    color: var(--reading-section) !important;
+  }
   /* ---- Baseline -------------------------------------------------------- */
   /* Form controls do not inherit font. Without this a button with no font of
      its own renders in the browser's 13.33px Arial, which is why one window

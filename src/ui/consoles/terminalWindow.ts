@@ -12,6 +12,8 @@ import type { CapabilityContext } from '@/services';
 import { createShellState, dispatch } from '@/terminal/dispatcher';
 import { COMPANY } from '@/config';
 import { notifyEndpointChanged } from '@/util/endpointEvents';
+import { copyText } from '@/util/copyText';
+import { loadSavedScripts } from '@/config/scriptTemplates';
 
 /**
  * The console's own text colour. The background is always console black, so
@@ -87,6 +89,45 @@ export function renderTerminalWindow(
     `line-height:1.45;color:${CONSOLE_FG};background:#0c0c0c;` +
     'scrollbar-width:thin;scrollbar-color:#333 #0c0c0c;';
   body.appendChild(screen);
+  screen.style.userSelect = 'text';
+  screen.style.setProperty('-webkit-user-select', 'text');
+  screen.tabIndex = -1;
+  const copyStatus = document.createElement('span');
+  copyStatus.setAttribute('role', 'status');
+  const copy = (text: string): void => {
+    void copyText(text).then(ok => { copyStatus.textContent = ok ? 'Copied' : 'Copy failed — use Ctrl+C on selected text'; });
+  };
+  const copySelection = (): void => {
+    const selection = window.getSelection();
+    if (selection?.toString() && selection.anchorNode && screen.contains(selection.anchorNode)) {
+      copy(selection.toString());
+    }
+  };
+  const copyBar = document.createElement('div');
+  copyBar.style.cssText = 'display:flex;gap:8px;position:sticky;top:0;background:#0c0c0c;padding:3px 0 8px;';
+  for (const [label, action] of [
+    ['Copy selection', copySelection],
+    ['Copy all', () => { copy(screen.innerText.replace(copyBar.innerText, '').trim()); }],
+  ] as const) {
+    const button = document.createElement('button');
+    button.textContent = label;
+    button.style.cssText = 'background:#222;color:#e6e6e6;border:1px solid #444;padding:4px 8px;cursor:pointer;';
+    button.addEventListener('mousedown', event => event.preventDefault());
+    button.addEventListener('click', action);
+    copyBar.appendChild(button);
+  }
+  copyBar.appendChild(copyStatus);
+  screen.appendChild(copyBar);
+  screen.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && window.getSelection()?.toString()) {
+      event.preventDefault(); copySelection();
+    }
+  });
+  screen.addEventListener('contextmenu', event => {
+    if (!window.getSelection()?.toString()) return;
+    event.preventDefault(); copySelection();
+  });
+  loadSavedScripts(); // Restore saved .ps1 files onto the workstation disk.
 
   const history: string[] = [];
   let historyIdx = -1;
@@ -122,6 +163,8 @@ export function renderTerminalWindow(
       `flex:1;background:transparent;border:none;outline:none;color:${CONSOLE_FG};caret-color:${CONSOLE_FG};font:inherit;padding:0;`;
     // The prompt line is the caret; a focus ring around it would look like a text box.
     input.dataset.caretOnly = '';
+    input.dataset.defaultFocus = '';
+    input.setAttribute('aria-label', 'PowerShell command');
 
     line.append(ps, input);
     screen.appendChild(line);
@@ -156,6 +199,10 @@ export function renderTerminalWindow(
       // Freeze the submitted line as text so it can't be edited afterwards.
       input.disabled = true;
       input.style.color = CONSOLE_FG;
+      const submitted = document.createElement('span');
+      submitted.textContent = line;
+      submitted.style.cssText = 'white-space:pre-wrap;user-select:text;';
+      input.replaceWith(submitted);
       if (line.trim()) {
         history.push(line);
         historyIdx = -1;
@@ -177,6 +224,7 @@ export function renderTerminalWindow(
 
     if (res.control === 'clear') {
       screen.innerHTML = '';
+      screen.appendChild(copyBar);
       write(BANNER, '#6a9955');
       newPrompt();
       return;
@@ -201,11 +249,19 @@ export function renderTerminalWindow(
 
   // Clicking anywhere in the shell returns focus to the live prompt, the way a
   // terminal emulator behaves.
-  screen.addEventListener('mousedown', (e) => {
+  let selectionBeforeClick = '';
+  screen.addEventListener('pointerdown', () => { selectionBeforeClick = window.getSelection()?.toString() ?? ''; });
+  screen.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
-    if (window.getSelection()?.toString()) return; // don't steal focus mid-selection
-    e.preventDefault();
+    if ((e.target as HTMLElement).closest('button')) return;
+    const selection = window.getSelection();
+    // A newly dragged selection belongs to Copy; old selections (including
+    // those in another window) must not disable the prompt forever.
+    if (selection?.toString() && selection.toString() !== selectionBeforeClick
+      && selection.anchorNode && screen.contains(selection.anchorNode)) return;
+    selection?.removeAllRanges();
     activeInput?.focus();
+    activeInput?.scrollIntoView({ block: 'nearest' });
   });
 
   write(BANNER, '#6a9955');

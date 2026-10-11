@@ -24,7 +24,12 @@ function legacyCopy(text: string): boolean {
   return ok;
 }
 
-export function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string): Promise<boolean> {
+  const desktop = typeof window === 'undefined' ? undefined :
+    (window as unknown as { electron?: { invoke?: (command: string, ...args: unknown[]) => Promise<unknown> } }).electron;
+  if (desktop?.invoke) {
+    try { if (await desktop.invoke('clipboard:writeText', text) === true) return true; } catch { /* older desktop build: use browser fallback */ }
+  }
   if (navigator.clipboard?.writeText) {
     return navigator.clipboard
       .writeText(text)

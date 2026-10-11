@@ -776,6 +776,29 @@ const RULES: Record<string, Rule> = {
   },
 };
 
+// Pathway evidence is a saved project document plus the existing lesson checks.
+// Personal Manual ticks never feed the evidence-based Lab Plan.
+for (const chapter of MANUAL.filter(c => ['career-roadmap', 'bootcamp'].includes(c.id))) {
+  for (const lesson of chapter.lessons) {
+    const supporting = lesson.lessonLinks ?? [];
+    const documentExists = (): boolean => {
+      try {
+        if (typeof localStorage === 'undefined') return false;
+        const docs: { title: string; html: string }[] = JSON.parse(localStorage.getItem('writer_documents') ?? '[]');
+        return Array.isArray(docs) && docs.some(d => d.title === lesson.title &&
+          typeof d.html === 'string' && d.html.replace(/<[^>]*>/g, '').trim().length >= 80);
+      } catch { return false; }
+    };
+    RULES[lesson.id] = {
+      done: s => documentExists() && supporting.every(id => RULES[id]?.done(s)),
+      started: s => documentExists() || supporting.some(id => RULES[id]?.done(s)),
+      evidence: s => `${supporting.filter(id => RULES[id]?.done(s)).length} of ${supporting.length} supporting lessons verified; project document ${documentExists() ? 'saved' : 'missing'}. External lab outcomes require separate review.`,
+      outstanding: `Complete the supporting lessons and save a Writer document titled "${lesson.title}" with evidence and verification.`,
+      actions: ['document.saved'],
+    };
+  }
+}
+
 /** Every lesson id the manual defines, in order. */
 export function lessonIds(): string[] {
   return MANUAL.flatMap((c) => c.lessons.map((l) => l.id));

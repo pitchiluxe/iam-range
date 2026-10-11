@@ -120,6 +120,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 }
 
 export function renderPortfolioWindow(body: HTMLElement): void {
+  body.classList.add('iam-reading');
   if (!document.getElementById('pf-css')) {
     const style = document.createElement('style');
     style.id = 'pf-css';

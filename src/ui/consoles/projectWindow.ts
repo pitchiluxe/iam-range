@@ -125,6 +125,7 @@ const STYLES = `
 `;
 
 export function renderProjectWindow(body: HTMLElement, conductor: VmServices): void {
+  body.classList.add('iam-reading');
   if (!document.getElementById('lab-plan-css')) {
     const style = document.createElement('style');
     style.id = 'lab-plan-css';

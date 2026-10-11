@@ -10,8 +10,12 @@ import { requestApp } from '@/util/appLauncher';
 import { showToast } from '@/ui/toast';
 import { copyText } from '@/util/copyText';
 import { openPs1File } from '@/util/ps1Opener';
+import { openTextFile } from '@/util/textFileOpener';
+import { VM_HOST } from '@/config/vmHost';
+import { loadSavedScripts } from '@/config/scriptTemplates';
 
 export function renderFileExplorerWindow(body: HTMLElement): void {
+  loadSavedScripts();
   body.style.cssText =
     'display:flex;flex-direction:column;height:100%;background:var(--panel);font-family:"Segoe UI Variable","Segoe UI",sans-serif;font-size:12px;color:var(--fg);';
 
@@ -25,9 +29,9 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
       id: 'qa',
       label: 'Quick Access',
       children: [
-        { id: 'documents', label: '📁 Documents', path: 'C:\\Users\\Public\\Documents' },
-        { id: 'pictures', label: '🖼️ Pictures', path: 'C:\\Users\\Public\\Pictures' },
-        { id: 'downloads', label: '⬇️ Downloads', path: 'C:\\Users\\Public\\Downloads' },
+        { id: 'documents', label: '📁 Documents', path: `C:\\Users\\${VM_HOST.user}\\Documents` },
+        { id: 'scripts', label: '📜 Scripts', path: `C:\\Users\\${VM_HOST.user}\\Scripts` },
+        { id: 'downloads', label: '⬇️ Downloads', path: `C:\\Users\\${VM_HOST.user}\\Downloads` },
       ],
     },
     {
@@ -292,10 +296,11 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
       if (__lab?.desktop && __lab.conductor) {
         __lab.desktop.openWindow(item.launch, __lab.conductor);
       }
-    } else if (item.type === 'file' && item.path?.toLowerCase().endsWith('.ps1')) {
+    } else if (item.type === 'file' && item.path) {
       const content = FS.readFile(item.path);
-      if (content !== null) openPs1File(item.name, content);
-      else showToast('Could not read that script.', { kind: 'error' });
+      if (content === null) showToast('Could not read that file.', { kind: 'error' });
+      else if (item.path.toLowerCase().endsWith('.ps1')) openPs1File(item.path, content);
+      else openTextFile(item.path, content);
     }
   }
 
@@ -316,6 +321,8 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
         <span style="text-align:center;line-height:1.3;word-break:break-all;">${item.name}</span>
       `;
       cell.addEventListener('dblclick', () => openItem(item));
+      cell.addEventListener('contextmenu', (e) => itemMenu(e, item));
+      cell.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); openItem(item); } });
       cell.addEventListener('mouseenter', () => {
         cell.style.background = 'var(--border)';
       });
@@ -361,6 +368,7 @@ export function renderFileExplorerWindow(body: HTMLElement): void {
         <span style="color:var(--muted);text-align:right;">${item.size}</span>
       `;
       row.addEventListener('dblclick', () => openItem(item));
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); openItem(item); } });
       row.addEventListener('mouseenter', () => {
         row.style.background = 'var(--border)';
       });
