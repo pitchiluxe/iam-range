@@ -234,6 +234,35 @@ describe('suggested questions', () => {
 
 
 describe('general answer mode', () => {
+  it('does not replace the requested onboarding script with a lifecycle article while offline', () => {
+    const answer = offlineAnswer('Create me a Powershell script to onboard 20 employees.', { env: bareEnv(), mode: 'answer' });
+    expect(answer.text).toContain('reviewed IAM Range lab example');
+    expect(answer.text).toContain('```powershell');
+    expect(answer.text).toContain('employee020');
+    expect(answer.text.match(/^employee\d{3},/gm)).toHaveLength(20);
+    expect(answer.text).not.toContain('From "Joiner, Mover, Leaver"');
+    expect(answer.citations).toEqual([]);
+  });
+  it('replaces hallucinated onboarding cmdlets with the reviewed lab script', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ response: 'New-ADOrganizationalUnitLink -Identity Users' })))));
+    try {
+      const answer = await askTutor('Create a PowerShell script to onboard 20 employees', { env: bareEnv(), mode: 'answer' });
+      expect(answer.source).toBe('offline');
+      expect(answer.text).toContain('New-ADUser -SamAccountName');
+      expect(answer.text).not.toContain('New-ADOrganizationalUnitLink');
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('requests runnable code even if the previous mode was coaching', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ response: '```powershell\nImport-Module ActiveDirectory\n```' }))));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const answer = await askTutor('Create me a Powershell script to onboard 20 employees.', { env: bareEnv(), mode: 'socratic' });
+      const request = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+      expect(request.prompt).toContain('complete runnable script');
+      expect(request.prompt).not.toContain('Do NOT give the answer');
+      expect(answer.text).toContain('```powershell');
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('answers outside the reference library and retains follow-up context', () => {
     const prompt = buildPrompt('How do I bake sourdough?', { env: bareEnv(), mode: 'answer', history: [{ role: 'user', text: 'I have a small oven.' }] }, []);
     expect(prompt).toContain('Answer using your general knowledge');

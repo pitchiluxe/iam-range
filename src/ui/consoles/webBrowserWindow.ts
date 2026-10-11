@@ -17,7 +17,7 @@
  *   - Web build: <iframe>. Most real sites send X-Frame-Options/CSP and will
  *     refuse to render; the UI says so plainly instead of showing a blank box.
  */
-import { BROWSER_HOME, IAM_BOOKMARKS, isAllowedUrl, normalizeUrl } from '@/config/webAllowlist';
+import { BROWSER_HOME, IAM_BOOKMARKS, isBrowsableUrl as isAllowedUrl, normalizeUrl } from '@/config/webAllowlist';
 import { openExternal } from '@/util/externalLink';
 import { onBrowserOpen, takePendingBrowserUrl } from '@/util/appLauncher';
 import type { VmServices } from '@/vm/session';
@@ -292,19 +292,17 @@ export function renderWebBrowserWindow(body: HTMLElement, endpoint?: { services:
       'gap:12px;text-align:center;padding:32px;';
 
     const h = document.createElement('div');
-    h.textContent = `${host} will not display inside a frame`;
+    h.textContent = 'Open this website';
     h.style.cssText = 'font-size:14px;color:var(--fg);font-weight:600;';
 
     const p = document.createElement('div');
     p.textContent =
-      `${host} sends X-Frame-Options: DENY, which tells every browser not to ` +
-      'render it inside another page. That is their server, not a limit of this ' +
-      'lab — the installed desktop app renders it properly, because it uses a ' +
-      'real browser view rather than a frame.';
+      'This website opens inside the Browser in the installed IAM Range desktop app. ' +
+      'In this web preview, open it in a browser tab to view the full site.';
     p.style.cssText = 'font-size:12px;color:var(--muted);max-width:460px;line-height:1.65;';
 
     const open = document.createElement('button');
-    open.textContent = 'Open in my browser ↗';
+    open.textContent = 'Open website ↗';
     open.style.cssText =
       'padding:8px 16px;border-radius:5px;border:1px solid var(--accent);background:var(--accent);' +
       'color:var(--on-accent);font-size:12px;cursor:pointer;font-family:inherit;';
@@ -327,14 +325,12 @@ export function renderWebBrowserWindow(body: HTMLElement, endpoint?: { services:
     if (!isAllowedUrl(target)) {
       showMessage(
         tab,
-        'Blocked — outside the IAM allowlist',
-        `This lab's browser only reaches identity and IAM learning resources. ` +
-          `"${target}" is not on the allowlist. Use a bookmark above, or add the ` +
-          `host to shared/webAllowlist.json if it belongs in the curriculum.`,
+        'Invalid web address',
+        'Enter an HTTP or HTTPS website address without embedded credentials.',
         'block',
       );
       setTitle(tab, 'Blocked');
-      setStatus(tab, 'Blocked by allowlist.');
+      setStatus(tab, 'Invalid web address.');
       return;
     }
 
@@ -352,6 +348,13 @@ export function renderWebBrowserWindow(body: HTMLElement, endpoint?: { services:
     }
 
     tab.view.innerHTML = '';
+    // These sites refuse embedding. Avoid showing a browser error as if loaded.
+    const knownFrameBlocked = /(^|\.)(microsoft\.com|owasp\.org|auth0\.com|keycloak\.org|google\.com)$/.test(new URL(target).hostname);
+    if (!hasWebview() && knownFrameBlocked) {
+      setTitle(tab, new URL(target).hostname);
+      showRefused(tab, new URL(target).hostname, target);
+      return;
+    }
     // <webview> in Electron can render sites that refuse framing; the web build
     // only has <iframe>, which most real sites will decline.
     const frame = document.createElement(hasWebview() ? 'webview' : 'iframe');

@@ -17,7 +17,7 @@
 const { app, BrowserWindow, shell, ipcMain, net, desktopCapturer, clipboard } = require('electron');
 const path = require('path');
 // The in-VM browser's allowlist, the same file the renderer checks.
-const { urlAllowed } = require('../shared/allowlistCheck.cjs');
+const { browserUrlAllowed: urlAllowed } = require('../shared/allowlistCheck.cjs');
 const fs = require('fs');
 
 let autoUpdater = null;
@@ -769,7 +769,8 @@ function createWindow() {
   // A webview is still fenced: it may only load what the allowlist permits,
   // enforced here as well as in the renderer so a bug in one is not the only
   // thing standing between the lab and the open internet.
-  mainWindow.webContents.on('will-attach-webview', (_event, webPreferences) => {
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    if (!urlAllowed(params.src)) { event.preventDefault(); return; }
     delete webPreferences.preload;
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
@@ -779,6 +780,9 @@ function createWindow() {
   // them) opens as a new tab in the in-VM browser, never as a separate
   // window, and only when the allowlist permits the address.
   mainWindow.webContents.on('did-attach-webview', (_event, contents) => {
+    const guardNavigation = (event, url) => { if (!urlAllowed(url)) event.preventDefault(); };
+    contents.on('will-navigate', guardNavigation);
+    contents.on('will-redirect', guardNavigation);
     contents.setWindowOpenHandler(({ url }) => {
       if (urlAllowed(url) && mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('browser:popup', url);

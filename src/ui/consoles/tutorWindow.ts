@@ -17,6 +17,7 @@ import type { VmServices } from '@/vm/session';
 import { readEnvironment } from '@/vm/environmentStage';
 import {
   askTutor,
+  isCodeRequest,
   tutorAvailable,
   suggestedQuestions,
   MODE_LABEL,
@@ -210,6 +211,7 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   async function send(): Promise<void> {
     const question = input.value.trim();
     if (!question || busy) return;
+    if (isCodeRequest(question)) { mode = 'answer'; paintModes(); }
     busy = true;
     input.value = '';
     sendBtn.disabled = true;
@@ -235,7 +237,7 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
     pending.replaceChildren(formattedAnswer(answer.text));
     history.push({ role: 'user', text: question }, { role: 'assistant', text: answer.text });
     if (history.length > 12) history.splice(0, history.length - 12);
-    status.textContent = answer.source === 'ollama' ? '● AI answer' : '○ Offline documentation';
+    status.textContent = answer.source === 'ollama' ? '● AI answer' : answer.text.includes('reviewed IAM Range lab example') ? '○ Reviewed reference script' : isCodeRequest(question) ? '○ AI request unavailable' : '○ Offline documentation';
     citations(answer);
     } catch {
       pending.replaceChildren(formattedAnswer('I could not complete that answer. Check the AI connection in Settings and try again.'));

@@ -22,6 +22,14 @@ import allowlist from '../../shared/webAllowlist.json';
  *  quietly permitting more than the other. */
 export const ALLOWED_HOSTS: readonly string[] = allowlist.hosts;
 
+/** The general browser accepts web addresses, never local files or executable URLs. */
+export function isBrowsableUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+  } catch { return false; }
+}
+
 /** Hosts that are only reachable on a specific path prefix. YouTube's full
  *  site would be a general-purpose browser by the back door, so only its
  *  embed player is permitted. */

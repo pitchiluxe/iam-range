@@ -39,4 +39,12 @@ function urlAllowed(raw) {
   return true;
 }
 
-module.exports = { urlAllowed };
+/** General browsing: remote pages remain isolated from the application. */
+function browserUrlAllowed(raw) {
+  try {
+    const url = new URL(raw);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+  } catch { return false; }
+}
+
+module.exports = { urlAllowed, browserUrlAllowed };

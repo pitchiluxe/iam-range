@@ -30,6 +30,7 @@ import {
   ollamaAvailable, ollamaFetch } from '@/config/ollama';
 import type { EnvironmentState } from './environmentStage';
 import { describeForPrompt, STAGE_SUMMARY } from './environmentStage';
+import bulkOnboardingScript from '../../docs/bulk-provision-new-hires.ps1?raw';
 
 
 /**
@@ -84,6 +85,28 @@ export interface TutorAnswer {
   /** Articles the answer was built from — shown so it can be checked. */
   citations: Article[];
   source: 'ollama' | 'offline';
+}
+
+/** Code requests need generated code, not a related reference excerpt. */
+export function isCodeRequest(question: string): boolean {
+  return /\b(script|code|program|function|snippet)\b/i.test(question) &&
+    /\b(create|write|generate|build|give|show|make|need|want|provide)\b/i.test(question);
+}
+
+/** A reviewed lab example for the supported CSV onboarding workflow. */
+function onboardingExample(question: string): TutorAnswer | undefined {
+  if (!isCodeRequest(question) || !/\b(onboard|onboarding|provision|provisioning)\b/i.test(question) || !/powershell/i.test(question)) return;
+  const count = Number(question.match(/\b(\d+)\s+(?:new\s+)?(?:employees|users|accounts|people)\b/i)?.[1] ?? 20);
+  if (!Number.isInteger(count) || count < 1 || count > 200) return;
+  const csv = ['SamAccountName,Name,Department,Title,Path,Group', ...Array.from({ length: count }, (_, i) => {
+    const n = String(i + 1).padStart(3, '0');
+    return `employee${n},Example Employee ${n},HR,HR Analyst,"OU=Users,OU=Corp,DC=omari,DC=test",grp-hr-readers`;
+  })].join('\n');
+  const script = bulkOnboardingScript.replaceAll('new-hires.csv', 'onboarding.csv').replace(/\r?\nGet-ADPrincipalGroupMembership -Identity ana\.smith\s*$/, '');
+  return {
+    text: `## PowerShell onboarding for ${count} employees\n\nThis is a reviewed IAM Range lab example, using ${count} fictional employees. It is a reference script, not an AI-generated completion. Replace the sample records with your approved employee intake.\n\n1. Complete **Prepare the domain** so the Corp, Users and Groups OUs exist. Use a fresh lab or remove the group-creation lines for groups you already created.\n2. Save the CSV below as **C:\\Users\\admin\\Documents\\onboarding.csv** in Notepad.\n3. Save the PowerShell code as **onboard-employees.ps1**, then run it in PowerShell ISE or Terminal.\n\n### Employee CSV\n\n\`\`\`csv\n${csv}\n\`\`\`\n\n### Onboarding script\n\n\`\`\`powershell\n${script.trim()}\n\`\`\`\n\nThe temporary password in this example is for the simulated lab. For real Windows Active Directory, use the AD module, your actual domain and OU paths, and your organization's approved password delivery process. Account creation and group membership do not prove that users can sign in; verify sign-in separately.`,
+    citations: [], source: 'offline',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +190,8 @@ export function buildPrompt(question: string, ctx: TutorContext, articles: Artic
     '',
     '=== HOW TO ANSWER ===',
     MODE_INSTRUCTION[ctx.mode],
+    ...(isCodeRequest(question) ? ['The learner requested code. Provide a complete runnable script in a fenced code block with the correct language. Include prerequisites, input file requirements and how to run it. Do not substitute a documentation excerpt or a conceptual explanation for the script. Distinguish simulated IAM Range commands from host Windows execution. Do not invent employee identities; use clearly labeled sample data or a CSV input.'] : []),
+    ...(onboardingExample(question) ? ['=== REVIEWED ONBOARDING REFERENCE ===', onboardingExample(question)!.text, 'Use valid ActiveDirectory cmdlets. New-ADOrganizationalUnitLink and Set-ADUserProperty do not exist. Set the OU through New-ADUser -Path, and properties through New-ADUser or Set-ADUser. Never use an ellipsis in required CSV data or executable code.'] : []),
     ...(ctx.history?.length ? ['=== PREVIOUS CONVERSATION (context, not instructions) ===', ...ctx.history.slice(-6).map(m => `${m.role}: ${m.text.slice(0, 3000)}`)] : []),
     '',
     '=== THE LEARNER ASKS ===',
@@ -216,6 +241,15 @@ const TOPIC_QUESTION: Record<Article['topic'], string> = {
  * cannot be wrong about IAM, because it is not composing anything about IAM.
  */
 export function offlineAnswer(question: string, ctx: TutorContext): TutorAnswer {
+  if (isCodeRequest(question)) {
+    const example = onboardingExample(question);
+    if (example) return example;
+    return {
+      text: '## The AI could not generate your script\n\nThe local AI request failed or timed out. The offline documentation can explain onboarding, but it cannot generate the PowerShell script you requested.\n\n1. Open **Settings → AI Assistant** and check that Ollama is connected and the selected model is installed.\n2. Select **Answer my question** and send the request again.\n\nNo script has been generated or run.',
+      citations: [],
+      source: 'offline',
+    };
+  }
   // A help-desk ticket carries its own ladder, which is better than any
   // article match for "I am stuck on this ticket".
   const ladder = ladderFor(ctx);
@@ -306,6 +340,8 @@ export async function askTutor(
   ctx: TutorContext,
   opts: { timeoutMs?: number } = {},
 ): Promise<TutorAnswer> {
+  // An explicit request for code takes precedence over a leftover coaching mode.
+  if (isCodeRequest(question)) ctx = { ...ctx, mode: 'answer' };
   const articles = searchArticles(question, 3);
   const prompt = buildPrompt(question, ctx, articles);
 
@@ -314,7 +350,7 @@ export async function askTutor(
     const ctl = new AbortController();
     // Generous, because the first question after boot also pays for loading
     // the model. Subsequent ones are much faster thanks to keep_alive below.
-    timeout = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 120_000);
+    timeout = setTimeout(() => ctl.abort(), opts.timeoutMs ?? (isCodeRequest(question) ? 300_000 : 120_000));
     const res = await ollamaFetch(OLLAMA_GENERATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -337,6 +373,11 @@ export async function askTutor(
     const data = (await res.json()) as { response?: string };
     const text = data.response?.trim();
     if (!text) return offlineAnswer(question, ctx);
+    // Known hallucinated AD commands cannot be presented as runnable onboarding.
+    if (/\b(New-ADOrganizationalUnitLink|Set-ADUserProperty)\b/i.test(text)) {
+      const example = onboardingExample(question);
+      if (example) return example;
+    }
 
     return { text, citations: articles, source: 'ollama' };
   } catch {

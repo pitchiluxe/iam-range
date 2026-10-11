@@ -7,6 +7,8 @@ import { saveScript, loadSavedScripts, SCRIPT_TEMPLATES } from '@/config/scriptT
 import { lessonById } from '@/config/manual';
 import { CORP_WIFI, GUEST_WIFI } from '@/services/mockEndpoints';
 import type { CapabilityContext } from '@/services';
+import { offlineAnswer } from '@/vm/tutor';
+import { readEnvironment } from '@/vm/environmentStage';
 
 let session: VmSession;
 let ctx: CapabilityContext;
@@ -24,6 +26,20 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('analyst onboarding', () => {
+  it('runs the Tutor reference script and provisions all twenty CSV employees', () => {
+    for (const cmd of ['New-ADOrganizationalUnit -Name Corp', 'New-ADOrganizationalUnit -Name Users -Path Corp', 'New-ADOrganizationalUnit -Name Groups -Path Corp']) expect(dispatch(cmd, ctx).ok).toBe(true);
+    const answer = offlineAnswer('Create me a PowerShell script to onboard 20 employees', { env: readEnvironment(session.dir), mode: 'answer' });
+    const csv = answer.text.match(/```csv\n([\s\S]*?)\n```/)![1]!;
+    const script = answer.text.match(/```powershell\n([\s\S]*?)\n```/)![1]!;
+    expect(FS.writeFile('C:\\Users\\admin\\Documents\\onboarding.csv', csv).ok).toBe(true);
+    const result = runScript(script, ctx);
+    expect(result.ok, JSON.stringify(result.results.filter(r => !r.result.ok))).toBe(true);
+    for (let i = 1; i <= 20; i++) {
+      const username = `employee${String(i).padStart(3, '0')}`;
+      expect(session.dir.getUserByUsername(username)).toBeDefined();
+      expect(dispatch(`Get-ADPrincipalGroupMembership -Identity ${username}`, ctx).output).toContain('grp-hr-readers');
+    }
+  });
   it('loads the onboarding template from the lesson and explains missing sample accounts', () => {
     expect(lessonById('analyst-provision')?.scriptTemplate).toBe('bulk-onboarding-csv');
     const missing = dispatch('Get-ADPrincipalGroupMembership -Identity ana.smith', ctx);

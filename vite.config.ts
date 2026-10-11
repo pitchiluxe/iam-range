@@ -17,7 +17,7 @@ function frameSrcFromAllowlist(): Plugin {
     name: 'frame-src-from-allowlist',
     transformIndexHtml(html) {
       const { hosts } = JSON.parse(readFileSync(resolve(__dirname, 'shared/webAllowlist.json'), 'utf8')) as { hosts: string[] };
-      const sources = hosts.flatMap((h) => [`https://${h}`, `https://*.${h}`]).join(' ');
+      const sources = hosts.length ? 'https: http:' : "'none'";
       return html.replace('%FRAME_SRC%', sources);
     },
   };
