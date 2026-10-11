@@ -157,9 +157,9 @@ const DESKTOP_APPS: WindowDef[] = [
     id: 'sticky-notes',
     title: 'Sticky Notes',
     icon: '📌',
-    width: 480,
-    height: 400,
-    render: (_c, b) => renderStickyNotesWindow(b),
+    width: 900,
+    height: 580,
+    render: (_c, b) => renderStickyNotesWindow(b, login.user?.username ?? 'workstation'),
   },
   {
     id: 'explorer',
@@ -491,6 +491,7 @@ export function remoteCatalog(c: VmServices): RemoteAppEntry[] {
           });
         else if (a.id === 'terminal')
           renderTerminalWindow(body, c, ctx.endpoint ? { host: ctx.endpoint } : {});
+        else if (a.id === 'sticky-notes') renderStickyNotesWindow(body, ctx.user.username);
         else if (a.id === 'browser') renderWebBrowserWindow(body, onEndpoint);
         else if (a.id === 'outlook') renderOutlookWindow(body, c, ctx.endpoint);
         else if (a.id === 'vpn-client') renderVpnClientWindow(body, c, ctx.endpoint);
@@ -534,6 +535,7 @@ const appAllowed = (id: string): boolean => allowedAppIds === null || allowedApp
 // ---------------------------------------------------------------------------
 
 interface WinState {
+  dispose?: () => void;
   id: string;
   el: HTMLElement;
   body: HTMLElement;
@@ -566,6 +568,7 @@ class WindowManager {
   constructor(conductor: VmServices, desktop: HTMLElement) {
     this.conductor = conductor;
     this.desktop = desktop;
+    window.addEventListener('resize', () => this.fitWindows());
     // Windows that can close themselves (the shell's `exit`) ask via an event
     // rather than reaching into the DOM, so the manager stays the single owner
     // of window lifecycle.
@@ -634,12 +637,13 @@ class WindowManager {
       return;
     }
     if (this.windows.has(def.id)) {
-      this.focus(def.id);
+      this.restore(def.id);
       return;
     }
     const win = this.createWindowElement(def);
     this.desktop.appendChild(win.el);
     this.windows.set(def.id, win);
+    this.fitWindows();
     this.focus(def.id);
     def.render(this.conductor, win.body);
     this.updateTaskbar();
@@ -648,6 +652,7 @@ class WindowManager {
   close(id: string): void {
     const w = this.windows.get(id);
     if (!w) return;
+    w.dispose?.();
     w.el.remove();
     this.windows.delete(id);
     this.updateTaskbar();
@@ -666,8 +671,22 @@ class WindowManager {
     if (!w) return;
     w.el.style.display = 'flex';
     w.minimized = false;
+    this.fitWindows();
     this.focus(id);
     this.updateTaskbar();
+  }
+
+  private fitWindows(): void {
+    const width = window.innerWidth, height = window.innerHeight - 48;
+    for (const w of this.windows.values()) {
+      if (w.maximized || w.fullscreen) continue;
+      const bounds = w.el.getBoundingClientRect();
+      const wd = Math.min(parseFloat(w.el.style.width) || bounds.width, Math.max(240, width - 16));
+      const ht = Math.min(parseFloat(w.el.style.height) || bounds.height, Math.max(180, height - 16));
+      Object.assign(w.el.style, { width: wd + 'px', height: ht + 'px',
+        left: Math.max(0, Math.min(parseFloat(w.el.style.left) || 0, width - wd - 8)) + 'px',
+        top: Math.max(0, Math.min(parseFloat(w.el.style.top) || 0, height - ht - 8)) + 'px' });
+    }
   }
 
   toggleMaximize(id: string): void {
@@ -688,13 +707,13 @@ class WindowManager {
         w.el.style.height = `${w.preMax.height}px`;
       }
       w.maximized = false;
+      this.fitWindows();
     }
   }
 
-  focus(id: string): void {
+  focus(id: string, restoreTyping = true): void {
     const w = this.windows.get(id);
     if (!w) return;
-    restoreWindowTextFocus(w.body);
 
     // Restack inside a bounded band rather than incrementing forever. The old
     // counter started at 200 and only ever went up, so a long session would
@@ -706,6 +725,7 @@ class WindowManager {
     [...rest, w].forEach((win, i) => {
       win.el.style.zIndex = String(win.fullscreen ? FULLSCREEN_Z + i : WINDOW_Z_BASE + i);
     });
+    if (restoreTyping) restoreWindowTextFocus(w.body);
 
     this.updateTaskbar();
   }
@@ -732,7 +752,8 @@ class WindowManager {
   updateTaskbar(): void {
     const strip = document.getElementById('taskbar-apps');
     if (!strip) return;
-    strip.innerHTML = this.buildTaskbarHTML();
+    const html = this.buildTaskbarHTML();
+    if (strip.dataset.markup !== html) { strip.innerHTML = html; strip.dataset.markup = html; }
     // Labels go before buttons do, which is what Windows does when the strip
     // fills up.
     strip.classList.toggle('crowded', this.getOpenIds().length > 6);
@@ -820,6 +841,13 @@ class WindowManager {
         transition: opacity 0.15s;
       `;
       btn.title = ld.action;
+      btn.setAttribute('aria-label', ld.action);
+      // Keep the colored dot, with a forgiving Windows-sized hit target.
+      btn.style.width = '28px';
+      btn.style.height = '26px';
+      btn.style.borderRadius = '4px';
+      btn.style.padding = '0';
+      btn.textContent = ld.action === 'minimize' ? '—' : ld.action === 'maximize' ? '□' : '×';
       btn.addEventListener('click', () => {
         if (ld.action === 'close') this.close(def.id);
         else if (ld.action === 'minimize') this.minimize(def.id);
@@ -842,6 +870,8 @@ class WindowManager {
     body.className = 'apex-window-body';
     body.style.cssText = 'background: var(--panel);';
     el.appendChild(body);
+    // Raise the window without redirecting the click away from its target.
+    el.addEventListener('pointerdown', () => this.focus(def.id, false));
 
     // Dragging
     let dragging = false;
@@ -883,7 +913,10 @@ class WindowManager {
       this.focus(def.id);
     });
 
-    return { id: def.id, el, body, minimized: false, maximized: false, preMax: null };
+    return { id: def.id, el, body, minimized: false, maximized: false, preMax: null, dispose: () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    } };
   }
 }
 

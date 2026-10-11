@@ -18,6 +18,7 @@ import { logoffChime } from '@/ui/sounds';
 import { applyTheme } from '@/ui/themes';
 import { installAppChrome } from '@/ui/appChrome';
 import { installTextFocus } from '@/ui/textFocus';
+import { installMousePointer } from '@/ui/mousePointer';
 import { startUpdateNotifier } from '@/ui/updateNotifier';
 import { installCaptureSourcePicker } from '@/ui/captureSourcePicker';
 
@@ -31,6 +32,7 @@ applyTheme();
 // without any of them being edited.
 installAppChrome();
 installTextFocus();
+installMousePointer();
 
 const appEl = document.getElementById('app');
 if (!appEl) throw new Error('[vm] #app container is missing from index.html');

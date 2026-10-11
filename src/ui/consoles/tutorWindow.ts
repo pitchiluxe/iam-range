@@ -28,8 +28,9 @@ import { renderMarkdown } from '@/ui/markdown';
 import type { EndpointTicketPayload, Ticket } from '@/domain';
 import { ENDPOINT_TICKET_KINDS } from '@/domain';
 import { ENDPOINT_ISSUES } from '@/vm/endpointIssues';
+import { copyText } from '@/util/copyText';
 
-const MODES: TutorMode[] = ['socratic', 'explain', 'walkthrough'];
+const MODES: TutorMode[] = ['answer', 'socratic', 'explain', 'walkthrough'];
 
 export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   body.classList.add('iam-reading');
@@ -37,12 +38,24 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
     'display:flex;flex-direction:column;height:100%;background:var(--panel);' +
     'font-family:"Segoe UI",system-ui,sans-serif;color:var(--fg);';
 
-  let mode: TutorMode = 'socratic';
+  let mode: TutorMode = 'answer';
+  const history: Array<{ role: 'user' | 'assistant'; text: string }> = [];
+  const copyButton = (label: string, text: string): HTMLButtonElement => {
+    const b = document.createElement('button'); b.textContent = label; b.setAttribute('aria-label', label);
+    b.style.cssText = 'padding:5px 10px;border:1px solid var(--border);border-radius:4px;background:var(--panel-alt);color:var(--fg);cursor:pointer;font-size:11px;';
+    b.onclick = async () => { const ok = await copyText(text); b.textContent = ok ? 'Copied' : 'Select text to copy'; setTimeout(() => { if (b.isConnected) b.textContent = label; }, 1600); }; return b;
+  };
+  function formattedAnswer(text: string): HTMLElement {
+    const result = document.createElement('div'); result.className = 'tutor-answer';
+    const markdown = renderMarkdown(text);
+    for (const pre of markdown.querySelectorAll('pre')) { const code = pre.querySelector('code')?.textContent ?? pre.textContent ?? ''; const control = copyButton('Copy code', code); control.style.display = 'block'; control.style.marginBottom = '8px'; pre.prepend(control); }
+    result.append(markdown, copyButton('Copy answer', text)); return result;
+  }
 
   // --- Header: mode switch and whether a model is actually answering --------
   const header = document.createElement('div');
   header.style.cssText =
-    'flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 14px;' +
+    'flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;' +
     'background:var(--panel-alt);border-bottom:1px solid var(--border);';
 
   const modeWrap = document.createElement('div');
@@ -107,7 +120,7 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
     // The tutor's replies are Markdown, rendered safely (no innerHTML).
     if (who === 'tutor') {
       wrap.style.whiteSpace = 'normal';
-      wrap.appendChild(renderMarkdown(text));
+      wrap.appendChild(formattedAnswer(text));
     } else wrap.textContent = text;
     log.appendChild(wrap);
     log.scrollTop = log.scrollHeight;
@@ -137,10 +150,8 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
 
   const env = readEnvironment(vm.dir);
   const GREETING =
-    'I am the tutor for this workstation. I know what state your domain is in and which ' +
-    'ticket you are on, and I answer from the material in Documentation.\n\n' +
-    'By default I will ask rather than tell. Switch to "Explain the concept" or ' +
-    '"Walk me through it" when you want more.';
+    'Ask me anything: IAM, Windows, PowerShell, careers, writing, programming, or another topic. I can use your lab context when it helps.\n\n' +
+    'Use **Copy answer** for a complete response or **Copy code** for a script. Choose a coaching mode when you want hints instead of a direct answer. General answers require the AI connection; offline mode uses the lab documentation.';
   bubble('tutor', GREETING);
 
   // Each question is answered from the environment and the documentation, not
@@ -148,6 +159,7 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
   clearBtn.onclick = () => {
     if (busy || log.childElementCount <= 1) return;
     log.innerHTML = '';
+    history.length = 0;
     bubble('tutor', GREETING);
     input.focus();
   };
@@ -176,9 +188,10 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
     'flex-shrink:0;display:flex;gap:8px;padding:10px 14px;background:var(--panel-alt);' +
     'border-top:1px solid var(--border);';
 
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.placeholder = 'Ask about this ticket, or about IAM and PIM…';
+  const input = document.createElement('textarea');
+  input.rows = 2;
+  input.setAttribute('aria-label', 'Ask the AI Tutor');
+  input.placeholder = 'Ask anything… Enter to send · Shift+Enter for a new line';
   input.style.cssText =
     'flex:1;padding:8px 10px;border-radius:4px;border:1px solid var(--border);background:var(--panel);' +
     'color:var(--fg);font-size:12.5px;outline:none;';
@@ -211,24 +224,32 @@ export function renderTutorWindow(body: HTMLElement, vm: VmServices): void {
     // The one being worked (assigned) first, then the oldest open one.
     const unresolved = vm.tickets.list().filter((t) => t.status !== 'resolved');
     const open = unresolved.find((t) => t.status === 'in-progress') ?? unresolved[0];
+    try {
     const answer = await askTutor(question, {
       env: readEnvironment(vm.dir),
       mode,
+      history,
       ...(open ? { ticket: { subject: open.subject, body: open.body, ...hintsFor(vm, open) } } : {}),
     });
 
-    pending.replaceChildren(renderMarkdown(answer.text));
+    pending.replaceChildren(formattedAnswer(answer.text));
+    history.push({ role: 'user', text: question }, { role: 'assistant', text: answer.text });
+    if (history.length > 12) history.splice(0, history.length - 12);
+    status.textContent = answer.source === 'ollama' ? '● AI answer' : '○ Offline documentation';
     citations(answer);
-
+    } catch {
+      pending.replaceChildren(formattedAnswer('I could not complete that answer. Check the AI connection in Settings and try again.'));
+    } finally {
     busy = false;
     sendBtn.disabled = false;
     sendBtn.textContent = 'Ask';
-    input.focus();
+    if (body.isConnected) input.focus();
+    }
   }
 
   sendBtn.onclick = () => void send();
   input.onkeydown = (e) => {
-    if (e.key === 'Enter') void send();
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); void send(); }
   };
   setTimeout(() => input.focus(), 50);
 }

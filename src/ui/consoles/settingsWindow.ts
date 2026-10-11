@@ -32,6 +32,8 @@ import {
   setOllamaModel,
 } from '@/config/ollama';
 import { PRODUCT } from '@/config/product';
+import { watchRemoval } from '@/ui/watchRemoval';
+import { getPointerPreference, setPointerPreference, pointerSvg, POINTER_COLORS, type PointerStyle } from '@/ui/mousePointer';
 import { login } from '@/vm/loginSession';
 import type { User } from '@/domain';
 import {
@@ -65,6 +67,7 @@ type CategoryId =
   | 'network'
   | 'storage'
   | 'personalization'
+  | 'accessibility'
   | 'apps'
   | 'accounts'
   | 'sound'
@@ -84,6 +87,7 @@ const CATEGORIES: Category[] = [
   { id: 'network', icon: '📶', label: 'Network & internet' },
   { id: 'storage', icon: '💽', label: 'Storage' },
   { id: 'personalization', icon: '🎨', label: 'Personalization' },
+  { id: 'accessibility', icon: '↖', label: 'Accessibility' },
   { id: 'apps', icon: '📦', label: 'Apps' },
   { id: 'accounts', icon: '👤', label: 'Accounts' },
   { id: 'sound', icon: '🔊', label: 'Sound' },
@@ -300,6 +304,47 @@ export function renderSettingsWindow(
 
   function renderContent(): void {
     content.innerHTML = '';
+
+    if (active === 'accessibility') {
+      content.appendChild(sectionTitle('Mouse pointer and touch'));
+      const preference = getPointerPreference();
+      const intro = document.createElement('p');
+      intro.textContent = 'Choose a pointer style and size. Changes apply immediately throughout the workstation.';
+      content.appendChild(intro);
+      const choices = document.createElement('div');
+      choices.style.cssText = 'display:flex;gap:10px;margin:20px 0;flex-wrap:wrap;';
+      for (const [id, label] of [['white', 'White'], ['black', 'Black'], ['inverted', 'Inverted'], ['color', 'Custom color']] as [PointerStyle, string][]) {
+        const b = document.createElement('button');
+        b.setAttribute('aria-pressed', String(preference.style === id));
+        b.setAttribute('aria-label', `${label} pointer`);
+        b.style.cssText = `display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px;min-width:90px;border-radius:8px;background:var(--panel-alt);color:var(--fg);border:2px solid ${preference.style === id ? 'var(--accent)' : 'var(--border)'};`;
+        b.innerHTML = pointerSvg(id === 'black' ? '#111111' : id === 'color' ? preference.color : '#ffffff', id === 'black' ? '#ffffff' : '#111111');
+        b.appendChild(document.createTextNode(label));
+        b.onclick = () => { setPointerPreference({ ...preference, style: id }); renderContent(); };
+        choices.appendChild(b);
+      }
+      content.appendChild(choices);
+      const sizeLabel = document.createElement('label');
+      sizeLabel.textContent = `Pointer size: ${preference.size}`;
+      const size = document.createElement('input');
+      size.type = 'range'; size.min = '1'; size.max = '5'; size.step = '1'; size.value = String(preference.size);
+      size.setAttribute('aria-label', 'Pointer size');
+      size.style.cssText = 'width:100%;margin:15px 0;';
+      size.oninput = () => { preference.size = Number(size.value); setPointerPreference(preference); sizeLabel.textContent = `Pointer size: ${preference.size}`; };
+      content.append(sizeLabel, size);
+      if (preference.style === 'color') {
+        const colors = document.createElement('div'); colors.style.cssText = 'display:flex;gap:8px;margin:16px 0;';
+        for (const color of POINTER_COLORS) {
+          const b = document.createElement('button'); b.setAttribute('aria-label', `Pointer color ${color}`);
+          b.style.cssText = `width:32px;height:32px;border-radius:50%;background:${color};border:2px solid ${preference.color === color ? 'var(--fg)' : 'transparent'};`;
+          b.onclick = () => { setPointerPreference({ ...preference, color }); renderContent(); }; colors.appendChild(b);
+        }
+        const custom = document.createElement('input'); custom.type = 'color'; custom.value = preference.color; custom.setAttribute('aria-label', 'Choose custom pointer color');
+        custom.oninput = () => { preference.color = custom.value; setPointerPreference(preference); };
+        content.append(colors, custom);
+      }
+      return;
+    }
 
     if (endpoint && active === 'printers') {
       content.appendChild(sectionTitle('Printers & scanners'));
@@ -1127,16 +1172,8 @@ export function renderSettingsWindow(
       // Subscribe to status changes
       const unsub = updateManager.subscribe(renderStatus);
 
-      // Also re-render when the update panel is revisited
-      const observer = new MutationObserver(() => {
-        if (document.contains(updateContainer)) {
-          renderStatus(updateManager.getStatus());
-        } else {
-          observer.disconnect();
-          unsub();
-        }
-      });
-      observer.observe(document.body, { childList: true, subtree: true });
+      // Only clean up on removal. Status changes already have their own subscription.
+      watchRemoval(updateContainer, unsub);
 
       // Check button handler
       checkBtn.addEventListener('click', () => {

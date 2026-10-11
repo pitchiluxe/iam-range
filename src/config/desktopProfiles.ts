@@ -42,6 +42,9 @@ const BASELINE_APPS = [
   'documentation',
   'explorer',
   'notepad',
+  // Editing and saving scripts is a standard desktop capability. Directory
+  // permissions still control what a script can change.
+  'script-editor',
   'writer',
   'calculator',
   // Everyone gets the spreadsheet, the way every desk in an office has one.
@@ -70,7 +73,6 @@ const IDENTITY_ADMIN_APPS = [
   'access-reviews',
   'active-directory',
   'terminal',
-  'script-editor',
   // The tenants in front of the domain. Whoever administers accounts on
   // premises administers their cloud copies too.
   'cloud-identity',
@@ -117,7 +119,7 @@ export function isIdentityAdmin(department: string): boolean {
  */
 export function appsForDepartment(department: string): string[] {
   const extras = EXTRA_BY_DEPARTMENT[department as Department] ?? [];
-  return [...BASELINE_APPS, ...extras];
+  return [...new Set([...BASELINE_APPS, ...extras])];
 }
 
 /** One-line description of what a department's desktop is for, shown in

@@ -491,7 +491,7 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
     );
     if (entry.render) body.className = 'apex-window-body';
     winEl.append(bar, body);
-    winEl.addEventListener('pointerdown', () => focusWin(entry.id));
+    winEl.addEventListener('pointerdown', () => focusWin(entry.id, false));
     winLayer.appendChild(winEl);
 
     wins.set(entry.id, { entry, el: winEl, minimized: false, maximized: false });
@@ -508,13 +508,13 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
     closeWin(id);
   });
 
-  function focusWin(id: string): void {
+  function focusWin(id: string, restoreTyping = true): void {
     const w = wins.get(id);
     if (!w) return;
     activeId = id;
     w.el.style.zIndex = String(++zTop);
     const body = w.el.querySelector<HTMLElement>('.apex-window-body');
-    if (body) restoreWindowTextFocus(body);
+    if (body && restoreTyping) restoreWindowTextFocus(body);
     for (const [otherId, other] of wins) other.el.classList.toggle('inactive', otherId !== id);
     renderTaskbarApps();
   }
@@ -629,12 +629,20 @@ export function renderRemoteSession(root: HTMLElement, opts: RemoteSessionOption
   center.append(startBtn, searchBtn, taskViewBtn, appsStrip);
 
   function renderTaskbarApps(): void {
-    appsStrip.innerHTML = '';
     const shown = [...pins, ...[...wins.values()].map((w) => w.entry).filter((e) => !pins.includes(e))];
+    // Focusing a window during pointerdown must not replace taskbar targets.
+    const signature = shown.map(entry => `${entry.id}:${wins.get(entry.id)?.minimized ?? 'closed'}`).join('|');
+    if (appsStrip.dataset.signature === signature) {
+      for (const b of appsStrip.querySelectorAll<HTMLElement>('[data-app]')) b.classList.toggle('active', b.dataset.app === activeId && !wins.get(b.dataset.app!)?.minimized);
+      return;
+    }
+    appsStrip.dataset.signature = signature;
+    appsStrip.innerHTML = '';
     for (const entry of shown) {
       const w = wins.get(entry.id);
       const b = document.createElement('button');
       b.className = 'rds-tb-btn';
+      b.dataset.app = entry.id;
       if (w) b.classList.add('running');
       if (w && !w.minimized && activeId === entry.id) b.classList.add('active');
       b.title = entry.title;

@@ -231,3 +231,20 @@ describe('suggested questions', () => {
     }
   });
 });
+
+
+describe('general answer mode', () => {
+  it('answers outside the reference library and retains follow-up context', () => {
+    const prompt = buildPrompt('How do I bake sourdough?', { env: bareEnv(), mode: 'answer', history: [{ role: 'user', text: 'I have a small oven.' }] }, []);
+    expect(prompt).toContain('Answer using your general knowledge');
+    expect(prompt).toContain('I have a small oven.');
+    expect(prompt).not.toContain('Answer ONLY from');
+    expect(prompt).toContain('fenced code blocks');
+  });
+  it('explains when general answers require the AI connection while offline', () => {
+    const answer = offlineAnswer('sourdough fermentation', { env: bareEnv(), mode: 'answer' });
+    expect(answer.source).toBe('offline');
+    expect(answer.text).toContain('AI connection');
+    expect(answer.citations).toEqual([]);
+  });
+});
