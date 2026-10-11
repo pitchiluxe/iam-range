@@ -73,6 +73,10 @@ function helpForOne(cmdletName: string): DispatchResult {
       lines.push(`        ${p.label}`);
     }
   }
+  if (cap.id === 'share.grant' || cap.id === 'share.revoke') {
+    lines.push('', 'ALIASES', '    -Identity is an alias for -Trustee.', '', 'EXAMPLE',
+      `    ${cap.cmdlet} -Name 'Dept-HR' -Identity '<username-or-group>'${cap.id === 'share.grant' ? ' -Access Modify' : ''}`);
+  }
   return ok(lines.join('\n'));
 }
 
@@ -348,6 +352,9 @@ function dispatchOne(
 
   const cap = CAPABILITY_BY_CMDLET[name];
   if (!cap) {
+    if (name === 'map' && positional.join(' ').toLowerCase() === 'network drive') {
+      return fail('To map a network drive, specify its drive letter and share path:\nnet use S: \\\\FS01\\Dept-HR\n\nGrant share permission first if Get-EffectiveAccess reports None. Run this command in the target computer\'s remote Terminal.');
+    }
     return fail(
       `The term '${cmdlet}' is not recognized as the name of a cmdlet. ` +
         `Run Get-Help to list available commands.`,
@@ -359,6 +366,12 @@ function dispatchOne(
   const adapted = adaptAdWrite(name, args, positional, ctx);
   if (adapted && !adapted.ok) return fail(adapted.error);
   const runs = adapted ? adapted.runs : [normaliseArgs(args, cap.params.map((p) => p.name))];
+  if (cap.id === 'share.grant' || cap.id === 'share.revoke') {
+    for (const run of runs) {
+      if (run.Identity && run.Trustee && run.Identity !== run.Trustee) return fail(`${cap.cmdlet}: -Identity and -Trustee refer to the same parameter. Supply only one.`);
+      if (run.Identity) run.Trustee = run.Identity;
+    }
+  }
 
   const messages: string[] = [];
   let lastRows: Record<string, unknown>[] | undefined;
@@ -368,7 +381,9 @@ function dispatchOne(
     const missing = cap.params.filter((p) => p.required && !run[p.name]?.trim());
     if (missing.length > 0) {
       return fail(
-        `${cap.cmdlet}: missing required parameter -${missing[0]!.name} (${missing[0]!.label}).`,
+        `${cap.cmdlet}: missing required parameter -${missing[0]!.name} (${missing[0]!.label}).` +
+        (cap.id === 'share.grant' || cap.id === 'share.revoke'
+          ? `\nExample: ${cap.cmdlet} -Name '${(run.Name || 'Dept-HR').replaceAll("'", "''")}' -Identity '${(run.Trustee || '<username-or-group>').replaceAll("'", "''")}'${cap.id === 'share.grant' ? ' -Access Modify' : ''}\nRun Get-Help ${cap.cmdlet} for all parameters.` : ''),
       );
     }
     const res = cap.run(ctx, run);
